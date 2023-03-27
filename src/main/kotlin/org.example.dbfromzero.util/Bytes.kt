@@ -3,7 +3,6 @@ package org.example.dbfromzero.util
 import org.example.dbfromzero.io.vfs.InputSource
 import org.example.dbfromzero.util.ByteArrayExtensions.hex
 import java.io.ByteArrayInputStream
-import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.io.OutputStream
 import java.util.*
@@ -12,6 +11,26 @@ import kotlin.math.min
 class Bytes(
     private val array: ByteArray
 ) : Comparable<Bytes>, Collection<Byte>, InputSource {
+
+    companion object {
+
+        private val SIZE_SUFFIXES = listOf("KiB", "MiB", "GiB", "TiB", "PiB", "XiB")
+
+        val EMPTY: Bytes = Bytes(ByteArray(0))
+
+        fun format(size: Long): String {
+            var scaled = size.toDouble()
+            val iter = SIZE_SUFFIXES.iterator()
+            var suffix: String? = ""
+            while (scaled >= 100.0 && iter.hasNext()) {
+                scaled /= 1024.0
+                suffix = iter.next()
+            }
+            return String.format("%.2f%s", scaled, suffix)
+        }
+
+    }
+
 
     override val size: Int
         get() = this.array.size
@@ -110,12 +129,6 @@ class Bytes(
             this.array[position + 6],
             this.array[position + 7],
         )
-    }
-
-    companion object {
-
-        val EMPTY: Bytes = Bytes(ByteArray(0))
-
     }
 
 }
