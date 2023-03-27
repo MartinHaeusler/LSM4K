@@ -9,7 +9,7 @@ import java.io.BufferedOutputStream
 class WriteSortedEntriesJob(
     val name: String,
     val isBase: Boolean,
-    val delta: Int,
+    val deltaIndex: Int,
     val indexRate: Int,
     val writes: Map<Bytes, Bytes>,
     val dataFile: VirtualReadWriteFile,
@@ -39,7 +39,7 @@ class WriteSortedEntriesJob(
 
             PositionTrackingStream(overWriter.outputStream, IO_BUFFER_SIZE).use { outputStream ->
                 KeyValueFileWriter(BufferedOutputStream(indexOverWriter.outputStream, IO_BUFFER_SIZE)).use { indexWriter ->
-                    val indexBuilder = IndexBuilder.indexBuilder(indexWriter, indexRate)
+                    val indexBuilder = IndexBuilder.create(indexWriter, indexRate)
                     KeyValueFileWriter(outputStream).use { writer ->
                         for (entry in sortedEntries) {
                             indexBuilder.accept(outputStream.position, entry.key)

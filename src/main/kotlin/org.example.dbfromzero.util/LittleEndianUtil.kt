@@ -1,7 +1,15 @@
 package org.example.dbfromzero.util
 
+import org.example.dbfromzero.util.LittleEndianExtensions.writeLittleEndianLong
+import java.io.ByteArrayOutputStream
+
 object LittleEndianUtil {
 
+    fun writeLittleEndianLong(value: Long): ByteArray {
+        val baos = ByteArrayOutputStream(8)
+        baos.writeLittleEndianLong(value)
+        return baos.toByteArray()
+    }
 
     @Suppress("NOTHING_TO_INLINE")
     inline fun readLittleEndianLong(
@@ -40,7 +48,7 @@ object LittleEndianUtil {
 
     @Suppress("NOTHING_TO_INLINE")
     inline fun readLittleEndianInt(b0: Byte, b1: Byte, b2: Byte, b3: Byte): Int {
-        return (b0.toInt()  and 0x000000FF) or
+        return (b0.toInt() and 0x000000FF) or
             (b1.toInt() and 0x000000FF).shl(1 * 8) or
             (b2.toInt() and 0x000000FF).shl(2 * 8) or
             (b3.toInt() and 0x000000FF).shl(3 * 8)

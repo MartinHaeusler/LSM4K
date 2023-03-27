@@ -32,7 +32,7 @@ class DirectoryManager(
      *
      * Eventually, all deltas will be merged into this file.
      */
-    val baseFile: VirtualFile = this.directory.file("base")
+    val baseFile: VirtualReadWriteFile = this.directory.file("base")
 
     /**
      * The base index file for the LSM tree.
