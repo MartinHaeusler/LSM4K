@@ -1,8 +1,10 @@
 package org.example.dbfromzero.util
 
 import org.example.dbfromzero.util.IOExtensions.readByte
+import java.io.EOFException
 import java.io.InputStream
 import java.io.OutputStream
+import java.lang.IllegalStateException
 
 object LittleEndianExtensions {
 
@@ -43,39 +45,57 @@ object LittleEndianExtensions {
 
     @JvmStatic
     fun InputStream.readLittleEndianLong(): Long {
+        return readLittleEndianLongOrNull()
+            ?: throw EOFException("End of input has been reached!")
+    }
+
+    @JvmStatic
+    fun InputStream.readLittleEndianLongOrNull(): Long? {
         return LittleEndianUtil.readLittleEndianLong(
-            this.readByte(),
-            this.readByte(),
-            this.readByte(),
-            this.readByte(),
-            this.readByte(),
-            this.readByte(),
-            this.readByte(),
-            this.readByte(),
+            this.readByte() ?: return null,
+            this.readByte() ?: return null,
+            this.readByte() ?: return null,
+            this.readByte() ?: return null,
+            this.readByte() ?: return null,
+            this.readByte() ?: return null,
+            this.readByte() ?: return null,
+            this.readByte() ?: return null,
         )
     }
 
     @JvmStatic
     fun InputStream.readLittleEndianDouble(): Double {
+        return this.readLittleEndianDoubleOrNull()
+            ?: throw EOFException("End of input has been reached!")
+    }
+
+    @JvmStatic
+    fun InputStream.readLittleEndianDoubleOrNull(): Double? {
         return LittleEndianUtil.readLittleEndianDouble(
-            this.readByte(),
-            this.readByte(),
-            this.readByte(),
-            this.readByte(),
-            this.readByte(),
-            this.readByte(),
-            this.readByte(),
-            this.readByte(),
+            this.readByte() ?: return null,
+            this.readByte() ?: return null,
+            this.readByte() ?: return null,
+            this.readByte() ?: return null,
+            this.readByte() ?: return null,
+            this.readByte() ?: return null,
+            this.readByte() ?: return null,
+            this.readByte() ?: return null,
         )
     }
 
     @JvmStatic
     fun InputStream.readLittleEndianInt(): Int {
+        return this.readLittleEndianIntOrNull()
+            ?: throw EOFException("End of input has been reached!")
+    }
+
+    @JvmStatic
+    fun InputStream.readLittleEndianIntOrNull(): Int? {
         return LittleEndianUtil.readLittleEndianInt(
-            this.readByte(),
-            this.readByte(),
-            this.readByte(),
-            this.readByte(),
+            this.readByte() ?: return null,
+            this.readByte() ?: return null,
+            this.readByte() ?: return null,
+            this.readByte() ?: return null,
         )
     }
 

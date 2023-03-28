@@ -24,14 +24,14 @@ class RandomAccessKeyValueFileReader(
         }
 
         fun readIndexAndClose(indexFileIterator: KeyValueFileIterator): TreeMap<Bytes, Long> {
-            val index = TreeMap<Bytes, Long>()
             indexFileIterator.use { iterator ->
+                val index = TreeMap<Bytes, Long>()
                 for (pair in iterator) {
                     // index file values are always little-endian long values.
                     index[pair.first] = pair.second.readLittleEndianLong()
                 }
+                return index
             }
-            return index
         }
 
     }

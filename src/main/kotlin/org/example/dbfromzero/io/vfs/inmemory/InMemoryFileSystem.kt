@@ -101,19 +101,26 @@ class InMemoryFileSystem {
      * @throws IOException if the parent doesn't exist, or if there already is an element at the indicated path.
      */
     fun mkdir(path: String) {
-        val parent = path.substringBeforeLast(File.separator)
-        val child = path.substring(parent.length + 1)
-        // "mkdir" is an atomic operation on most file systems, so let's make it atomic here as well.
-        this.fileSystemLock.withLock {
-            if (this.isFile(path)) {
-                throw IOException("Cannot create directory '${path}' - it refers to a file!")
-            }
-            if (parent.isNotEmpty()) {
-                if (!isDirectory(parent)) {
-                    throw IOException("Cannot create directory '${path}' - its parent doesn't exist!")
+        if (path.contains(File.separator)) {
+            val parent = path.substringBeforeLast(File.separator)
+            val child = path.substring(parent.length)
+            // "mkdir" is an atomic operation on most file systems, so let's make it atomic here as well.
+            this.fileSystemLock.withLock {
+                if (this.isFile(path)) {
+                    throw IOException("Cannot create directory '${path}' - it refers to a file!")
                 }
+                if (parent.isNotEmpty()) {
+                    if (!isDirectory(parent)) {
+                        throw IOException("Cannot create directory '${path}' - its parent doesn't exist!")
+                    }
+                }
+                fileTree.getOrPut(parent, ::mutableSetOf) += child
             }
-            fileTree.getOrPut(parent, ::mutableSetOf) += child
+        } else {
+            // create the root directory
+            this.fileSystemLock.withLock {
+                fileTree.getOrPut(path, ::mutableSetOf)
+            }
         }
     }
 
@@ -164,7 +171,7 @@ class InMemoryFileSystem {
         // writing the desired content to the secondary file, and renaming the
         // secondary file to the primary file. So let's consider it as an atomic operation here.
         this.fileSystemLock.withLock {
-            if(!this.isFile(path)){
+            if (!this.isFile(path)) {
                 throw IOException("Cannot overwrite file '${path}' - the path does not refer to an existing file!")
             }
             this.fileContents[path] = bytes
@@ -172,13 +179,13 @@ class InMemoryFileSystem {
     }
 
     fun openAppendOutputStream(path: String): OutputStream {
-        if(!this.isFile(path)){
+        if (!this.isFile(path)) {
             throw IOException("Path '${path}' does not refer to an existing file!")
         }
         val outputStream = ByteArrayOutputStream()
         val existingContent = this.getFileContentOrNull(path) ?: Bytes.EMPTY
         existingContent.writeToStream(outputStream)
-        return ObservableOutputStream(outputStream){
+        return ObservableOutputStream(outputStream) {
             this.overwrite(path, Bytes(outputStream.toByteArray()))
         }
     }
@@ -186,7 +193,7 @@ class InMemoryFileSystem {
     private class ObservableOutputStream(
         private val outputStream: OutputStream,
         private val onChange: () -> Unit
-    ): OutputStream() {
+    ) : OutputStream() {
 
         override fun flush() {
             super.flush()

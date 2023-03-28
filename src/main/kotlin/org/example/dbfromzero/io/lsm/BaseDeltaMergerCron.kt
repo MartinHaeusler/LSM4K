@@ -1,6 +1,7 @@
 package org.example.dbfromzero.io.lsm
 
 import mu.KotlinLogging
+import org.example.dbfromzero.io.lsm.LsmTree.Companion.DELETE_VALUE
 import org.example.dbfromzero.io.stream.PositionTrackingStream
 import org.example.dbfromzero.io.vfs.VirtualFile
 import org.example.dbfromzero.io.vfs.VirtualReadWriteFile
@@ -120,7 +121,7 @@ class BaseDeltaMergerCron(
         log.info { "Merging base '${this.directoryManager.baseFile.path}' with the following deltas: ${orderedDeltaFilesForMerge.values.joinToString { it.path }}" }
         val baseFile = this.directoryManager.baseFile
         val baseIndex = this.directoryManager.baseIndex
-        log.trace { "Total input size: ${Bytes.format(orderedDeltaFilesForMerge.values.sumOf { it.length })}" }
+        log.trace { "Total input size: ${Bytes.formatSize(orderedDeltaFilesForMerge.values.sumOf { it.length })}" }
         // order readers as base and the deltas in descending age such that we prefer that last entry for a single key
         val orderedReaders = mutableListOf(batchReader(baseFile))
         for ((_, deltaFile) in orderedDeltaFilesForMerge) {

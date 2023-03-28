@@ -36,7 +36,7 @@ class KeyValueFileReader(
         assertIsOpen()
         check(!hasReadKey) { "This reader is currently expecting a call to readValue() or skipValue()!" }
         return try {
-            val key = PrefixIO.readBytes(this.inputStream)
+            val key = PrefixIO.readBytesOrNull(this.inputStream)
             hasReadKey = true
             key
         } catch (e: EOFException) {

@@ -18,7 +18,7 @@ class Bytes(
 
         val EMPTY: Bytes = Bytes(ByteArray(0))
 
-        fun format(size: Long): String {
+        fun formatSize(size: Long): String {
             var scaled = size.toDouble()
             val iter = SIZE_SUFFIXES.iterator()
             var suffix: String? = ""
@@ -29,8 +29,13 @@ class Bytes(
             return String.format("%.2f%s", scaled, suffix)
         }
 
-    }
+        fun random(random: Random, length: Int): Bytes {
+            val bytes = ByteArray(length)
+            random.nextBytes(bytes)
+            return Bytes(bytes)
+        }
 
+    }
 
     override val size: Int
         get() = this.array.size

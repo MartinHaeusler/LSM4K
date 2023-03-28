@@ -19,6 +19,15 @@ class DiskBasedVirtualReadWriteFile(
 
     }
 
+    override fun create() {
+        if(this.exists()){
+            return
+        }
+        this.parent.mkdirs()
+        this.file.createNewFile()
+
+    }
+
     override fun delete() {
         val deleted = file.delete()
         if (!deleted) {

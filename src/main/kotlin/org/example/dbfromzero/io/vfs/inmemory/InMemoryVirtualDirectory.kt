@@ -2,6 +2,7 @@ package org.example.dbfromzero.io.vfs.inmemory
 
 import org.example.dbfromzero.io.vfs.VirtualDirectory
 import org.example.dbfromzero.io.vfs.VirtualFile
+import org.example.dbfromzero.io.vfs.VirtualReadWriteFile
 import java.io.File
 
 class InMemoryVirtualDirectory : VirtualDirectory, InMemoryVirtualFileSystemElement {
@@ -15,7 +16,7 @@ class InMemoryVirtualDirectory : VirtualDirectory, InMemoryVirtualFileSystemElem
         this.fileSystem = parent.fileSystem
         this.parent = parent
         this.name = name
-        this.path = parent.path + File.separator + this.name
+        this.path = "<memory>://${parent.path}${File.separator}${this.name}"
     }
 
     constructor(fileSystem: InMemoryFileSystem, name: String) {
@@ -52,8 +53,8 @@ class InMemoryVirtualDirectory : VirtualDirectory, InMemoryVirtualFileSystemElem
         }
     }
 
-    override fun file(name: String): VirtualFile {
-        return InMemoryVirtualFile(this, name)
+    override fun file(name: String): VirtualReadWriteFile {
+        return InMemoryVirtualReadWriteFile(this, name)
     }
 
     override fun directory(name: String): VirtualDirectory {

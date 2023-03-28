@@ -14,6 +14,13 @@ class InMemoryVirtualReadWriteFile(
         return this.fileSystem.openAppendOutputStream(this.path)
     }
 
+    override fun create() {
+        if(this.exists()){
+            return
+        }
+        this.fileSystem.createNewFile(this.path)
+    }
+
     override fun delete() {
         this.fileSystem.delete(this.path)
     }
@@ -41,6 +48,10 @@ class InMemoryVirtualReadWriteFile(
             this.assertIsOpen()
             val file = this@InMemoryVirtualReadWriteFile
             this.outputStream.flush()
+            if(!file.exists()){
+                file.parent.mkdirs()
+                file.create()
+            }
             file.fileSystem.overwrite(file.path, Bytes(this.outputStream.toByteArray()))
             this.outputStream.close()
             this.isOpen = false

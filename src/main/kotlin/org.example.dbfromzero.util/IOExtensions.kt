@@ -15,8 +15,13 @@ object IOExtensions {
     }
 
     @JvmStatic
-    fun InputStream.readByte(): Byte {
-        return this.read().toByte()
+    fun InputStream.readByte(): Byte? {
+        val readValue = this.read()
+        return if (readValue >= 0) {
+            readValue.toByte()
+        }else{
+            null
+        }
     }
 
 }

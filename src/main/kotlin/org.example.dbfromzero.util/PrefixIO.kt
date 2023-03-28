@@ -1,6 +1,7 @@
 package org.example.dbfromzero.util
 
 import org.example.dbfromzero.util.LittleEndianExtensions.readLittleEndianInt
+import org.example.dbfromzero.util.LittleEndianExtensions.readLittleEndianIntOrNull
 import org.example.dbfromzero.util.LittleEndianExtensions.writeLittleEndianInt
 import java.io.EOFException
 import java.io.InputStream
@@ -14,11 +15,17 @@ object PrefixIO {
     }
 
     fun readBytes(inputStream: InputStream): Bytes {
-        val length = inputStream.readLittleEndianInt()
+        return readBytesOrNull(inputStream)
+            ?: throw EOFException("Cannot read prefixed byte array due to unexpected end-of-input!")
+    }
+
+    fun readBytesOrNull(inputStream: InputStream): Bytes? {
+        val length = inputStream.readLittleEndianIntOrNull()
+            ?: return null
         val array = ByteArray(length)
         val read = inputStream.read(array)
-        if(read != length){
-            throw EOFException("Unexpected end-of-input: expected $length bytes, but got $read!")
+        if (read != length) {
+            return null
         }
         return Bytes(array)
     }

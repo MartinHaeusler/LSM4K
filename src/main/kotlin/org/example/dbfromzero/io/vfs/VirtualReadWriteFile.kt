@@ -8,6 +8,8 @@ interface VirtualReadWriteFile: VirtualFile {
 
     fun delete()
 
+    fun create()
+
     fun createOverWriter(): OverWriter
 
 
