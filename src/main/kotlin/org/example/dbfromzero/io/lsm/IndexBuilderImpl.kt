@@ -1,7 +1,7 @@
 package org.example.dbfromzero.io.lsm
 
-import org.example.dbfromzero.util.Bytes
-import org.example.dbfromzero.util.LittleEndianUtil
+import org.chronos.chronostore.util.Bytes
+import org.chronos.chronostore.util.LittleEndianUtil
 
 class IndexBuilderImpl(
     private val indexStorage: KeyValueFileWriter,

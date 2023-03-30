@@ -2,10 +2,10 @@ package org.example.dbfromzero.io.lsm
 
 import mu.KotlinLogging
 import org.example.dbfromzero.io.lsm.LsmTree.Companion.DELETE_VALUE
-import org.example.dbfromzero.io.stream.PositionTrackingStream
-import org.example.dbfromzero.io.vfs.VirtualFile
-import org.example.dbfromzero.io.vfs.VirtualReadWriteFile
-import org.example.dbfromzero.util.Bytes
+import org.chronos.chronostore.util.PositionTrackingStream
+import org.chronos.chronostore.io.vfs.VirtualFile
+import org.chronos.chronostore.io.vfs.VirtualReadWriteFile
+import org.chronos.chronostore.util.Bytes
 import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
 import java.time.Duration
@@ -141,8 +141,8 @@ class BaseDeltaMergerCron(
             }
             this.directoryManager.commitNewBase(baseOverWriter, indexOverWriter)
         } catch (e: Exception) {
-            baseOverWriter?.abort()
-            indexOverWriter?.abort()
+            baseOverWriter?.rollback()
+            indexOverWriter?.rollback()
             throw RuntimeException("Error in merging deltas. Aborting.", e)
         } finally {
             for (reader in orderedReaders) {

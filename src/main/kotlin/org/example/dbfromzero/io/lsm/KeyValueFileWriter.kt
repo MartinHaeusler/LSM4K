@@ -1,7 +1,7 @@
 package org.example.dbfromzero.io.lsm
 
-import org.example.dbfromzero.util.Bytes
-import org.example.dbfromzero.util.PrefixIO
+import org.chronos.chronostore.util.Bytes
+import org.chronos.chronostore.util.PrefixIO
 import java.io.BufferedOutputStream
 import java.io.OutputStream
 

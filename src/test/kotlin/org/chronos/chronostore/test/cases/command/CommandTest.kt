@@ -1,0 +1,115 @@
+package org.chronos.chronostore.test.cases.command
+
+import com.google.common.hash.BloomFilter
+import com.google.common.hash.Funnels
+import org.chronos.chronostore.command.Command
+import org.chronos.chronostore.util.Bytes
+import org.chronos.chronostore.util.Bytes.Companion.mightContain
+import org.chronos.chronostore.util.Bytes.Companion.put
+import org.junit.jupiter.api.Assertions
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Test
+import strikt.api.expectThat
+import strikt.assertions.*
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
+
+class CommandTest {
+
+    @Test
+    fun canSerializeAndDeserializePutCommand() {
+        val cmd = Command.put("foo", 123456, "bar")
+        val serialized = cmd.toBytes()
+        val deserialized = Command.fromBytes(serialized)
+        expectThat(deserialized).isEqualTo(cmd)
+    }
+
+    @Test
+    fun canSerializeAndDeserializeDeleteCommand() {
+        val cmd = Command.del("foo", 123456)
+        val serialized = cmd.toBytes()
+        val deserialized = Command.fromBytes(serialized)
+        expectThat(deserialized).isEqualTo(cmd)
+    }
+
+    @Test
+    fun canSerializeAndDeserializeCommandWithMaxTimestamp() {
+        val cmd = Command.put("foo", Long.MAX_VALUE, "bar")
+        val serialized = cmd.toBytes()
+        val deserialized = Command.fromBytes(serialized)
+        expectThat(deserialized).isEqualTo(cmd)
+    }
+
+    @Test
+    fun canSortFirsByKeyThenByTimestamp() {
+        val commands = listOf(
+            Command.put("foo", 123456, "bar"),
+            Command.put("foo", 123457, "bar"),
+            Command.put("foo", 123455, "bar"),
+            Command.put("foo1", 23456, "bar"),
+            Command.put("fo", 123456, "bar")
+        )
+        val sorted = commands.shuffled().sorted()
+        expectThat(sorted).containsExactly(
+            Command.put("fo", 123456, "bar"),
+            Command.put("foo", 123455, "bar"),
+            Command.put("foo", 123456, "bar"),
+            Command.put("foo", 123457, "bar"),
+            Command.put("foo1", 23456, "bar"),
+        )
+    }
+
+    @Test
+    fun canComputeByteSize() {
+        val commands = listOf(
+            Command.put("foo", 123456, "bar"),
+            Command.put("foo", 123457, "bar"),
+            Command.put("foo", 123455, "bar"),
+            Command.put("foo1", 23456, "bar"),
+            Command.put("fo", 123456, "bar"),
+            Command.del("bar", 12),
+        )
+
+        for(command in commands){
+            assertEquals(command.toBytes().size, command.byteSize){
+                "Expected command '${command}' to have a byteSize of ${command.toBytes().size}, but got ${command.byteSize}!"
+            }
+        }
+    }
+
+    @Test
+    fun canCreateBloomFilterForKeys(){
+        val bloomFilter = BloomFilter.create(
+            Funnels.byteArrayFunnel(),
+            6,
+            0.01
+        )
+
+        val commands = listOf(
+            Command.put("foo", 123456, "bar"),
+            Command.put("foo", 123457, "bar"),
+            Command.put("foo", 123455, "bar"),
+            Command.put("foo1", 23456, "bar"),
+            Command.put("fo", 123456, "bar"),
+            Command.del("bar", 12),
+        )
+
+        commands.asSequence().map { it.key }.forEach { bloomFilter.put(it) }
+
+        val byteArrayOutputStream = ByteArrayOutputStream()
+        bloomFilter.writeTo(byteArrayOutputStream)
+        val bloomBytes = byteArrayOutputStream.toByteArray()
+
+        val deserializedBloom = BloomFilter.readFrom(ByteArrayInputStream(bloomBytes), Funnels.byteArrayFunnel())
+
+        expectThat(deserializedBloom){
+            get { mightContain(Bytes("foo")) }.isTrue()
+            get { mightContain(Bytes("foo1")) }.isTrue()
+            get { mightContain(Bytes("fo")) }.isTrue()
+            get { mightContain(Bytes("bar")) }.isTrue()
+            get { mightContain(Bytes("apple")) }.isFalse()
+            get { mightContain(Bytes("bullshit")) }.isFalse()
+        }
+    }
+
+}

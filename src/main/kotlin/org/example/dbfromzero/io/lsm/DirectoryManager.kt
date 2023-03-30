@@ -1,10 +1,10 @@
 package org.example.dbfromzero.io.lsm
 
 import mu.KotlinLogging
-import org.example.dbfromzero.io.vfs.VirtualDirectory
-import org.example.dbfromzero.io.vfs.VirtualFile
-import org.example.dbfromzero.io.vfs.VirtualReadWriteFile
-import org.example.dbfromzero.util.Bytes
+import org.chronos.chronostore.io.vfs.VirtualDirectory
+import org.chronos.chronostore.io.vfs.VirtualFile
+import org.chronos.chronostore.io.vfs.VirtualReadWriteFile
+import org.chronos.chronostore.util.Bytes
 import java.io.BufferedInputStream
 import java.util.*
 import java.util.concurrent.locks.ReentrantReadWriteLock

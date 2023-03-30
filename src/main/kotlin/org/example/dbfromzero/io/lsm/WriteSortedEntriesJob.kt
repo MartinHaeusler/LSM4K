@@ -1,9 +1,9 @@
 package org.example.dbfromzero.io.lsm
 
 import mu.KotlinLogging
-import org.example.dbfromzero.io.stream.PositionTrackingStream
-import org.example.dbfromzero.io.vfs.VirtualReadWriteFile
-import org.example.dbfromzero.util.Bytes
+import org.chronos.chronostore.util.PositionTrackingStream
+import org.chronos.chronostore.io.vfs.VirtualReadWriteFile
+import org.chronos.chronostore.util.Bytes
 import java.io.BufferedOutputStream
 
 class WriteSortedEntriesJob(
@@ -54,8 +54,8 @@ class WriteSortedEntriesJob(
             coordinator.commitWrites(this)
         } catch (e: Exception) {
             log.error(e) { "Error in writing sorted file for '${name}'!" }
-            overWriter?.abort()
-            indexOverWriter?.abort()
+            overWriter?.rollback()
+            indexOverWriter?.rollback()
             coordinator.abortWrites(this)
         }
     }

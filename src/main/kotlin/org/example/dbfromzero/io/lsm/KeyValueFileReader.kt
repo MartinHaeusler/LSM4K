@@ -1,9 +1,9 @@
 package org.example.dbfromzero.io.lsm
 
-import org.example.dbfromzero.io.vfs.VirtualFile
-import org.example.dbfromzero.util.Bytes
-import org.example.dbfromzero.util.LittleEndianExtensions.readLittleEndianInt
-import org.example.dbfromzero.util.PrefixIO
+import org.chronos.chronostore.io.vfs.VirtualFile
+import org.chronos.chronostore.util.Bytes
+import org.chronos.chronostore.util.LittleEndianExtensions.readLittleEndianInt
+import org.chronos.chronostore.util.PrefixIO
 import java.io.EOFException
 import java.io.InputStream
 

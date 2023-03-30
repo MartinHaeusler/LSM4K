@@ -1,10 +1,11 @@
 package org.example.dbfromzero.io.lsm
 
 import mu.KotlinLogging
-import org.example.dbfromzero.io.vfs.VirtualDirectory
-import org.example.dbfromzero.io.vfs.disk.DiskBasedVirtualDirectory
-import org.example.dbfromzero.io.vfs.inmemory.InMemoryFileSystem
-import org.example.dbfromzero.util.Bytes
+import org.chronos.chronostore.io.vfs.VirtualDirectory
+import org.chronos.chronostore.io.vfs.disk.DiskBasedVirtualDirectory
+import org.chronos.chronostore.io.vfs.disk.DiskBasedVirtualFileSystem
+import org.chronos.chronostore.io.vfs.inmemory.InMemoryVirtualFileSystem
+import org.chronos.chronostore.util.Bytes
 import java.io.File
 import java.time.Duration
 import java.util.concurrent.ExecutorService
@@ -47,7 +48,8 @@ class LsmTree private constructor(
             require(directory.exists() && directory.isDirectory) {
                 "Argument 'directory' must refer to an existing directory, but it does not. Path: ${directory.absolutePath}"
             }
-            val virtualDirectory = DiskBasedVirtualDirectory(directory)
+            val vfs = DiskBasedVirtualFileSystem(directory)
+            val virtualDirectory = vfs.directory("lsm")
             return builderForDirectory(virtualDirectory)
         }
 
@@ -55,7 +57,7 @@ class LsmTree private constructor(
             require(name.isNotEmpty()) {
                 "Argument 'name' must not be empty!"
             }
-            val vfs = InMemoryFileSystem()
+            val vfs = InMemoryVirtualFileSystem()
             val directory = vfs.directory(name)
             directory.mkdirs()
             return builderForDirectory(directory)

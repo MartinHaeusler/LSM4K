@@ -1,3 +1,3 @@
 
-rootProject.name = "DBFromZero"
+rootProject.name = "ChronoStore"
 

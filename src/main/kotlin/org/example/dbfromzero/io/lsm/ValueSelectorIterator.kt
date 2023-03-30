@@ -2,7 +2,7 @@ package org.example.dbfromzero.io.lsm
 
 import com.google.common.collect.Iterators
 import com.google.common.collect.PeekingIterator
-import org.example.dbfromzero.util.Bytes
+import org.chronos.chronostore.util.Bytes
 
 class ValueSelectorIterator : Iterator<Pair<Bytes, Bytes>> {
 

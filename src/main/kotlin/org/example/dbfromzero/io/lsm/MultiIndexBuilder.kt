@@ -1,6 +1,6 @@
 package org.example.dbfromzero.io.lsm
 
-import org.example.dbfromzero.util.Bytes
+import org.chronos.chronostore.util.Bytes
 
 class MultiIndexBuilder : IndexBuilder {
 
