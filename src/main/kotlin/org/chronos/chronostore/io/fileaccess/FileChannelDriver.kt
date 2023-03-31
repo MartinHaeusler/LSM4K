@@ -20,6 +20,9 @@ class FileChannelDriver(
     override val size: Long
         get() = this.file.length()
 
+    override val filePath: String
+        get() = this.file.absolutePath
+
     override fun readBytesOrNull(offset: Long, bytesToRead: Int): Bytes? {
         require(offset >= 0) { "Argument 'offset' must not be negative, but got: ${offset}" }
         require(bytesToRead >= 0) { "Argument 'bytesToRead' must not be negative, but got: ${bytesToRead}" }
@@ -27,11 +30,15 @@ class FileChannelDriver(
         // TODO[Performance]: we might also try "ByteBuffer.allocateDirect(...)" here
         val buffer = ByteBuffer.allocate(bytesToRead)
         val bytesRead = this.channel.read(buffer)
-        if(bytesRead < bytesToRead){
+        if (bytesRead < bytesToRead) {
             // file doesn't contain enough bytes.
             return null
         }
         return Bytes(buffer.array())
+    }
+
+    override fun copy(): FileChannelDriver {
+        return FileChannelDriver(this.file)
     }
 
     override fun close() {

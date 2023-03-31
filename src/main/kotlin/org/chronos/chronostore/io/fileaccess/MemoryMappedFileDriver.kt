@@ -34,6 +34,9 @@ class MemoryMappedFileDriver(
         this.randomAccessFile.length()
     }
 
+    override val filePath: String
+        get() = this.file.absolutePath
+
     override fun readBytesOrNull(offset: Long, bytesToRead: Int): Bytes? {
         require(offset >= 0) { "Argument 'offset' must not be negative, but got: ${offset}!" }
         require(bytesToRead >= 0) { "Argument 'bytesToRead' must not be negative, but got: ${offset}!" }
@@ -59,6 +62,10 @@ class MemoryMappedFileDriver(
             n += count
         } while (n < bytesToRead)
         return Bytes(buffer)
+    }
+
+    override fun copy(): MemoryMappedFileDriver {
+        return MemoryMappedFileDriver(this.file)
     }
 
     override fun close() {

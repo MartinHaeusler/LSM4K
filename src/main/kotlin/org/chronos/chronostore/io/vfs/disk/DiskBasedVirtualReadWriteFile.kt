@@ -66,7 +66,10 @@ class DiskBasedVirtualReadWriteFile(
             log.trace { "Committing writing $file" }
             inProgress = false
             try {
-                tryClose()
+                val fd = this.stream.fd
+                this.stream.flush()
+                fd.sync()
+                this.stream.close()
                 Files.move(tempFile.toPath(), file.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
             } catch (e: IOException) {
                 rollback()
@@ -81,7 +84,7 @@ class DiskBasedVirtualReadWriteFile(
             inProgress = false
             log.trace { "Aborting writing $file" }
             try {
-                tryClose()
+                this.stream.close()
             } catch (e: Exception) {
                 log.warn(e) { "Ignoring error in closing file" }
             } finally {
@@ -100,15 +103,6 @@ class DiskBasedVirtualReadWriteFile(
             }
         }
 
-        private fun tryClose() {
-            try {
-                stream.close()
-            } catch (e: IOException) {
-                if (e.message != "Stream Closed") {
-                    throw e
-                }
-            }
-        }
     }
 
 }

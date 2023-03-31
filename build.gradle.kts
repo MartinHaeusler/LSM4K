@@ -15,6 +15,11 @@ dependencies {
     implementation("io.github.microutils:kotlin-logging:2.1.23")
     implementation("com.google.guava:guava:31.1-jre")
 
+    // compression
+    implementation("org.xerial.snappy:snappy-java:1.1.9.1")
+    implementation("org.anarres.lzo:lzo-core:1.0.6")
+
+
     testImplementation(platform("org.junit:junit-bom:${BuildVersions.jUnit5}"))
     testImplementation("org.junit.jupiter", "junit-jupiter")
     testImplementation("org.junit.jupiter:junit-jupiter-engine")

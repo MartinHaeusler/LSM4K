@@ -15,6 +15,9 @@ class InMemoryFileDriver(
         this.inMemoryVirtualFile.length
     }
 
+    override val filePath: String
+        get() = this.inMemoryVirtualFile.path
+
     override fun readBytesOrNull(offset: Long, bytesToRead: Int): Bytes? {
         require(offset >= 0) { "Argument 'offset' must not be negative, but got: ${offset}" }
         require(bytesToRead >= 0) { "Argument 'bytesToRead' must not be negative, but got: ${bytesToRead}" }
@@ -24,6 +27,10 @@ class InMemoryFileDriver(
             return null
         }
         return this.inMemoryVirtualFile.readAtOffsetOrNull(offset.toInt(), bytesToRead)
+    }
+
+    override fun copy(): InMemoryFileDriver {
+        return InMemoryFileDriver(this.inMemoryVirtualFile)
     }
 
     override fun close() {

@@ -27,9 +27,12 @@ class MemorySegmentFileDriver(
         this.file.length()
     }
 
+    override val filePath: String
+        get() = this.file.absolutePath
+
     override fun readBytesOrNull(offset: Long, bytesToRead: Int): Bytes? {
         check(!this.closed) { "This file access driver on '${file.absolutePath}' has already been closed!" }
-        if(this.memorySegment.byteSize() < offset + bytesToRead){
+        if (this.memorySegment.byteSize() < offset + bytesToRead) {
             // there are not enough bytes in the segment to fulfill the request
             return null
         }
@@ -39,6 +42,10 @@ class MemorySegmentFileDriver(
             return null
         }
         return Bytes(slice.toByteArray())
+    }
+
+    override fun copy(): MemorySegmentFileDriver {
+        return MemorySegmentFileDriver(this.file)
     }
 
     override fun close() {

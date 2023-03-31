@@ -8,6 +8,7 @@ import org.chronos.chronostore.util.PrefixIO
 import org.chronos.chronostore.util.StringExtensions.ellipsis
 import org.chronos.chronostore.util.Timestamp
 import java.io.ByteArrayOutputStream
+import java.io.InputStream
 
 class Command(
     val opCode: OpCode,
@@ -42,22 +43,26 @@ class Command(
             return del(Bytes(key.toByteArray()), timestamp)
         }
 
-        fun fromBytes(bytes: Bytes): Command {
+        fun readFromBytes(bytes: Bytes): Command {
             bytes.withInputStream { inputStream ->
-                val opCode = OpCode.fromByte(inputStream.read())
-                val key = PrefixIO.readBytes(inputStream)
-                val timestamp = inputStream.readLittleEndianLong()
-                val value = when (opCode) {
-                    OpCode.PUT -> PrefixIO.readBytes(inputStream)
-                    OpCode.DEL -> Bytes.EMPTY
-                }
-                return Command(
-                    opCode = opCode,
-                    key = key,
-                    timestamp = timestamp,
-                    value = value
-                )
+                return readFromStream(inputStream)
             }
+        }
+
+        fun readFromStream(inputStream: InputStream): Command {
+            val opCode = OpCode.fromByte(inputStream.read())
+            val key = PrefixIO.readBytes(inputStream)
+            val timestamp = inputStream.readLittleEndianLong()
+            val value = when (opCode) {
+                OpCode.PUT -> PrefixIO.readBytes(inputStream)
+                OpCode.DEL -> Bytes.EMPTY
+            }
+            return Command(
+                opCode = opCode,
+                key = key,
+                timestamp = timestamp,
+                value = value
+            )
         }
 
     }
@@ -92,8 +97,6 @@ class Command(
     }
 
     fun toBytes(): Bytes {
-        val length = byteSize
-
         val outputStream = ByteArrayOutputStream(1 + 8 + key.size + value.size)
         outputStream.write(this.opCode.byte.toInt())
         PrefixIO.writeBytes(outputStream, this.key)
@@ -124,6 +127,9 @@ class Command(
                 key.size /* key bytes */ +
                 8 /* timestamp */
         }
+
+    val keyAndTimestamp: KeyAndTimestamp
+        get() = KeyAndTimestamp(this.key, this.timestamp)
 
     override fun compareTo(other: Command): Int {
         val keyCmp = this.key.compareTo(other.key)

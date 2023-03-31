@@ -1,6 +1,7 @@
 package org.chronos.chronostore.util
 
 import com.google.common.hash.BloomFilter
+import org.chronos.chronostore.io.format.CompressionAlgorithm
 import org.chronos.chronostore.io.vfs.InputSource
 import org.chronos.chronostore.util.ByteArrayExtensions.hex
 import java.io.ByteArrayInputStream
@@ -45,6 +46,10 @@ class Bytes(
         @Suppress("UnstableApiUsage")
         fun BloomFilter<ByteArray>.put(bytes: Bytes) {
             this.put(bytes.array)
+        }
+
+        fun OutputStream.write(bytes: Bytes) {
+            this.write(bytes.array)
         }
 
     }
@@ -133,12 +138,6 @@ class Bytes(
         return "Bytes[${this.array.hex()}]"
     }
 
-    fun writeToStream(outputStream: OutputStream) {
-        // this is always safe, because output streams
-        // treat the incoming arrays as read-only.
-        outputStream.write(this.array)
-    }
-
     fun readLittleEndianLong(position: Int = 0): Long {
         return LittleEndianUtil.readLittleEndianLong(
             this.array[position + 0],
@@ -160,7 +159,7 @@ class Bytes(
             // file has not enough bytes
             return null
         }
-        if(bytesToRead == 0){
+        if (bytesToRead == 0) {
             return EMPTY
         }
         val buffer = ByteArray(bytesToRead)
@@ -172,6 +171,14 @@ class Bytes(
             /* length = */ buffer.size
         )
         return Bytes(buffer)
+    }
+
+    fun compressWith(algorithm: CompressionAlgorithm): Bytes {
+        require(!this.isEmpty()) { "The empty Bytes object cannot be compressed!" }
+        if (algorithm == CompressionAlgorithm.NONE) {
+            return this
+        }
+        return Bytes(algorithm.compress(this.array))
     }
 
 }

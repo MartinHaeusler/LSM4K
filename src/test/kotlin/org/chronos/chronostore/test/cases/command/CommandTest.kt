@@ -6,7 +6,6 @@ import org.chronos.chronostore.command.Command
 import org.chronos.chronostore.util.Bytes
 import org.chronos.chronostore.util.Bytes.Companion.mightContain
 import org.chronos.chronostore.util.Bytes.Companion.put
-import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import strikt.api.expectThat
@@ -20,7 +19,7 @@ class CommandTest {
     fun canSerializeAndDeserializePutCommand() {
         val cmd = Command.put("foo", 123456, "bar")
         val serialized = cmd.toBytes()
-        val deserialized = Command.fromBytes(serialized)
+        val deserialized = Command.readFromBytes(serialized)
         expectThat(deserialized).isEqualTo(cmd)
     }
 
@@ -28,7 +27,7 @@ class CommandTest {
     fun canSerializeAndDeserializeDeleteCommand() {
         val cmd = Command.del("foo", 123456)
         val serialized = cmd.toBytes()
-        val deserialized = Command.fromBytes(serialized)
+        val deserialized = Command.readFromBytes(serialized)
         expectThat(deserialized).isEqualTo(cmd)
     }
 
@@ -36,7 +35,7 @@ class CommandTest {
     fun canSerializeAndDeserializeCommandWithMaxTimestamp() {
         val cmd = Command.put("foo", Long.MAX_VALUE, "bar")
         val serialized = cmd.toBytes()
-        val deserialized = Command.fromBytes(serialized)
+        val deserialized = Command.readFromBytes(serialized)
         expectThat(deserialized).isEqualTo(cmd)
     }
 
