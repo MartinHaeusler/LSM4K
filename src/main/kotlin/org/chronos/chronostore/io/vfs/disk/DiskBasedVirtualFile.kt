@@ -15,6 +15,11 @@ open class DiskBasedVirtualFile(
         return this.file.exists() && this.file.isFile
     }
 
+    val fileOnDisk: File
+        get(){
+            return this.file
+        }
+
     override val length: Long
         get() = this.file.length()
 

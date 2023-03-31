@@ -1,17 +1,32 @@
 package org.chronos.chronostore.io.fileaccess
 
+import org.chronos.chronostore.io.vfs.VirtualFile
+import org.chronos.chronostore.io.vfs.disk.DiskBasedVirtualFile
+import org.chronos.chronostore.io.vfs.inmemory.InMemoryVirtualFile
 import org.chronos.chronostore.util.Bytes
 import java.io.File
 import java.io.RandomAccessFile
 
 /**
  * A [RandomFileAccessDriver] based on a [RandomAccessFile].
+ *
+ * This technique uses memory-mapped files.
+ *
+ * **ATTENTION:**
+ * Memory-mapped files in Java have a maximum size of 2GB (due to API restrictions).
+ * Files larger than this size will be *rejected* by this class.
  */
-class RandomAccessFileDriver(
+class MemoryMappedFileDriver(
     val file: File
 ) : RandomFileAccessDriver {
 
-    val randomAccessFile: RandomAccessFile = RandomAccessFile(this.file, "r")
+    private val randomAccessFile: RandomAccessFile
+    private var closed = false
+
+    init {
+        require(this.file.length() < Int.MAX_VALUE) { "File '${file.absolutePath}' is too large to be used with the MemoryMappedFileDriver!" }
+        this.randomAccessFile = RandomAccessFile(this.file, "r")
+    }
 
     override val size: Long by lazy {
         // we assume that the file size doesn't change
@@ -22,6 +37,7 @@ class RandomAccessFileDriver(
     override fun readBytesOrNull(offset: Long, bytesToRead: Int): Bytes? {
         require(offset >= 0) { "Argument 'offset' must not be negative, but got: ${offset}!" }
         require(bytesToRead >= 0) { "Argument 'bytesToRead' must not be negative, but got: ${offset}!" }
+        check(!this.closed) { "This file access driver on '${this.file.absolutePath}' has already been closed!" }
         if (offset > this.size) {
             // offset is outside the file!
             return null
@@ -46,7 +62,25 @@ class RandomAccessFileDriver(
     }
 
     override fun close() {
+        if (this.closed) {
+            return
+        }
+        this.closed = true
         this.randomAccessFile.close()
+    }
+
+
+    class Factory : RandomFileAccessDriverFactory {
+
+        override fun createDriver(file: VirtualFile): RandomFileAccessDriver {
+            return when (file) {
+                is DiskBasedVirtualFile -> MemoryMappedFileDriver(file.fileOnDisk)
+                // fall back to in-memory driver
+                is InMemoryVirtualFile -> InMemoryFileDriver(file)
+                else -> throw IllegalArgumentException("Unknown subclass of ${VirtualFile::class.simpleName}: ${file::class.qualifiedName}")
+            }
+        }
+
     }
 
 }

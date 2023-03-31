@@ -6,6 +6,7 @@ import org.chronos.chronostore.util.ByteArrayExtensions.hex
 import java.io.ByteArrayInputStream
 import java.io.InputStream
 import java.io.OutputStream
+import java.nio.charset.Charset
 import java.util.*
 import kotlin.math.min
 
@@ -36,17 +37,19 @@ class Bytes(
             return Bytes(bytes)
         }
 
-        fun BloomFilter<ByteArray>.mightContain(bytes: Bytes): Boolean{
+        @Suppress("UnstableApiUsage")
+        fun BloomFilter<ByteArray>.mightContain(bytes: Bytes): Boolean {
             return this.mightContain(bytes.array)
         }
 
-        fun BloomFilter<ByteArray>.put(bytes: Bytes){
+        @Suppress("UnstableApiUsage")
+        fun BloomFilter<ByteArray>.put(bytes: Bytes) {
             this.put(bytes.array)
         }
 
     }
 
-    constructor(string: String): this(string.toByteArray())
+    constructor(string: String) : this(string.toByteArray())
 
     override val size: Int
         get() = this.array.size
@@ -111,9 +114,7 @@ class Bytes(
 
         other as Bytes
 
-        if (!array.contentEquals(other.array)) return false
-
-        return true
+        return array.contentEquals(other.array)
     }
 
     override fun hashCode(): Int {
@@ -122,6 +123,10 @@ class Bytes(
 
     fun hex(): String {
         return HexFormat.of().formatHex(this.array)
+    }
+
+    fun asString(charset: Charset = Charsets.UTF_8): String {
+        return String(this.array, charset)
     }
 
     override fun toString(): String {
@@ -145,6 +150,28 @@ class Bytes(
             this.array[position + 6],
             this.array[position + 7],
         )
+    }
+
+    fun readAtOffsetOrNull(offset: Int, bytesToRead: Int): Bytes? {
+        require(offset >= 0) { "Argument 'offset' must not be negative, but got: $offset" }
+        require(bytesToRead >= 0) { "Argument 'bytesToRead' mut not be negative, but got: $bytesToRead" }
+        // we have to convert to long here in order to avoid numeric overflow!
+        if ((offset.toLong() + bytesToRead.toLong()) > this.size) {
+            // file has not enough bytes
+            return null
+        }
+        if(bytesToRead == 0){
+            return EMPTY
+        }
+        val buffer = ByteArray(bytesToRead)
+        System.arraycopy(
+            /* src = */ this.array,
+            /* srcPos = */ offset,
+            /* dest = */ buffer,
+            /* destPos = */ 0,
+            /* length = */ buffer.size
+        )
+        return Bytes(buffer)
     }
 
 }

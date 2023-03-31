@@ -1,16 +1,19 @@
 package org.chronos.chronostore.io.fileaccess
 
+import org.chronos.chronostore.io.vfs.VirtualFile
+import org.chronos.chronostore.io.vfs.disk.DiskBasedVirtualFile
 import org.chronos.chronostore.io.vfs.inmemory.InMemoryVirtualFile
 import org.chronos.chronostore.util.Bytes
 
-class InMemoryFileAccessDriver(
+class InMemoryFileDriver(
     val inMemoryVirtualFile: InMemoryVirtualFile
 ) : RandomFileAccessDriver {
 
     private var closed = false
 
-    override val size: Long
-        get() = this.inMemoryVirtualFile.length
+    override val size: Long by lazy {
+        this.inMemoryVirtualFile.length
+    }
 
     override fun readBytesOrNull(offset: Long, bytesToRead: Int): Bytes? {
         require(offset >= 0) { "Argument 'offset' must not be negative, but got: ${offset}" }
@@ -26,4 +29,18 @@ class InMemoryFileAccessDriver(
     override fun close() {
         this.closed = true
     }
+
+    class Factory : RandomFileAccessDriverFactory {
+
+        override fun createDriver(file: VirtualFile): RandomFileAccessDriver {
+            return when (file) {
+                is InMemoryVirtualFile -> InMemoryFileDriver(file)
+                // fall back to file channel driver
+                is DiskBasedVirtualFile -> FileChannelDriver(file.fileOnDisk)
+                else -> throw IllegalArgumentException("Unknown subclass of ${VirtualFile::class.simpleName}: ${file::class.qualifiedName}")
+            }
+        }
+
+    }
+
 }

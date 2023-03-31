@@ -1,13 +1,20 @@
 package org.chronos.chronostore.test.cases.io.vfs
 
+import org.chronos.chronostore.io.fileaccess.InMemoryFileDriver
+import org.chronos.chronostore.io.fileaccess.MemoryMappedFileDriver
+import org.chronos.chronostore.io.fileaccess.MemorySegmentFileDriver
+import org.chronos.chronostore.io.fileaccess.RandomFileAccessDriverFactory
+import org.chronos.chronostore.io.fileaccess.RandomFileAccessDriverFactory.Companion.withDriver
 import org.chronos.chronostore.io.vfs.VirtualReadWriteFile.Companion.withOverWriter
 import org.chronos.chronostore.test.util.VFSMode
 import org.chronos.chronostore.test.util.VirtualFileSystemTest
 import org.chronos.chronostore.util.IOExtensions.withInputStream
+import org.junit.jupiter.api.Assumptions
 import strikt.api.expect
 import strikt.api.expectThat
 import strikt.api.expectThrows
 import strikt.assertions.*
+import java.io.EOFException
 import java.io.IOException
 
 class VFSTest {
@@ -128,4 +135,53 @@ class VFSTest {
         }
     }
 
+    @VirtualFileSystemTest
+    fun canUseInMemoryRandomFileAccessDriver(mode: VFSMode) {
+        val driverFactory = InMemoryFileDriver.Factory()
+        runRandomFileAccessDriverTest(mode, driverFactory)
+    }
+
+    @VirtualFileSystemTest
+    fun canUseMemoryMappedRandomFileAccessDriver(mode: VFSMode) {
+        val driverFactory = MemoryMappedFileDriver.Factory()
+        runRandomFileAccessDriverTest(mode, driverFactory)
+    }
+
+    @VirtualFileSystemTest
+    fun canUseMemorySegmentRandomFileAccessDriver(mode: VFSMode) {
+        Assumptions.assumeTrue(MemorySegmentFileDriver.Factory.isAvailable) {
+            "The MemorySegment API is not available for this run." +
+                " Please attach the JVM option \"--add-modules jdk.incubator.foreign\" to enable it (JDK 17+ required)."
+        }
+        val driverFactory = MemorySegmentFileDriver.Factory()
+        runRandomFileAccessDriverTest(mode, driverFactory)
+    }
+
+
+    private fun runRandomFileAccessDriverTest(mode: VFSMode, driverFactory: RandomFileAccessDriverFactory) {
+        mode.withVFS { vfs ->
+            val meta = vfs.directory("meta")
+            meta.mkdirs()
+            val file = meta.file("myFile.txt")
+            file.withOverWriter { overWriter ->
+                overWriter.outputStream.write("Hello World".toByteArray())
+                overWriter.commit()
+            }
+            driverFactory.withDriver(file) { driver ->
+                expectThat(driver) {
+                    get { this.size }.isEqualTo(11)
+                    get { this.readBytesOrNull(6, 5)?.asString() }.isNotNull().contains("World")
+                }
+                expectThrows<EOFException> {
+                    // let's attempt to read more bytes than we need. This should fail.
+                    driver.readBytes(0, 100)
+                }
+                // the following should not throw an exception though (note the "orNull")
+                expectThat(driver){
+                    get { this.readBytesOrNull(0, 100) }.isNull()
+                }
+            }
+        }
+
+    }
 }
