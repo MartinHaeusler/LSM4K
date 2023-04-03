@@ -138,6 +138,15 @@ class Bytes(
         return "Bytes[${this.array.hex()}]"
     }
 
+    fun readLittleEndianInt(position: Int = 0): Int {
+        return LittleEndianUtil.readLittleEndianInt(
+            this.array[position + 0],
+            this.array[position + 1],
+            this.array[position + 2],
+            this.array[position + 3],
+        )
+    }
+
     fun readLittleEndianLong(position: Int = 0): Long {
         return LittleEndianUtil.readLittleEndianLong(
             this.array[position + 0],
@@ -179,6 +188,10 @@ class Bytes(
             return this
         }
         return Bytes(algorithm.compress(this.array))
+    }
+
+    fun slice(range: IntRange): Bytes {
+        return Bytes(this.array.sliceArray(range))
     }
 
 }

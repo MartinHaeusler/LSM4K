@@ -9,9 +9,11 @@ import java.io.ByteArrayOutputStream
 import java.util.zip.GZIPOutputStream
 
 
-enum class CompressionAlgorithm {
+enum class CompressionAlgorithm(
+    val algorithmIndex: Int
+) {
 
-    NONE {
+    NONE(0) {
 
         override fun compress(bytes: ByteArray): ByteArray {
             // for consistency with the other algorithms, we do this check here,
@@ -23,7 +25,7 @@ enum class CompressionAlgorithm {
 
     },
 
-    SNAPPY {
+    SNAPPY(10) {
 
         override fun compress(bytes: ByteArray): ByteArray {
             require(bytes.isNotEmpty()) { "An empty byte array cannot be compressed!" }
@@ -32,7 +34,7 @@ enum class CompressionAlgorithm {
 
     },
 
-    LZO_1 {
+    LZO_1(20) {
 
         override fun compress(bytes: ByteArray): ByteArray {
             return compressWithLzoAlgorithm(bytes, LzoAlgorithm.LZO1X)
@@ -40,7 +42,7 @@ enum class CompressionAlgorithm {
 
     },
 
-    LZO_1A {
+    LZO_1A(21) {
 
         override fun compress(bytes: ByteArray): ByteArray {
             return compressWithLzoAlgorithm(bytes, LzoAlgorithm.LZO1A)
@@ -48,7 +50,7 @@ enum class CompressionAlgorithm {
 
     },
 
-    LZO_1B {
+    LZO_1B(22) {
 
         override fun compress(bytes: ByteArray): ByteArray {
             return compressWithLzoAlgorithm(bytes, LzoAlgorithm.LZO1B)
@@ -56,7 +58,7 @@ enum class CompressionAlgorithm {
 
     },
 
-    LZO_1C {
+    LZO_1C(23) {
 
         override fun compress(bytes: ByteArray): ByteArray {
             return compressWithLzoAlgorithm(bytes, LzoAlgorithm.LZO1C)
@@ -64,7 +66,7 @@ enum class CompressionAlgorithm {
 
     },
 
-    LZO_1F {
+    LZO_1F(24) {
 
         override fun compress(bytes: ByteArray): ByteArray {
             return compressWithLzoAlgorithm(bytes, LzoAlgorithm.LZO1F)
@@ -72,14 +74,14 @@ enum class CompressionAlgorithm {
 
     },
 
-    LZO_1X {
+    LZO_1X(25) {
 
         override fun compress(bytes: ByteArray): ByteArray {
             return compressWithLzoAlgorithm(bytes, LzoAlgorithm.LZO1X)
         }
     },
 
-    LZO_1Y {
+    LZO_1Y(26) {
 
         override fun compress(bytes: ByteArray): ByteArray {
             return compressWithLzoAlgorithm(bytes, LzoAlgorithm.LZO1Y)
@@ -87,7 +89,7 @@ enum class CompressionAlgorithm {
 
     },
 
-    LZO_1Z {
+    LZO_1Z(27) {
 
         override fun compress(bytes: ByteArray): ByteArray {
             return compressWithLzoAlgorithm(bytes, LzoAlgorithm.LZO1Z)
@@ -95,7 +97,7 @@ enum class CompressionAlgorithm {
 
     },
 
-    LZO_2A {
+    LZO_2A(28) {
 
         override fun compress(bytes: ByteArray): ByteArray {
             return compressWithLzoAlgorithm(bytes, LzoAlgorithm.LZO2A)
@@ -103,7 +105,7 @@ enum class CompressionAlgorithm {
 
     },
 
-    GZIP {
+    GZIP(40) {
 
         override fun compress(bytes: ByteArray): ByteArray {
             // we expect GZIP to have a compression rate of about 50%, so we provide
@@ -127,6 +129,15 @@ enum class CompressionAlgorithm {
             val compressor = LzoLibrary.getInstance().newCompressor(lzoAlgorithm, null)
             LzoOutputStream(out, compressor).use { lzoOutput -> lzoOutput.write(bytes) }
             return out.toByteArray()
+        }
+
+        fun fromAlgorithmIndex(algorithmIndex: Int): CompressionAlgorithm {
+            for (algorithm in values()) {
+                if (algorithm.algorithmIndex == algorithmIndex) {
+                    return algorithm
+                }
+            }
+            throw IllegalArgumentException("Could not find CompressionAlgorithm for int ${algorithmIndex}!")
         }
 
     }

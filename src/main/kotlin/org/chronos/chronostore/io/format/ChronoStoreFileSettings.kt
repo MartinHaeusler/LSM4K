@@ -1,8 +1,6 @@
 package org.chronos.chronostore.io.format
 
 class ChronoStoreFileSettings(
-    /** The format version of the file. */
-    val fileFormatVersion: ChronoStoreFileFormat.Version,
     /** The compression used for the blocks in the file. */
     val compression: CompressionAlgorithm,
     /** The maximum size of a single block, in bytes. */

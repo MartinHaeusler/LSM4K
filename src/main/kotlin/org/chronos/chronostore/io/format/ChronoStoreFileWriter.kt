@@ -11,27 +11,45 @@ import org.chronos.chronostore.util.Bytes
 import org.chronos.chronostore.util.Bytes.Companion.put
 import org.chronos.chronostore.util.Bytes.Companion.write
 import org.chronos.chronostore.util.LittleEndianExtensions.writeLittleEndianInt
+import org.chronos.chronostore.util.LittleEndianExtensions.writeLittleEndianLong
 import org.chronos.chronostore.util.PositionTrackingStream
 import org.chronos.chronostore.util.Timestamp
-import org.chronos.chronostore.util.UUIDExtensions.toBytes
 import org.chronos.chronostore.util.sequence.OrderCheckingSequence.Companion.checkOrdered
 import java.io.ByteArrayOutputStream
 import java.io.OutputStream
+import java.lang.UnsupportedOperationException
 import java.util.*
-import kotlin.math.max
-import kotlin.math.min
 
 /**
  * Streaming writer for a *.chronostore file.
  */
-class ChronoStoreFileWriter(
-    /** The output stream to write to. Will be closed when the writer is closed. */
-    private val outputStream: OutputStream,
-    /** The settings to use for writing the file. Will also be persisted in the file itself. */
-    val settings: ChronoStoreFileSettings,
-) : AutoCloseable {
+class ChronoStoreFileWriter : AutoCloseable {
 
     private var closed = false
+
+    private val outputStream: PositionTrackingStream
+
+    private val settings: ChronoStoreFileSettings
+
+    private val metadata: Map<Bytes, Bytes>
+
+    companion object {
+
+        /** The format version of the file. */
+        val FILE_FORMAT_VERSION: ChronoStoreFileFormat.Version = ChronoStoreFileFormat.Version.V_1_0_0
+
+    }
+
+    /**
+     *
+     * @param outputStream The output stream to write to. Will be closed when the writer is closed.
+     * @param settings The settings to use for writing the file. Will also be persisted in the file itself.
+     */
+    constructor(outputStream: OutputStream, settings: ChronoStoreFileSettings, metadata: Map<Bytes, Bytes>) {
+        this.outputStream = PositionTrackingStream(outputStream.buffered())
+        this.settings = settings
+        this.metadata = metadata
+    }
 
     /**
      * Writes the given [orderedCommands] (as well as any required additional information) to the [outputStream].
@@ -39,44 +57,112 @@ class ChronoStoreFileWriter(
      * @param orderedCommands The sequence of commands to write. **MUST** be ordered!
      */
     fun writeFile(orderedCommands: Sequence<Command>) {
-        // the file starts with the magic bytes (for later filetype recognition)
-        this.outputStream.write(ChronoStoreFileFormat.FILE_MAGIC_BYTES)
+        // grab the system clock time (will be written into the file later on)
+        val wallClockTime = System.currentTimeMillis()
 
+        // the file starts with the magic bytes (for later filetype recognition; fixed size)
+        this.outputStream.write(ChronoStoreFileFormat.FILE_MAGIC_BYTES)
+        // the next 4 bytes are reserved for the file format version (fixed size)
+        this.outputStream.write(FILE_FORMAT_VERSION.versionInt)
+
+        val beginOfBlocks = this.outputStream.position
+
+        val blockWriteResult = this.writeBlocks(orderedCommands)
+
+        val beginOfIndexOfBlocks = this.outputStream.position
+        // write the index of blocks
+        for ((blockIndex, startPosition) in blockWriteResult.indexOfBlocks) {
+            this.outputStream.writeLittleEndianInt(blockIndex)
+            this.outputStream.writeLittleEndianLong(startPosition)
+        }
+
+        val beginOfMetadata = this.outputStream.position
+
+        val metadata = FileMetaData(
+            settings = this.settings,
+            fileUUID = UUID.randomUUID(),
+            minTimestamp = blockWriteResult.minTimestamp,
+            maxTimestamp = blockWriteResult.maxTimestamp,
+            minKey = blockWriteResult.minKey,
+            maxKey = blockWriteResult.maxKey,
+            headEntries = blockWriteResult.headEntries,
+            totalEntries = blockWriteResult.totalEntries,
+            createdAt = wallClockTime,
+            infoMap = this.metadata,
+        )
+
+        metadata.writeTo(this.outputStream)
+
+        val trailer = FileTrailer(
+            beginOfBlocks = beginOfBlocks,
+            beginOfIndexOfBlocks = beginOfIndexOfBlocks,
+            beginOfMetadata = beginOfMetadata
+        )
+        trailer.writeTo(outputStream)
+
+        this.outputStream.flush()
+    }
+
+    private fun writeBlocks(orderedCommands: Sequence<Command>): BlockWriteResult {
         // ensure that the commands we receive really are ordered,
         // as a command which appears out of order would be fatal.
         // Note that "checkOrdered" doesn't "sort" the input, it
         // just lazily checks that each element is greater than
         // the previous one. We also demand "strictly greater",
         // i.e. we do not allow the same command to exist multiple times.
-        val commands = Iterators.peekingIterator(
+        val commandsIterator = Iterators.peekingIterator(
             orderedCommands.checkOrdered(strict = true).iterator()
         )
 
+        var totalEntries = 0L
+        var headEntries = 0L
+
+        var minTimestamp = Timestamp.MAX_VALUE
+        var maxTimestamp = 0L
+
+        var minKey: Bytes? = null
+        var maxKey: Bytes? = null
+
+        val commands = ObservingPeekingIterator(commandsIterator) { command ->
+            // each command contributes towards the total entries
+            totalEntries += 1
+            minTimestamp = min(command.timestamp, minTimestamp)
+            maxTimestamp = max(command.timestamp, maxTimestamp)
+            minKey = min(minKey ?: command.key, command.key)
+            maxKey = max(maxKey ?: command.key, command.key)
+
+            if (!commandsIterator.hasNext() || commandsIterator.peek().key != command.key) {
+                // the entry has no successor on the same key
+                if (command.opCode != Command.OpCode.DEL) {
+                    // the entry belongs to the HEAD revision of the file
+                    headEntries++
+                }
+            }
+        }
+
         // write the individual blocks into the file until we
         // run out of commands.
+        val blockIndexToStartPosition = mutableListOf<Pair<Int, Long>>()
+
         var blockSequenceNumber = 0
         while (commands.hasNext()) {
+            blockIndexToStartPosition += Pair(blockSequenceNumber, this.outputStream.position)
             writeBlock(commands, blockSequenceNumber)
             blockSequenceNumber++
         }
 
-        // TODO
-        // index-of-blocks
-        // file metadata
-        //      settings
-        //      formatVersion,
-        //      fileUUID
-        //      fileMinKey
-        //      fileMaxKey
-        //      fileMinTimestamp
-        //      fileMaxTimestamp
-        //      cratedAt (wall clock timestamp)
-        //      infoMap (arbitrary application-controlled key-value pairs)
-
-        // trailer (offsets)
+        return BlockWriteResult(
+            totalEntries = totalEntries,
+            headEntries = headEntries,
+            minTimestamp = minTimestamp,
+            maxTimestamp = maxTimestamp,
+            minKey = minKey,
+            maxKey = maxKey,
+            indexOfBlocks = blockIndexToStartPosition
+        )
     }
 
-    fun writeBlock(commands: PeekingIterator<Command>, blockSequenceNumber: Int) {
+    private fun writeBlock(commands: PeekingIterator<Command>, blockSequenceNumber: Int) {
         if (!commands.hasNext()) {
             // no commands -> no need to start a block.
             return
@@ -202,7 +288,6 @@ class ChronoStoreFileWriter(
         return Bytes(outputStream.toByteArray())
     }
 
-
     override fun close() {
         if (closed) {
             return
@@ -211,4 +296,54 @@ class ChronoStoreFileWriter(
         this.outputStream.close()
     }
 
+    private fun <T : Comparable<T>> min(left: T, right: T): T {
+        return if (left < right) {
+            left
+        } else {
+            right
+        }
+    }
+
+    private fun <T : Comparable<T>> max(left: T, right: T): T {
+        return if (left > right) {
+            left
+        } else {
+            right
+        }
+    }
+
+    private class BlockWriteResult(
+        val totalEntries: Long,
+        val headEntries: Long,
+        val minKey: Bytes?,
+        val maxKey: Bytes?,
+        val minTimestamp: Timestamp?,
+        val maxTimestamp: Timestamp?,
+        val indexOfBlocks: List<Pair<Int, Long>>,
+    )
+
+    private class ObservingPeekingIterator<E>(
+        private val peekingIterator: PeekingIterator<E>,
+        private val observer: (E) -> Unit,
+    ) : PeekingIterator<E> {
+
+        override fun remove() {
+            throw UnsupportedOperationException()
+        }
+
+        override fun hasNext(): Boolean {
+            return this.peekingIterator.hasNext()
+        }
+
+        override fun next(): E {
+            val next = this.peekingIterator.next()
+            observer(next)
+            return next
+        }
+
+        override fun peek(): E {
+            return this.peekingIterator.peek()
+        }
+
+    }
 }

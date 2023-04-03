@@ -1,6 +1,8 @@
 package org.chronos.chronostore.io.format
 
+import org.chronos.chronostore.io.fileaccess.RandomFileAccessDriver
 import org.chronos.chronostore.util.Bytes
+import org.chronos.chronostore.util.IOExtensions.withInputStream
 
 object ChronoStoreFileFormat {
 
@@ -31,10 +33,27 @@ object ChronoStoreFileFormat {
     )
 
     enum class Version(
-        val versionString: String
+        val versionString: String,
+        val versionInt: Int,
     ) {
 
-        ONE_0_0("1.0.0")
+        V_1_0_0("1.0.0", 100_000_000) {
+
+            override fun readTrailer(driver: RandomFileAccessDriver): FileTrailer {
+                val fileLength = driver.size
+                val trailerSizeInBytes = FileTrailer.SIZE_BYTES
+                val trailerBytes = driver.readBytes(fileLength - trailerSizeInBytes, trailerSizeInBytes)
+                return FileTrailer.readFrom(trailerBytes)
+            }
+
+            override fun readMetaData(driver: RandomFileAccessDriver, fileTrailer: FileTrailer): FileMetaData {
+                val trailer = this.readTrailer(driver)
+                val metadataBytes = driver.readBytes(trailer.beginOfMetadata, (driver.size - FileTrailer.SIZE_BYTES - trailer.beginOfMetadata).toInt())
+                return metadataBytes.withInputStream(FileMetaData::readFrom)
+            }
+
+
+        }
 
         ;
 
@@ -50,7 +69,20 @@ object ChronoStoreFileFormat {
                 throw IllegalArgumentException("Unknown ChronoStore file format version: '${string}'!")
             }
 
+            fun fromInt(int: Int): Version {
+                for (literal in values()) {
+                    if (literal.versionInt == int) {
+                        return literal
+                    }
+                }
+                throw IllegalArgumentException("Unknown ChronoStore file format version: '${int}'!")
+            }
+
         }
+
+        abstract fun readTrailer(driver: RandomFileAccessDriver): FileTrailer
+
+        abstract fun readMetaData(driver: RandomFileAccessDriver, trailer: FileTrailer): FileMetaData
 
         override fun toString(): String {
             return this.versionString

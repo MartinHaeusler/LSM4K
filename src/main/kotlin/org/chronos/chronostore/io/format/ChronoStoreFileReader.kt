@@ -3,6 +3,8 @@ package org.chronos.chronostore.io.format
 import org.chronos.chronostore.command.Command
 import org.chronos.chronostore.command.KeyAndTimestamp
 import org.chronos.chronostore.io.fileaccess.RandomFileAccessDriver
+import org.chronos.chronostore.util.IOExtensions.withInputStream
+import java.io.ByteArrayInputStream
 
 class ChronoStoreFileReader : AutoCloseable {
 
@@ -30,11 +32,16 @@ class ChronoStoreFileReader : AutoCloseable {
 
     private fun loadFileMetaData(): FileMetaData {
         // read and validate the magic bytes
-        val bytes = driver.readBytes(0, 8)
-        if (bytes != ChronoStoreFileFormat.FILE_MAGIC_BYTES) {
+        val magicBytesAndVersion = driver.readBytes(0, ChronoStoreFileFormat.FILE_MAGIC_BYTES.size + Int.SIZE_BYTES)
+        val magicBytes = magicBytesAndVersion.slice(0 until ChronoStoreFileFormat.FILE_MAGIC_BYTES.size)
+
+        if (magicBytes != ChronoStoreFileFormat.FILE_MAGIC_BYTES) {
             throw IllegalStateException("The file '${driver.filePath}' has an unknown file format.")
         }
-        TODO("implement me!")
+
+        val version = ChronoStoreFileFormat.Version.fromInt(magicBytesAndVersion.readLittleEndianInt(ChronoStoreFileFormat.FILE_MAGIC_BYTES.size))
+        val trailer = version.readTrailer(this.driver)
+        return version.readMetaData(this.driver, trailer)
     }
 
     fun get(keyAndTimestamp: KeyAndTimestamp): Command {

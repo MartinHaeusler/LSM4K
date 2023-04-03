@@ -6,7 +6,7 @@ import org.chronos.chronostore.util.Bytes
 
 class BlockIndexBuilder(
     /** The rate at which to index. Every n-th incoming command will be indexed.*/
-    val indexRate: Int
+    private val indexRate: Int
 ) {
 
     /**
