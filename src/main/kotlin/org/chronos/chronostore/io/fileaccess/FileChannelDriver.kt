@@ -17,7 +17,7 @@ class FileChannelDriver(
 
     private var closed = false
 
-    override val size: Long
+    override val fileSize: Long
         get() = this.file.length()
 
     override val filePath: String

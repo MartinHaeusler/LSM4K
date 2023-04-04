@@ -52,6 +52,21 @@ class Bytes(
             this.write(bytes.array)
         }
 
+        fun Bytes.compressWith(algorithm: CompressionAlgorithm): Bytes {
+            require(!this.isEmpty()) { "The empty Bytes object cannot be compressed!" }
+            if (algorithm == CompressionAlgorithm.NONE) {
+                return this
+            }
+            return Bytes(algorithm.compress(this.array))
+        }
+
+        fun Bytes.decompressWith(algorithm: CompressionAlgorithm): Bytes {
+            require(!this.isEmpty()){ "The empty Bytes object cannot be decompressed!" }
+            if(algorithm == CompressionAlgorithm.NONE){
+                return this
+            }
+            return Bytes(algorithm.decompress(this.array))
+        }
     }
 
     constructor(string: String) : this(string.toByteArray())
@@ -111,6 +126,10 @@ class Bytes(
 
     override fun createInputStream(): InputStream {
         return ByteArrayInputStream(this.array)
+    }
+
+    fun createInputStream(offset: Int): InputStream {
+        return ByteArrayInputStream(this.array, offset, this.size)
     }
 
     override fun equals(other: Any?): Boolean {
@@ -180,14 +199,6 @@ class Bytes(
             /* length = */ buffer.size
         )
         return Bytes(buffer)
-    }
-
-    fun compressWith(algorithm: CompressionAlgorithm): Bytes {
-        require(!this.isEmpty()) { "The empty Bytes object cannot be compressed!" }
-        if (algorithm == CompressionAlgorithm.NONE) {
-            return this
-        }
-        return Bytes(algorithm.compress(this.array))
     }
 
     fun slice(range: IntRange): Bytes {

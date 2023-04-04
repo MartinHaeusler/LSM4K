@@ -169,7 +169,7 @@ class VFSTest {
             }
             driverFactory.withDriver(file) { driver ->
                 expectThat(driver) {
-                    get { this.size }.isEqualTo(11)
+                    get { this.fileSize }.isEqualTo(11)
                     get { this.readBytesOrNull(6, 5)?.asString() }.isNotNull().contains("World")
                 }
                 expectThrows<EOFException> {

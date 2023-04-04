@@ -1,20 +1,23 @@
 package org.chronos.chronostore.io.format
 
+import com.google.common.cache.Cache
+import com.google.common.cache.CacheBuilder
 import org.chronos.chronostore.command.Command
 import org.chronos.chronostore.command.KeyAndTimestamp
 import org.chronos.chronostore.io.fileaccess.RandomFileAccessDriver
-import org.chronos.chronostore.util.IOExtensions.withInputStream
-import java.io.ByteArrayInputStream
+import java.util.*
 
 class ChronoStoreFileReader : AutoCloseable {
 
     private val driver: RandomFileAccessDriver
 
-    private val fileMetaData: FileMetaData
+    private val fileHeader: FileHeader
+    private val blockCache: Cache<Int, Optional<DataBlock>>
 
     constructor(driver: RandomFileAccessDriver) {
         this.driver = driver
-        this.fileMetaData = this.loadFileMetaData()
+        this.fileHeader = loadFileHeader()
+        this.blockCache = CacheBuilder.newBuilder().maximumSize(100).build()
     }
 
     /**
@@ -24,13 +27,14 @@ class ChronoStoreFileReader : AutoCloseable {
      * overhead, which is skipped here because the file is immutable
      * and the reader we were copied from already did all the work for us.
      */
-    private constructor(driver: RandomFileAccessDriver, fileMetaData: FileMetaData) {
+    private constructor(driver: RandomFileAccessDriver, header: FileHeader, blockCache: Cache<Int, Optional<DataBlock>>) {
         // skip all the validation, it has already been done for us.
         this.driver = driver
-        this.fileMetaData = fileMetaData
+        this.fileHeader = header
+        this.blockCache = blockCache
     }
 
-    private fun loadFileMetaData(): FileMetaData {
+    private fun loadFileHeader(): FileHeader {
         // read and validate the magic bytes
         val magicBytesAndVersion = driver.readBytes(0, ChronoStoreFileFormat.FILE_MAGIC_BYTES.size + Int.SIZE_BYTES)
         val magicBytes = magicBytesAndVersion.slice(0 until ChronoStoreFileFormat.FILE_MAGIC_BYTES.size)
@@ -38,14 +42,49 @@ class ChronoStoreFileReader : AutoCloseable {
         if (magicBytes != ChronoStoreFileFormat.FILE_MAGIC_BYTES) {
             throw IllegalStateException("The file '${driver.filePath}' has an unknown file format.")
         }
-
-        val version = ChronoStoreFileFormat.Version.fromInt(magicBytesAndVersion.readLittleEndianInt(ChronoStoreFileFormat.FILE_MAGIC_BYTES.size))
-        val trailer = version.readTrailer(this.driver)
-        return version.readMetaData(this.driver, trailer)
+        val versionInt = magicBytesAndVersion.readLittleEndianInt(ChronoStoreFileFormat.FILE_MAGIC_BYTES.size)
+        val fileFormatVersion = ChronoStoreFileFormat.Version.fromInt(versionInt)
+        return fileFormatVersion.readFileHeader(this.driver)
     }
 
-    fun get(keyAndTimestamp: KeyAndTimestamp): Command {
-        TODO("Implement me!")
+
+    fun get(keyAndTimestamp: KeyAndTimestamp): Command? {
+        if (!this.fileHeader.metaData.mayContainKey(keyAndTimestamp.key)) {
+            // key is definitely not in this file, no point in searching.
+            return null
+        }
+        if (!this.fileHeader.metaData.mayContainDataRelevantForTimestamp(keyAndTimestamp.timestamp)) {
+            // the data in this file is too new and doesn't contain anything relevant for the request timestamp.
+            return null
+        }
+        // the key may be contained, let's check.
+        var blockIndex = this.fileHeader.indexOfBlocks.getBlockIndexForKeyAndTimestamp(keyAndTimestamp)
+            ?: return null // we don't have a block for this key and timestamp.
+        var matchingCommandFromPreviousBlock: Command? = null
+        while (true) {
+            val dataBlock = this.getBlockForIndex(blockIndex)
+                ?: return matchingCommandFromPreviousBlock
+            val (command, isLastInBlock) = dataBlock.get(keyAndTimestamp)
+                ?: return matchingCommandFromPreviousBlock
+            if (!isLastInBlock) {
+                return command
+            }
+            // we've hit the last key in the block, so we need to consult the next block
+            // in order to see if we find a newer entry which matches the key-and-timestamp.
+            matchingCommandFromPreviousBlock = command
+            // check the next block
+            blockIndex++
+        }
+    }
+
+    private fun getBlockForIndex(blockIndex: Int): DataBlock? {
+        val cachedResult = this.blockCache.get(blockIndex) {
+            val (startPosition, length) = this.fileHeader.indexOfBlocks.getBlockStartPositionAndLengthOrNull(blockIndex)
+                ?: return@get Optional.empty()
+            val blockBytes = this.driver.readBytes(startPosition, length)
+            return@get Optional.of(DataBlock.readLazy(blockBytes.createInputStream(), this.fileHeader.metaData.settings.compression))
+        }
+        return cachedResult.orElse(null)
     }
 
     fun scan(from: KeyAndTimestamp?, fromInclusive: Boolean, to: KeyAndTimestamp?, toInclusive: Boolean, consumer: ScanClient) {
@@ -77,7 +116,11 @@ class ChronoStoreFileReader : AutoCloseable {
      * @return A copy of this reader, for use by another thread.
      */
     fun copy(): ChronoStoreFileReader {
-        return ChronoStoreFileReader(this.driver.copy(), this.fileMetaData)
+        return ChronoStoreFileReader(
+            driver = this.driver.copy(),
+            header = this.fileHeader,
+            blockCache = this.blockCache,
+        )
     }
 
     override fun close() {

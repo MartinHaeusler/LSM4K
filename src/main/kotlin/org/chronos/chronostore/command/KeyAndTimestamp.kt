@@ -12,6 +12,7 @@ import org.chronos.chronostore.util.Timestamp
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.io.InputStream
+import java.io.OutputStream
 
 data class KeyAndTimestamp(
     val key: Bytes,
@@ -24,6 +25,18 @@ data class KeyAndTimestamp(
             bytes.withInputStream { inputStream ->
                 return readFromStream(inputStream)
             }
+        }
+
+        fun readFromStreamOrNull(inputStream: InputStream): KeyAndTimestamp? {
+            val keyLength = inputStream.readLittleEndianIntOrNull()
+                ?: return null
+            val keyArray = ByteArray(keyLength)
+            val readBytes = inputStream.read(keyArray)
+            if (readBytes != keyLength) {
+                throw IOException("Failed to read ${keyLength} bytes from input stream (got: ${readBytes})!")
+            }
+            val timestamp = inputStream.readLittleEndianLong()
+            return KeyAndTimestamp(Bytes(keyArray), timestamp)
         }
 
         fun readFromStream(inputStream: InputStream): KeyAndTimestamp {
@@ -53,7 +66,7 @@ data class KeyAndTimestamp(
         return Bytes(baos.toByteArray())
     }
 
-    fun writeTo(outputStream: ByteArrayOutputStream){
+    fun writeTo(outputStream: OutputStream){
         outputStream.writeLittleEndianInt(this.key.size)
         outputStream.write(this.key)
         outputStream.writeLittleEndianLong(this.timestamp)

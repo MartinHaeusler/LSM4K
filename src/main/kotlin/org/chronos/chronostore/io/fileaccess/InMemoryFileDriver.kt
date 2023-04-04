@@ -11,7 +11,7 @@ class InMemoryFileDriver(
 
     private var closed = false
 
-    override val size: Long by lazy {
+    override val fileSize: Long by lazy {
         this.inMemoryVirtualFile.length
     }
 

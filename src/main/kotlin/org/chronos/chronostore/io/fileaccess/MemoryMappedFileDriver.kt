@@ -28,7 +28,7 @@ class MemoryMappedFileDriver(
         this.randomAccessFile = RandomAccessFile(this.file, "r")
     }
 
-    override val size: Long by lazy {
+    override val fileSize: Long by lazy {
         // we assume that the file size doesn't change
         // while we're reading, so we can cache it.
         this.randomAccessFile.length()
@@ -41,7 +41,7 @@ class MemoryMappedFileDriver(
         require(offset >= 0) { "Argument 'offset' must not be negative, but got: ${offset}!" }
         require(bytesToRead >= 0) { "Argument 'bytesToRead' must not be negative, but got: ${offset}!" }
         check(!this.closed) { "This file access driver on '${this.file.absolutePath}' has already been closed!" }
-        if (offset > this.size) {
+        if (offset > this.fileSize) {
             // offset is outside the file!
             return null
         }

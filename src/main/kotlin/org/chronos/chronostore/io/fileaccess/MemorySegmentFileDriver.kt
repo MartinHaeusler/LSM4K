@@ -20,10 +20,10 @@ class MemorySegmentFileDriver(
 ) : RandomFileAccessDriver {
 
     var closed = false
-    val scope: ResourceScope = ResourceScope.newConfinedScope()
-    val memorySegment: MemorySegment = MemorySegment.mapFile(this.file.toPath(), 0, file.length(), FileChannel.MapMode.READ_ONLY, scope)
+    private val scope: ResourceScope = ResourceScope.newConfinedScope()
+    private val memorySegment: MemorySegment = MemorySegment.mapFile(this.file.toPath(), 0, file.length(), FileChannel.MapMode.READ_ONLY, scope)
 
-    override val size: Long by lazy {
+    override val fileSize: Long by lazy {
         this.file.length()
     }
 

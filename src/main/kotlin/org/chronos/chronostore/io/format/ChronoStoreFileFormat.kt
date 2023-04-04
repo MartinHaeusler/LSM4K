@@ -1,8 +1,13 @@
 package org.chronos.chronostore.io.format
 
+import org.chronos.chronostore.command.KeyAndTimestamp
 import org.chronos.chronostore.io.fileaccess.RandomFileAccessDriver
 import org.chronos.chronostore.util.Bytes
 import org.chronos.chronostore.util.IOExtensions.withInputStream
+import org.chronos.chronostore.util.LittleEndianExtensions.readLittleEndianInt
+import org.chronos.chronostore.util.LittleEndianExtensions.readLittleEndianIntOrNull
+import org.chronos.chronostore.util.LittleEndianExtensions.readLittleEndianLong
+import java.util.*
 
 object ChronoStoreFileFormat {
 
@@ -37,21 +42,47 @@ object ChronoStoreFileFormat {
         val versionInt: Int,
     ) {
 
-        V_1_0_0("1.0.0", 100_000_000) {
+        V_1_0_0("1.0.0", 1_000_000) {
 
-            override fun readTrailer(driver: RandomFileAccessDriver): FileTrailer {
-                val fileLength = driver.size
+            override fun readFileHeader(driver: RandomFileAccessDriver): FileHeader {
+                val trailer = this.readTrailer(driver)
+                val metadata = this.readMetaData(driver, trailer)
+                val indexOfBlocks = this.readIndexOfBlocks(driver, trailer)
+                return FileHeader(
+                    fileFormatVersion = this,
+                    trailer = trailer,
+                    metaData = metadata,
+                    indexOfBlocks = indexOfBlocks,
+                )
+            }
+
+            private fun readTrailer(driver: RandomFileAccessDriver): FileTrailer {
+                val fileLength = driver.fileSize
                 val trailerSizeInBytes = FileTrailer.SIZE_BYTES
                 val trailerBytes = driver.readBytes(fileLength - trailerSizeInBytes, trailerSizeInBytes)
                 return FileTrailer.readFrom(trailerBytes)
             }
 
-            override fun readMetaData(driver: RandomFileAccessDriver, fileTrailer: FileTrailer): FileMetaData {
-                val trailer = this.readTrailer(driver)
-                val metadataBytes = driver.readBytes(trailer.beginOfMetadata, (driver.size - FileTrailer.SIZE_BYTES - trailer.beginOfMetadata).toInt())
+            private fun readMetaData(driver: RandomFileAccessDriver, fileTrailer: FileTrailer): FileMetaData {
+                val lengthOfMetadata = (driver.fileSize - FileTrailer.SIZE_BYTES - fileTrailer.beginOfMetadata).toInt()
+                val metadataBytes = driver.readBytes(fileTrailer.beginOfMetadata, lengthOfMetadata)
                 return metadataBytes.withInputStream(FileMetaData::readFrom)
             }
 
+            private fun readIndexOfBlocks(driver: RandomFileAccessDriver, trailer: FileTrailer): IndexOfBlocks {
+                val lengthOfIndexOfBlocks = (trailer.beginOfMetadata - trailer.beginOfIndexOfBlocks).toInt()
+                val indexBytes = driver.readBytes(trailer.beginOfIndexOfBlocks, lengthOfIndexOfBlocks)
+                return indexBytes.withInputStream { inputStream ->
+                    val entries = generateSequence {
+                        val blockSequenceNumber = inputStream.readLittleEndianIntOrNull()
+                            ?: return@generateSequence null // we're done
+                        val blockStartPosition = inputStream.readLittleEndianLong()
+                        val blockMinKeyAndTimestamp = KeyAndTimestamp.readFromStream(inputStream)
+                        Triple(blockSequenceNumber, blockStartPosition, blockMinKeyAndTimestamp)
+                    }.toList()
+                    IndexOfBlocks(entries, trailer.beginOfIndexOfBlocks)
+                }
+            }
 
         }
 
@@ -80,9 +111,8 @@ object ChronoStoreFileFormat {
 
         }
 
-        abstract fun readTrailer(driver: RandomFileAccessDriver): FileTrailer
+        abstract fun readFileHeader(driver: RandomFileAccessDriver): FileHeader
 
-        abstract fun readMetaData(driver: RandomFileAccessDriver, trailer: FileTrailer): FileMetaData
 
         override fun toString(): String {
             return this.versionString

@@ -5,7 +5,7 @@ import java.io.EOFException
 
 interface RandomFileAccessDriver : AutoCloseable {
 
-    val size: Long
+    val fileSize: Long
 
     val filePath: String
 

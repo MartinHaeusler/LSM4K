@@ -21,6 +21,31 @@ class BlockMetaData(
     val uncompressedDataSize: Int,
 ) {
 
+    companion object {
+
+        fun readFrom(inputStream: InputStream): BlockMetaData {
+            val blockSequenceNumber = inputStream.readLittleEndianInt()
+            val minKey = PrefixIO.readBytes(inputStream)
+            val maxKey = PrefixIO.readBytes(inputStream)
+            val minTimestamp = inputStream.readLittleEndianLong()
+            val maxTimestamp = inputStream.readLittleEndianLong()
+            val commandCount = inputStream.readLittleEndianInt()
+            val compressedSize = inputStream.readLittleEndianInt()
+            val uncompressedSize = inputStream.readLittleEndianInt()
+            return BlockMetaData(
+                blockSequenceNumber = blockSequenceNumber,
+                minKey = minKey,
+                maxKey = maxKey,
+                minTimestamp = minTimestamp,
+                maxTimestamp = maxTimestamp,
+                commandCount = commandCount,
+                compressedDataSize = compressedSize,
+                uncompressedDataSize = uncompressedSize,
+            )
+        }
+
+    }
+
     init {
         require(this.blockSequenceNumber >= 0) { "Argument 'blockSequenceNumber' must not be negative (${this.blockSequenceNumber})!" }
         require(!this.minKey.isEmpty()) { "Argument 'minKey' must not be empty!" }
@@ -57,27 +82,6 @@ class BlockMetaData(
         outputStream.writeLittleEndianInt(this.commandCount)
         outputStream.writeLittleEndianInt(this.compressedDataSize)
         outputStream.writeLittleEndianInt(this.uncompressedDataSize)
-    }
-
-    fun readFrom(inputStream: InputStream): BlockMetaData {
-        val blockSequenceNumber = inputStream.readLittleEndianInt()
-        val minKey = PrefixIO.readBytes(inputStream)
-        val maxKey = PrefixIO.readBytes(inputStream)
-        val minTimestamp = inputStream.readLittleEndianLong()
-        val maxTimestamp = inputStream.readLittleEndianLong()
-        val commandCount = inputStream.readLittleEndianInt()
-        val compressedSize = inputStream.readLittleEndianInt()
-        val uncompressedSize = inputStream.readLittleEndianInt()
-        return BlockMetaData(
-            blockSequenceNumber = blockSequenceNumber,
-            minKey = minKey,
-            maxKey = maxKey,
-            minTimestamp = minTimestamp,
-            maxTimestamp = maxTimestamp,
-            commandCount = commandCount,
-            compressedDataSize = compressedSize,
-            uncompressedDataSize = uncompressedSize,
-        )
     }
 
     override fun toString(): String {

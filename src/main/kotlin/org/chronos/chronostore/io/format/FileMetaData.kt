@@ -6,7 +6,6 @@ import org.chronos.chronostore.util.LittleEndianExtensions.readLittleEndianInt
 import org.chronos.chronostore.util.LittleEndianExtensions.readLittleEndianLong
 import org.chronos.chronostore.util.LittleEndianExtensions.writeLittleEndianInt
 import org.chronos.chronostore.util.LittleEndianExtensions.writeLittleEndianLong
-import org.chronos.chronostore.util.PositionTrackingStream
 import org.chronos.chronostore.util.PrefixIO
 import org.chronos.chronostore.util.Timestamp
 import org.chronos.chronostore.util.UUIDExtensions.readUUIDFrom
@@ -99,6 +98,26 @@ class FileMetaData(
             PrefixIO.writeBytes(outputStream, key)
             PrefixIO.writeBytes(outputStream, value)
         }
+    }
+
+    fun mayContainKey(key: Bytes): Boolean {
+        if (this.minKey == null || this.maxKey == null) {
+            // this file is empty -> it contains NO keys at all
+            return false
+        }
+        // check if the key is in range
+        return this.minKey <= key && key <= this.maxKey
+    }
+
+    fun mayContainDataRelevantForTimestamp(timestamp: Timestamp): Boolean {
+        if (this.minTimestamp == null) {
+            // the file is empty
+            return false
+        }
+        // if the min timestamp is GREATER than the request timestamp,
+        // this file only contains data which is NEWER than the timestamp
+        // we're looking for, thus there's no data in this file affecting that timestamp.
+        return this.minTimestamp <= timestamp
     }
 
     /** The number of entries in this file which have been overwritten by newer entries on the same keys. */

@@ -71,9 +71,10 @@ class ChronoStoreFileWriter : AutoCloseable {
 
         val beginOfIndexOfBlocks = this.outputStream.position
         // write the index of blocks
-        for ((blockIndex, startPosition) in blockWriteResult.indexOfBlocks) {
+        for ((blockIndex, startPosition, minKeyAndTimestamp) in blockWriteResult.indexOfBlocks) {
             this.outputStream.writeLittleEndianInt(blockIndex)
             this.outputStream.writeLittleEndianLong(startPosition)
+            minKeyAndTimestamp.writeTo(this.outputStream)
         }
 
         val beginOfMetadata = this.outputStream.position
@@ -142,11 +143,12 @@ class ChronoStoreFileWriter : AutoCloseable {
 
         // write the individual blocks into the file until we
         // run out of commands.
-        val blockIndexToStartPosition = mutableListOf<Pair<Int, Long>>()
+        val blockIndexToStartPositionAndMinKey = mutableListOf<Triple<Int, Long, KeyAndTimestamp>>()
 
         var blockSequenceNumber = 0
         while (commands.hasNext()) {
-            blockIndexToStartPosition += Pair(blockSequenceNumber, this.outputStream.position)
+            val minKeyAndTimestamp = commands.peek().keyAndTimestamp
+            blockIndexToStartPositionAndMinKey += Triple(blockSequenceNumber, this.outputStream.position, minKeyAndTimestamp)
             writeBlock(commands, blockSequenceNumber)
             blockSequenceNumber++
         }
@@ -158,7 +160,7 @@ class ChronoStoreFileWriter : AutoCloseable {
             maxTimestamp = maxTimestamp,
             minKey = minKey,
             maxKey = maxKey,
-            indexOfBlocks = blockIndexToStartPosition
+            indexOfBlocks = blockIndexToStartPositionAndMinKey
         )
     }
 
@@ -183,14 +185,14 @@ class ChronoStoreFileWriter : AutoCloseable {
         var maxTimestamp = 0L
         // in order to create an appropriately sized bloom filter for the block later on,
         // we must keep track of all of the keys within the block.
-        val allKeysInBlock = mutableListOf<KeyAndTimestamp>()
+        val allKeysInBlock = mutableListOf<Bytes>()
         while (commands.hasNext() && (blockPositionTrackingStream.position + commands.peek().byteSize) < this.settings.maxBlockSizeInBytes) {
             val command = commands.next()
             blockIndexBuilder.visit(command, blockPositionTrackingStream.position.toInt())
             blockDataOutputStream.write(command.toBytes())
             minTimestamp = min(minTimestamp, command.timestamp)
             maxTimestamp = max(maxTimestamp, command.timestamp)
-            allKeysInBlock += command.keyAndTimestamp
+            allKeysInBlock += command.keyAndTimestamp.key
             commandCount++
         }
         // we're done writing the commands. Complete the index construction
@@ -252,7 +254,7 @@ class ChronoStoreFileWriter : AutoCloseable {
     }
 
     @Suppress("UnstableApiUsage")
-    private fun createBlockBloomFilter(allKeysInBlock: MutableList<KeyAndTimestamp>): Bytes {
+    private fun createBlockBloomFilter(allKeysInBlock: List<Bytes>): Bytes {
         // create a bloom filter to track which elements *might* be in the block
         val bloomFilter = BloomFilter.create(
             /* funnel = */ Funnels.byteArrayFunnel(),
@@ -262,7 +264,7 @@ class ChronoStoreFileWriter : AutoCloseable {
 
         // add all entries to the bloom filter
         for (key in allKeysInBlock) {
-            bloomFilter.put(key.toBytes())
+            bloomFilter.put(key)
         }
 
         return bloomFilter.toBytes()
@@ -319,7 +321,7 @@ class ChronoStoreFileWriter : AutoCloseable {
         val maxKey: Bytes?,
         val minTimestamp: Timestamp?,
         val maxTimestamp: Timestamp?,
-        val indexOfBlocks: List<Pair<Int, Long>>,
+        val indexOfBlocks: List<Triple<Int, Long, KeyAndTimestamp>>,
     )
 
     private class ObservingPeekingIterator<E>(
