@@ -5,6 +5,7 @@ import com.google.common.cache.CacheBuilder
 import org.chronos.chronostore.command.Command
 import org.chronos.chronostore.command.KeyAndTimestamp
 import org.chronos.chronostore.io.fileaccess.RandomFileAccessDriver
+import org.chronos.chronostore.util.Order
 import java.util.*
 
 class ChronoStoreFileReader : AutoCloseable {
@@ -87,16 +88,35 @@ class ChronoStoreFileReader : AutoCloseable {
         return cachedResult.orElse(null)
     }
 
-    fun scan(from: KeyAndTimestamp?, fromInclusive: Boolean, to: KeyAndTimestamp?, toInclusive: Boolean, consumer: ScanClient) {
-        return if (to == null) {
-            scan(from, fromInclusive, consumer)
-        } else {
-            scan(from, fromInclusive, ScanUntilUpperLimitClient(consumer, to, toInclusive))
-        }
-    }
+    fun scan(from: KeyAndTimestamp?, to: KeyAndTimestamp?, order: Order, consumer: ScanClient) {
+        // does this file contain anything of value for the range?
+        val minKey = this.fileHeader.metaData.minKey
+            ?: return // file is empty
+        val maxKey = this.fileHeader.metaData.maxKey
+            ?: return // file is empty
 
-    fun scan(from: KeyAndTimestamp?, fromInclusive: Boolean, consumer: ScanClient) {
-        TODO("Implement me!")
+        val scanStart = (from?.key ?: minKey).coerceAtLeast(minKey)
+        val scanEnd = (to?.key ?: maxKey).coerceAtMost(maxKey)
+
+        if(scanStart > maxKey || scanEnd < minKey){
+            // this file contains no key we're interested in.
+            return
+        }
+
+        this.fileHeader.indexOfBlocks.getBlockIndexForKeyAndTimestamp(scanStart)
+
+
+        // determine the start block
+        val startBlock = if(from == null){
+            // start from the first block
+            this.getBlockForIndex(0)
+                ?: return
+        }else{
+            val blockIndex = this.fileHeader.indexOfBlocks.getBlockIndexForKeyAndTimestamp(from) ?: 0
+            this.getBlockForIndex(blockIndex)
+                ?: return
+
+        }
     }
 
     // TODO: maybe cursor API instead of just scans?
