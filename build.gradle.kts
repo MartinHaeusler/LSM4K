@@ -25,6 +25,9 @@ dependencies {
     testImplementation("org.junit.jupiter:junit-jupiter-engine")
     testImplementation("io.strikt","strikt-core", BuildVersions.strikt)
     testImplementation("ch.qos.logback", "logback-classic", BuildVersions.logback)
+    testImplementation("com.fasterxml.jackson.core:jackson-core:${BuildVersions.jackson}")
+    testImplementation("com.fasterxml.jackson.core:jackson-databind:${BuildVersions.jackson}")
+
     testImplementation(kotlin("reflect"))
 }
 

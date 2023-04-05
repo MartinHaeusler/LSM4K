@@ -14,7 +14,7 @@ object BuildVersions {
     const val logback = "1.4.6"
 
     // JSON / BSON
-    const val jackson = "2.13.1"
+    const val jackson = "2.14.2"
     const val hornoxBson = "1.2"
 
     // SCRIPTING

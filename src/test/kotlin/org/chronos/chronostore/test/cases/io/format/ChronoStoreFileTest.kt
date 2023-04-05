@@ -118,6 +118,52 @@ class ChronoStoreFileTest {
                         }
 
                         get { get(KeyAndTimestamp(theKey, min - 1)) }.isNull()
+
+                        get { get(KeyAndTimestamp(theKey, 101_000)) }.isNotNull().and {
+                            get { this.opCode }.isEqualTo(Command.OpCode.DEL)
+                            get { this.timestamp }.isEqualTo(101_000)
+                            get { this.value }.isEmpty()
+                        }
+                        get { get(KeyAndTimestamp(theKey, 101_001)) }.isNotNull().and {
+                            get { this.opCode }.isEqualTo(Command.OpCode.DEL)
+                            get { this.timestamp }.isEqualTo(101_000)
+                            get { this.value }.isEmpty()
+                        }
+                        get { get(KeyAndTimestamp(theKey, 101_002)) }.isNotNull().and {
+                            get { this.opCode }.isEqualTo(Command.OpCode.DEL)
+                            get { this.timestamp }.isEqualTo(101_000)
+                            get { this.value }.isEmpty()
+                        }
+                        get { get(KeyAndTimestamp(theKey, 101_010)) }.isNotNull().and {
+                            get { this.opCode }.isEqualTo(Command.OpCode.DEL)
+                            get { this.timestamp }.isEqualTo(101_000)
+                            get { this.value }.isEmpty()
+                        }
+                        get { get(KeyAndTimestamp(theKey, 101_100)) }.isNotNull().and {
+                            get { this.opCode }.isEqualTo(Command.OpCode.DEL)
+                            get { this.timestamp }.isEqualTo(101_000)
+                            get { this.value }.isEmpty()
+                        }
+                        get { get(KeyAndTimestamp(theKey, 101_990)) }.isNotNull().and {
+                            get { this.opCode }.isEqualTo(Command.OpCode.DEL)
+                            get { this.timestamp }.isEqualTo(101_000)
+                            get { this.value }.isEmpty()
+                        }
+                        get { get(KeyAndTimestamp(theKey, 101_999)) }.isNotNull().and {
+                            get { this.opCode }.isEqualTo(Command.OpCode.DEL)
+                            get { this.timestamp }.isEqualTo(101_000)
+                            get { this.value }.isEmpty()
+                        }
+                        get { get(KeyAndTimestamp(theKey, 102_000)) }.isNotNull().and {
+                            get { this.opCode }.isEqualTo(Command.OpCode.PUT)
+                            get { this.timestamp }.isEqualTo(102_000)
+                            get { this.value }.hasSize(1024)
+                        }
+                        get { get(KeyAndTimestamp(theKey, 102_001)) }.isNotNull().and {
+                            get { this.opCode }.isEqualTo(Command.OpCode.PUT)
+                            get { this.timestamp }.isEqualTo(102_000)
+                            get { this.value }.hasSize(1024)
+                        }
                     }
                 }
             }
