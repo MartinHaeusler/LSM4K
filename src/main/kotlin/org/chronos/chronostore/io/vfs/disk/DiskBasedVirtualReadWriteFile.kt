@@ -2,6 +2,7 @@ package org.chronos.chronostore.io.vfs.disk
 
 import mu.KotlinLogging
 import org.chronos.chronostore.io.vfs.VirtualReadWriteFile
+import org.chronos.chronostore.util.IOExtensions.sync
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
@@ -66,9 +67,8 @@ class DiskBasedVirtualReadWriteFile(
             log.trace { "Committing writing $file" }
             inProgress = false
             try {
-                val fd = this.stream.fd
                 this.stream.flush()
-                fd.sync()
+                this.stream.sync()
                 this.stream.close()
                 Files.move(tempFile.toPath(), file.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
             } catch (e: IOException) {

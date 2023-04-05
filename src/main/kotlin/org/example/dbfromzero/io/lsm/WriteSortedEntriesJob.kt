@@ -37,7 +37,7 @@ class WriteSortedEntriesJob(
             overWriter = dataFile.createOverWriter()
             indexOverWriter = indexFile.createOverWriter()
 
-            PositionTrackingStream(overWriter.outputStream, IO_BUFFER_SIZE).use { outputStream ->
+            PositionTrackingStream(overWriter.outputStream).use { outputStream ->
                 KeyValueFileWriter(BufferedOutputStream(indexOverWriter.outputStream, IO_BUFFER_SIZE)).use { indexWriter ->
                     val indexBuilder = IndexBuilder.create(indexWriter, indexRate)
                     KeyValueFileWriter(outputStream).use { writer ->

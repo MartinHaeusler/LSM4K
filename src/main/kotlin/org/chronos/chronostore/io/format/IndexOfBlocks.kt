@@ -26,6 +26,11 @@ class IndexOfBlocks {
         }
     }
 
+    val isEmpty: Boolean
+        get(){
+            return this.minKeyAndTimestampToBlockIndex.isEmpty()
+        }
+
     fun getBlockStartPositionAndLengthOrNull(blockIndex: Int): Pair<Long, Int>? {
         return when {
             blockIndex > this.startPositions.lastIndex -> {

@@ -48,10 +48,10 @@ class FileMetaData(
                 indexRate = inputStream.readLittleEndianInt(),
             )
             val fileUUID = readUUIDFrom(inputStream.readNBytes(Long.SIZE_BYTES * 2))
-            val minKey = PrefixIO.readBytes(inputStream)
-            val maxKey = PrefixIO.readBytes(inputStream)
-            val minTimestamp = inputStream.readLittleEndianLong()
-            val maxTimestamp = inputStream.readLittleEndianLong()
+            val minKey = PrefixIO.readBytes(inputStream).takeIf { it.isNotEmpty() }
+            val maxKey = PrefixIO.readBytes(inputStream).takeIf { it.isNotEmpty() }
+            val minTimestamp = inputStream.readLittleEndianLong().takeIf { it > 0 }
+            val maxTimestamp = inputStream.readLittleEndianLong().takeIf { it > 0 }
             val headEntries = inputStream.readLittleEndianLong()
             val totalEntries = inputStream.readLittleEndianLong()
             val createdAt = inputStream.readLittleEndianLong()
@@ -127,7 +127,7 @@ class FileMetaData(
     val headHistoryRatio: Double
         get() {
             if (this.totalEntries <= 0) {
-                return 0.0
+                return 1.0 // by definition
             }
             return this.headEntries.toDouble() / this.totalEntries
         }

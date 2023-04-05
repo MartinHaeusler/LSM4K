@@ -1,11 +1,14 @@
-package org.chronos.chronostore.io.format
+package org.chronos.chronostore.io.format.datablock
 
 import com.google.common.hash.BloomFilter
 import com.google.common.hash.Funnels
 import org.chronos.chronostore.command.Command
 import org.chronos.chronostore.command.KeyAndTimestamp
+import org.chronos.chronostore.io.fileaccess.RandomFileAccessDriver
+import org.chronos.chronostore.io.format.BlockMetaData
+import org.chronos.chronostore.io.format.ChronoStoreFileFormat
+import org.chronos.chronostore.io.format.CompressionAlgorithm
 import org.chronos.chronostore.util.Bytes
-import org.chronos.chronostore.util.Bytes.Companion.mightContain
 import org.chronos.chronostore.util.LittleEndianExtensions.readLittleEndianInt
 import java.io.ByteArrayInputStream
 import java.io.InputStream
@@ -29,13 +32,16 @@ interface DataBlock {
      *         the case, the next data block needs to be consulted as well, because
      *         the entry we returned may not be the **latest** entry for the key.
      */
-    fun get(key: KeyAndTimestamp): Pair<Command, Boolean>?
-
+    fun get(key: KeyAndTimestamp, driver: RandomFileAccessDriver): Pair<Command, Boolean>?
 
 
     companion object {
 
-        fun readEager(inputStream: InputStream, compressionAlgorithm: CompressionAlgorithm): DataBlock {
+        @JvmStatic
+        fun createEagerLoadingInMemoryBlock(
+            inputStream: InputStream,
+            compressionAlgorithm: CompressionAlgorithm
+        ): DataBlock {
             val magicBytes = Bytes(inputStream.readNBytes(ChronoStoreFileFormat.BLOCK_MAGIC_BYTES.size))
             if (magicBytes != ChronoStoreFileFormat.BLOCK_MAGIC_BYTES) {
                 throw IllegalArgumentException(
@@ -72,11 +78,17 @@ interface DataBlock {
                 }
             }
 
-            return EagerDataBlock(blockMetaData, commands)
+            return EagerDataBlock(
+                metaData = blockMetaData,
+                data = commands
+            )
         }
 
-
-        fun readLazy(inputStream: InputStream, compressionAlgorithm: CompressionAlgorithm): DataBlock {
+        @JvmStatic
+        fun createLazyLoadingInMemoryBlock(
+            inputStream: InputStream,
+            compressionAlgorithm: CompressionAlgorithm
+        ): DataBlock {
             val magicBytes = Bytes(inputStream.readNBytes(ChronoStoreFileFormat.BLOCK_MAGIC_BYTES.size))
             if (magicBytes != ChronoStoreFileFormat.BLOCK_MAGIC_BYTES) {
                 throw IllegalArgumentException(
@@ -103,7 +115,55 @@ interface DataBlock {
             // decompress the data
             val decompressedData = Bytes(compressionAlgorithm.decompress(compressedBytes))
 
-            return LazyDataBlock(blockMetaData, bloomFilter, blockIndex, decompressedData)
+            return LazyDataBlock(
+                metaData = blockMetaData,
+                bloomFilter = bloomFilter,
+                blockIndex = blockIndex,
+                data = decompressedData
+            )
+        }
+
+        @JvmStatic
+        fun createDiskBasedDataBlock(
+            inputStream: InputStream,
+            compressionAlgorithm: CompressionAlgorithm,
+            blockStartOffset: Long,
+        ): DataBlock {
+            require(compressionAlgorithm == CompressionAlgorithm.NONE) {
+                // TODO: check HBase implementation about details how to read partially from a compressed byte array
+                "Disk-based data blocks do not support compression at the moment."
+            }
+            val magicBytes = Bytes(inputStream.readNBytes(ChronoStoreFileFormat.BLOCK_MAGIC_BYTES.size))
+            if (magicBytes != ChronoStoreFileFormat.BLOCK_MAGIC_BYTES) {
+                throw IllegalArgumentException(
+                    "Cannot read block from input: the magic bytes do not match!" +
+                        " Expected ${ChronoStoreFileFormat.BLOCK_MAGIC_BYTES.hex()}, found ${magicBytes.hex()}!"
+                )
+            }
+            // read the individual parts of the binary format
+            val blockSize = inputStream.readLittleEndianInt()
+            val blockMetadataSize = inputStream.readLittleEndianInt()
+            val blockMetadataBytes = inputStream.readNBytes(blockMetadataSize)
+            val bloomFilterSize = inputStream.readLittleEndianInt()
+            val bloomFilterBytes = inputStream.readNBytes(bloomFilterSize)
+            val blockIndexSize = inputStream.readLittleEndianInt()
+            val blockIndexBytes = inputStream.readNBytes(blockIndexSize)
+            val compressedSize = inputStream.readLittleEndianInt()
+            // skip over the actual data, we load it lazily
+            inputStream.skipNBytes(compressedSize.toLong())
+
+            // deserialize the binary representations
+            val blockMetaData = BlockMetaData.readFrom(ByteArrayInputStream(blockMetadataBytes))
+            val bloomFilter = BloomFilter.readFrom(ByteArrayInputStream(bloomFilterBytes), Funnels.byteArrayFunnel())
+            val blockIndex = readBlockIndexFromBytes(blockIndexBytes)
+
+            return DiskBasedDataBlock(
+                metaData = blockMetaData,
+                bloomFilter = bloomFilter,
+                blockIndex = blockIndex,
+                blockStartOffset = blockStartOffset,
+                blockEndOffset = blockStartOffset + blockSize
+            )
         }
 
         private fun readBlockIndexFromBytes(blockIndexBytes: ByteArray): NavigableMap<KeyAndTimestamp, Int> {
@@ -116,87 +176,6 @@ interface DataBlock {
                     tree[keyAndTimestamp] = offset
                 }
                 return tree
-            }
-        }
-
-    }
-
-}
-
-class EagerDataBlock(
-    override val metaData: BlockMetaData,
-    private val data: NavigableMap<KeyAndTimestamp, Command>,
-) : DataBlock {
-
-    override fun get(key: KeyAndTimestamp): Pair<Command, Boolean>? {
-        if (key.key !in metaData.minKey..metaData.maxKey) {
-            return null
-        }
-        if (key.timestamp < metaData.minTimestamp) {
-            return null
-        }
-        val (foundKeyAndTimestamp, foundCommand) = data.floorEntry(key)
-            ?: return null // request key is too small
-
-        // did we hit the same key?
-        return if (foundKeyAndTimestamp.key == key.key) {
-            // key is the same -> this is the entry we're looking for.
-            Pair(foundCommand, data.lastKey() == foundKeyAndTimestamp)
-        } else {
-            // key is different -> the key we wanted doesn't exist.
-            null
-        }
-    }
-
-}
-
-class LazyDataBlock(
-    override val metaData: BlockMetaData,
-    private val bloomFilter: BloomFilter<ByteArray>,
-    private val blockIndex: NavigableMap<KeyAndTimestamp, Int>,
-    private val data: Bytes,
-) : DataBlock {
-
-    override fun get(key: KeyAndTimestamp): Pair<Command, Boolean>? {
-        if (key.key !in metaData.minKey..metaData.maxKey) {
-            return null
-        }
-        if (key.timestamp < metaData.minTimestamp) {
-            return null
-        }
-        if (!bloomFilter.mightContain(key.key)) {
-            // key isn't in our block
-            return null
-        }
-        val (_, foundOffset) = blockIndex.floorEntry(key)
-            ?: return null // request key is too small
-
-        data.createInputStream(foundOffset).use { inputStream ->
-            var previous: Command? = null
-            while (inputStream.available() > 0) {
-                val command = Command.readFromStream(inputStream)
-                val cmp = command.keyAndTimestamp.compareTo(key)
-                if (cmp == 0) {
-                    // exact match (unlikely, but possible)
-                    return Pair(command, false)
-                } else if (cmp > 0) {
-                    // this key is bigger, use the previous one
-                    return if (previous?.key == key.key) {
-                        Pair(previous, false)
-                    } else {
-                        null
-                    }
-                } else {
-                    // remember this one, but keep searching
-                    previous = command
-                }
-            }
-            // we're at the end of the block, maybe the last
-            // entry matches?
-            return if (previous?.key == key.key) {
-                Pair(previous, true)
-            } else {
-                null
             }
         }
 

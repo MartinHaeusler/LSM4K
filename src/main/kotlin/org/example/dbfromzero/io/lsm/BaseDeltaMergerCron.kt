@@ -134,7 +134,7 @@ class BaseDeltaMergerCron(
         try {
             baseOverWriter = baseFile.createOverWriter()
             indexOverWriter = baseIndex.createOverWriter()
-            PositionTrackingStream(baseOverWriter.outputStream, BUFFER_SIZE).use { outputStream ->
+            PositionTrackingStream(baseOverWriter.outputStream).use { outputStream ->
                 KeyValueFileWriter(BufferedOutputStream(indexOverWriter.outputStream, BUFFER_SIZE)).use { indexWriter ->
                     writeMerged(selectedIterator, outputStream, indexWriter)
                 }

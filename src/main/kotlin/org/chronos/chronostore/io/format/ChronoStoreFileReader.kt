@@ -5,18 +5,22 @@ import com.google.common.cache.CacheBuilder
 import org.chronos.chronostore.command.Command
 import org.chronos.chronostore.command.KeyAndTimestamp
 import org.chronos.chronostore.io.fileaccess.RandomFileAccessDriver
+import org.chronos.chronostore.io.format.datablock.BlockReadMode
+import org.chronos.chronostore.io.format.datablock.DataBlock
 import org.chronos.chronostore.util.Order
 import java.util.*
 
 class ChronoStoreFileReader : AutoCloseable {
 
     private val driver: RandomFileAccessDriver
+    private val blockReadMode: BlockReadMode
 
-    private val fileHeader: FileHeader
+    val fileHeader: FileHeader
     private val blockCache: Cache<Int, Optional<DataBlock>>
 
-    constructor(driver: RandomFileAccessDriver) {
+    constructor(driver: RandomFileAccessDriver, blockReadMode: BlockReadMode) {
         this.driver = driver
+        this.blockReadMode = blockReadMode
         this.fileHeader = loadFileHeader()
         this.blockCache = CacheBuilder.newBuilder().maximumSize(100).build()
     }
@@ -28,9 +32,10 @@ class ChronoStoreFileReader : AutoCloseable {
      * overhead, which is skipped here because the file is immutable
      * and the reader we were copied from already did all the work for us.
      */
-    private constructor(driver: RandomFileAccessDriver, header: FileHeader, blockCache: Cache<Int, Optional<DataBlock>>) {
+    private constructor(driver: RandomFileAccessDriver, header: FileHeader, blockCache: Cache<Int, Optional<DataBlock>>, blockReadMode: BlockReadMode) {
         // skip all the validation, it has already been done for us.
         this.driver = driver
+        this.blockReadMode = blockReadMode
         this.fileHeader = header
         this.blockCache = blockCache
     }
@@ -65,7 +70,7 @@ class ChronoStoreFileReader : AutoCloseable {
         while (true) {
             val dataBlock = this.getBlockForIndex(blockIndex)
                 ?: return matchingCommandFromPreviousBlock
-            val (command, isLastInBlock) = dataBlock.get(keyAndTimestamp)
+            val (command, isLastInBlock) = dataBlock.get(keyAndTimestamp, this.driver)
                 ?: return matchingCommandFromPreviousBlock
             if (!isLastInBlock) {
                 return command
@@ -83,41 +88,41 @@ class ChronoStoreFileReader : AutoCloseable {
             val (startPosition, length) = this.fileHeader.indexOfBlocks.getBlockStartPositionAndLengthOrNull(blockIndex)
                 ?: return@get Optional.empty()
             val blockBytes = this.driver.readBytes(startPosition, length)
-            return@get Optional.of(DataBlock.readLazy(blockBytes.createInputStream(), this.fileHeader.metaData.settings.compression))
+            return@get Optional.of(DataBlock.createLazyLoadingInMemoryBlock(blockBytes.createInputStream(), this.fileHeader.metaData.settings.compression))
         }
         return cachedResult.orElse(null)
     }
 
-    fun scan(from: KeyAndTimestamp?, to: KeyAndTimestamp?, order: Order, consumer: ScanClient) {
-        // does this file contain anything of value for the range?
-        val minKey = this.fileHeader.metaData.minKey
-            ?: return // file is empty
-        val maxKey = this.fileHeader.metaData.maxKey
-            ?: return // file is empty
-
-        val scanStart = (from?.key ?: minKey).coerceAtLeast(minKey)
-        val scanEnd = (to?.key ?: maxKey).coerceAtMost(maxKey)
-
-        if(scanStart > maxKey || scanEnd < minKey){
-            // this file contains no key we're interested in.
-            return
-        }
-
-        this.fileHeader.indexOfBlocks.getBlockIndexForKeyAndTimestamp(scanStart)
-
-
-        // determine the start block
-        val startBlock = if(from == null){
-            // start from the first block
-            this.getBlockForIndex(0)
-                ?: return
-        }else{
-            val blockIndex = this.fileHeader.indexOfBlocks.getBlockIndexForKeyAndTimestamp(from) ?: 0
-            this.getBlockForIndex(blockIndex)
-                ?: return
-
-        }
-    }
+    // fun scan(from: KeyAndTimestamp?, to: KeyAndTimestamp?, order: Order, consumer: ScanClient) {
+    //     // does this file contain anything of value for the range?
+    //     val minKey = this.fileHeader.metaData.minKey
+    //         ?: return // file is empty
+    //     val maxKey = this.fileHeader.metaData.maxKey
+    //         ?: return // file is empty
+    //
+    //     val scanStart = (from?.key ?: minKey).coerceAtLeast(minKey)
+    //     val scanEnd = (to?.key ?: maxKey).coerceAtMost(maxKey)
+    //
+    //     if(scanStart > maxKey || scanEnd < minKey){
+    //         // this file contains no key we're interested in.
+    //         return
+    //     }
+    //
+    //     this.fileHeader.indexOfBlocks.getBlockIndexForKeyAndTimestamp(scanStart)
+    //
+    //
+    //     // determine the start block
+    //     val startBlock = if(from == null){
+    //         // start from the first block
+    //         this.getBlockForIndex(0)
+    //             ?: return
+    //     }else{
+    //         val blockIndex = this.fileHeader.indexOfBlocks.getBlockIndexForKeyAndTimestamp(from) ?: 0
+    //         this.getBlockForIndex(blockIndex)
+    //             ?: return
+    //
+    //     }
+    // }
 
     // TODO: maybe cursor API instead of just scans?
 
@@ -138,6 +143,7 @@ class ChronoStoreFileReader : AutoCloseable {
     fun copy(): ChronoStoreFileReader {
         return ChronoStoreFileReader(
             driver = this.driver.copy(),
+            blockReadMode = this.blockReadMode,
             header = this.fileHeader,
             blockCache = this.blockCache,
         )

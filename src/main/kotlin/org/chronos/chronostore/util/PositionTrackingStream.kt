@@ -15,4 +15,12 @@ class PositionTrackingStream(
         this.position += 1
     }
 
+    override fun flush() {
+        this.outputStream.flush()
+    }
+
+    override fun close() {
+        this.outputStream.close()
+    }
+
 }

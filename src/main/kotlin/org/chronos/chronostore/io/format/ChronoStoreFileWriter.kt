@@ -63,7 +63,7 @@ class ChronoStoreFileWriter : AutoCloseable {
         // the file starts with the magic bytes (for later filetype recognition; fixed size)
         this.outputStream.write(ChronoStoreFileFormat.FILE_MAGIC_BYTES)
         // the next 4 bytes are reserved for the file format version (fixed size)
-        this.outputStream.write(FILE_FORMAT_VERSION.versionInt)
+        this.outputStream.writeLittleEndianInt(FILE_FORMAT_VERSION.versionInt)
 
         val beginOfBlocks = this.outputStream.position
 
@@ -156,8 +156,8 @@ class ChronoStoreFileWriter : AutoCloseable {
         return BlockWriteResult(
             totalEntries = totalEntries,
             headEntries = headEntries,
-            minTimestamp = minTimestamp,
-            maxTimestamp = maxTimestamp,
+            minTimestamp = minTimestamp.takeIf { it < Timestamp.MAX_VALUE },
+            maxTimestamp = maxTimestamp.takeIf { it > 0 },
             minKey = minKey,
             maxKey = maxKey,
             indexOfBlocks = blockIndexToStartPositionAndMinKey
