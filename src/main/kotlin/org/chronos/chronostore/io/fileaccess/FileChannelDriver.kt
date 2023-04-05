@@ -41,6 +41,10 @@ class FileChannelDriver(
         return FileChannelDriver(this.file)
     }
 
+    override fun toString(): String {
+        return "FileChannelDriver[${this.file.path}]"
+    }
+
     override fun close() {
         if (this.closed) {
             return

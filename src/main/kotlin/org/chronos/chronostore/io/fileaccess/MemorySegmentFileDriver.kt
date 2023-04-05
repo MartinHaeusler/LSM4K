@@ -48,6 +48,11 @@ class MemorySegmentFileDriver(
         return MemorySegmentFileDriver(this.file)
     }
 
+    override fun toString(): String {
+        return "MemorySegmentFileDriver[${this.file.path}]"
+    }
+
+
     override fun close() {
         if (this.closed) {
             return

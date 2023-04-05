@@ -31,6 +31,9 @@ class IndexOfBlocks {
             return this.minKeyAndTimestampToBlockIndex.isEmpty()
         }
 
+    val size: Int
+        get() = this.minKeyAndTimestampToBlockIndex.size
+
     fun getBlockStartPositionAndLengthOrNull(blockIndex: Int): Pair<Long, Int>? {
         return when {
             blockIndex > this.startPositions.lastIndex -> {

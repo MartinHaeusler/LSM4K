@@ -149,6 +149,10 @@ class ChronoStoreFileReader : AutoCloseable {
         )
     }
 
+    override fun toString(): String {
+        return "ChronoStoreFileReader[${this.driver.filePath}]"
+    }
+
     override fun close() {
         this.driver.close()
     }

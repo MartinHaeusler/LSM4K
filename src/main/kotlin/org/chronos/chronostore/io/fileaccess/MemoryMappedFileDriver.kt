@@ -68,6 +68,10 @@ class MemoryMappedFileDriver(
         return MemoryMappedFileDriver(this.file)
     }
 
+    override fun toString(): String {
+        return "MemoryMappedFileDriver[${this.file.path}]"
+    }
+
     override fun close() {
         if (this.closed) {
             return

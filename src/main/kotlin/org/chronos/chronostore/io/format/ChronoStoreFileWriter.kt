@@ -171,7 +171,7 @@ class ChronoStoreFileWriter : AutoCloseable {
         }
         // write the (raw) bytes of the block to a separate, intermediate array first.
         val blockDataOutputStream = ByteArrayOutputStream()
-        val blockPositionTrackingStream = PositionTrackingStream(outputStream)
+        val blockPositionTrackingStream = PositionTrackingStream(blockDataOutputStream)
 
         // The block index is a list of pairs:
         // - each key contains the key and the timestamp of a command in the file.
@@ -189,7 +189,7 @@ class ChronoStoreFileWriter : AutoCloseable {
         while (commands.hasNext() && (blockPositionTrackingStream.position + commands.peek().byteSize) < this.settings.maxBlockSizeInBytes) {
             val command = commands.next()
             blockIndexBuilder.visit(command, blockPositionTrackingStream.position.toInt())
-            blockDataOutputStream.write(command.toBytes())
+            blockPositionTrackingStream.write(command.toBytes())
             minTimestamp = min(minTimestamp, command.timestamp)
             maxTimestamp = max(maxTimestamp, command.timestamp)
             allKeysInBlock += command.keyAndTimestamp.key
@@ -199,6 +199,7 @@ class ChronoStoreFileWriter : AutoCloseable {
         val blockIndex = blockIndexBuilder.build()
 
         // these are the uncompressed bytes of the block.
+        blockPositionTrackingStream.flush()
         val blockDataArrayRaw = blockDataOutputStream.toByteArray()
         // compress the data
         val blockDataArrayCompressed = this.settings.compression.compress(blockDataArrayRaw)

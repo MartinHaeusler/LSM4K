@@ -33,6 +33,10 @@ class InMemoryFileDriver(
         return InMemoryFileDriver(this.inMemoryVirtualFile)
     }
 
+    override fun toString(): String {
+        return "InMemoryFileDriver[${this.inMemoryVirtualFile.path}]"
+    }
+
     override fun close() {
         this.closed = true
     }
