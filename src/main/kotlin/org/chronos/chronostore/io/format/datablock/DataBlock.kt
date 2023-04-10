@@ -9,6 +9,7 @@ import org.chronos.chronostore.io.format.BlockMetaData
 import org.chronos.chronostore.io.format.ChronoStoreFileFormat
 import org.chronos.chronostore.io.format.CompressionAlgorithm
 import org.chronos.chronostore.util.Bytes
+import org.chronos.chronostore.util.cursor.Cursor
 import org.chronos.chronostore.util.LittleEndianExtensions.readLittleEndianInt
 import java.io.ByteArrayInputStream
 import java.io.InputStream
@@ -18,6 +19,8 @@ import java.util.*
 interface DataBlock {
 
     val metaData: BlockMetaData
+
+    fun isEmpty(): Boolean
 
     /**
      * Attempts to get the value for the given [key] from this block.
@@ -34,6 +37,14 @@ interface DataBlock {
      */
     fun get(key: KeyAndTimestamp, driver: RandomFileAccessDriver): Pair<Command, Boolean>?
 
+    /**
+     * Opens a new cursor on this block.
+     *
+     * The cursor needs to be closed explicitly.
+     *
+     * @return the new cursor.
+     */
+    fun cursor(driver: RandomFileAccessDriver): Cursor<KeyAndTimestamp, Command>
 
     companion object {
 

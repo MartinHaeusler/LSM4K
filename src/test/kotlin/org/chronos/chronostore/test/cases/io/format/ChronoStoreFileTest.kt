@@ -6,6 +6,7 @@ import org.chronos.chronostore.io.fileaccess.MemorySegmentFileDriver
 import org.chronos.chronostore.io.format.*
 import org.chronos.chronostore.io.format.datablock.BlockReadMode
 import org.chronos.chronostore.io.vfs.VirtualReadWriteFile.Companion.withOverWriter
+import org.chronos.chronostore.lsm.BlockCache
 import org.chronos.chronostore.test.util.VFSMode
 import org.chronos.chronostore.test.util.VirtualFileSystemTest
 import org.chronos.chronostore.util.Bytes
@@ -37,7 +38,7 @@ class ChronoStoreFileTest {
 
             val factory = MemorySegmentFileDriver.Factory()
             factory.createDriver(file).use { driver ->
-                ChronoStoreFileReader(driver, BlockReadMode.DISK_BASED).use { reader ->
+                ChronoStoreFileReader(driver, BlockReadMode.DISK_BASED, BlockCache.NONE).use { reader ->
                     expectThat(reader) {
                         get { fileHeader }.and {
                             get { this.indexOfBlocks.isEmpty }.isTrue()
@@ -103,7 +104,7 @@ class ChronoStoreFileTest {
 
             val factory = MemorySegmentFileDriver.Factory()
             factory.createDriver(file).use { driver ->
-                ChronoStoreFileReader(driver, BlockReadMode.DISK_BASED).use { reader ->
+                ChronoStoreFileReader(driver, BlockReadMode.DISK_BASED, BlockCache.NONE).use { reader ->
                     val min = reader.fileHeader.metaData.minTimestamp!!
                     val max = reader.fileHeader.metaData.maxTimestamp!!
 

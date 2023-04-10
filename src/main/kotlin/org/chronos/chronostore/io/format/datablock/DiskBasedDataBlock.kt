@@ -8,6 +8,9 @@ import org.chronos.chronostore.io.format.BlockMetaData
 import org.chronos.chronostore.io.format.datablock.DataBlockUtil.seekInData
 import org.chronos.chronostore.util.Bytes.Companion.mightContain
 import org.chronos.chronostore.util.IOExtensions.withInputStream
+import org.chronos.chronostore.util.cursor.Cursor
+import org.chronos.chronostore.util.cursor.EmptyCursor
+import org.chronos.chronostore.util.cursor.IndexBasedCursor
 import java.util.*
 
 class DiskBasedDataBlock(
@@ -24,6 +27,10 @@ class DiskBasedDataBlock(
         require(blockStartOffset > 0) { "Argument 'blockStartOffset' (${blockStartOffset}) must not be negative!" }
         require(blockEndOffset > 0) { "Argument 'blockEndOffset' (${blockEndOffset}) must not be negative!" }
         require(blockStartOffset < blockEndOffset) { "Argument 'blockEndOffset' (${blockEndOffset}) must be larger than argument 'blockStartOffset' (${blockStartOffset})!" }
+    }
+
+    override fun isEmpty(): Boolean {
+        return this.blockIndex.isEmpty()
     }
 
     override fun get(key: KeyAndTimestamp, driver: RandomFileAccessDriver): Pair<Command, Boolean>? {
@@ -51,5 +58,30 @@ class DiskBasedDataBlock(
         }
     }
 
+    override fun cursor(driver: RandomFileAccessDriver): Cursor<KeyAndTimestamp, Command> {
+        // we have to read the entire block to create a cursor, there's no other choice.
+        val bytes = driver.readBytes(this.blockStartOffset, this.blockSize)
+        val commandList = mutableListOf<Command>()
+        bytes.withInputStream { inputStream ->
+            while (inputStream.available() > 0) {
+                commandList += Command.readFromStream(inputStream)
+            }
+        }
+        return if (commandList.isEmpty()) {
+            EmptyCursor(
+                getCursorName = { "Data Block #${this.metaData.blockSequenceNumber}" }
+            )
+        } else {
+            IndexBasedCursor(
+                minIndex = 0,
+                maxIndex = commandList.size,
+                getEntryAtIndex = { index ->
+                    val command = commandList[index]
+                    command.keyAndTimestamp to command
+                },
+                getCursorName = { "Data Block #${this.metaData.blockSequenceNumber}" }
+            )
+        }
+    }
 
 }

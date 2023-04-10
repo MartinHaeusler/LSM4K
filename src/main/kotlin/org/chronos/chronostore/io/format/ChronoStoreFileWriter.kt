@@ -88,6 +88,7 @@ class ChronoStoreFileWriter : AutoCloseable {
             maxKey = blockWriteResult.maxKey,
             headEntries = blockWriteResult.headEntries,
             totalEntries = blockWriteResult.totalEntries,
+            numberOfBlocks = blockWriteResult.numberOfBlocks,
             createdAt = wallClockTime,
             infoMap = this.metadata,
         )
@@ -160,6 +161,7 @@ class ChronoStoreFileWriter : AutoCloseable {
             maxTimestamp = maxTimestamp.takeIf { it > 0 },
             minKey = minKey,
             maxKey = maxKey,
+            numberOfBlocks = blockSequenceNumber,
             indexOfBlocks = blockIndexToStartPositionAndMinKey
         )
     }
@@ -322,6 +324,7 @@ class ChronoStoreFileWriter : AutoCloseable {
         val maxKey: Bytes?,
         val minTimestamp: Timestamp?,
         val maxTimestamp: Timestamp?,
+        val numberOfBlocks: Int,
         val indexOfBlocks: List<Triple<Int, Long, KeyAndTimestamp>>,
     )
 

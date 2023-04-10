@@ -32,6 +32,8 @@ class FileMetaData(
     val headEntries: Long,
     /** The total number of entries in this file. */
     val totalEntries: Long,
+    /** The total number of data blocks in this file. May be zero if the file is empty. */
+    val numberOfBlocks: Int,
     /** The wall-clock-timestamp this file was written at (begin of write). */
     val createdAt: Timestamp,
     /** A map of additional, arbitrary key-value pairs. */
@@ -54,6 +56,7 @@ class FileMetaData(
             val maxTimestamp = inputStream.readLittleEndianLong().takeIf { it > 0 }
             val headEntries = inputStream.readLittleEndianLong()
             val totalEntries = inputStream.readLittleEndianLong()
+            val numberOfBlocks = inputStream.readLittleEndianInt()
             val createdAt = inputStream.readLittleEndianLong()
             val infoMapSize = inputStream.readLittleEndianInt()
             val mapInput = ByteArrayInputStream(inputStream.readNBytes(infoMapSize))
@@ -73,6 +76,7 @@ class FileMetaData(
                 maxTimestamp = maxTimestamp,
                 headEntries = headEntries,
                 totalEntries = totalEntries,
+                numberOfBlocks = numberOfBlocks,
                 createdAt = createdAt,
                 infoMap = infoMap,
             )
@@ -91,6 +95,7 @@ class FileMetaData(
         outputStream.writeLittleEndianLong(this.maxTimestamp ?: 0)
         outputStream.writeLittleEndianLong(this.headEntries)
         outputStream.writeLittleEndianLong(this.totalEntries)
+        outputStream.writeLittleEndianInt(this.numberOfBlocks)
         outputStream.writeLittleEndianLong(this.createdAt)
         val infoMapSize = this.infoMap.entries.sumOf { it.key.size + Int.SIZE_BYTES + it.value.size + Int.SIZE_BYTES }
         outputStream.writeLittleEndianInt(infoMapSize)

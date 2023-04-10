@@ -1,14 +1,12 @@
 package org.chronos.chronostore.io.format
 
-import com.google.common.cache.Cache
-import com.google.common.cache.CacheBuilder
 import org.chronos.chronostore.command.Command
 import org.chronos.chronostore.command.KeyAndTimestamp
 import org.chronos.chronostore.io.fileaccess.RandomFileAccessDriver
 import org.chronos.chronostore.io.format.datablock.BlockReadMode
 import org.chronos.chronostore.io.format.datablock.DataBlock
-import org.chronos.chronostore.util.Order
-import java.util.*
+import org.chronos.chronostore.lsm.BlockCache
+import org.chronos.chronostore.util.cursor.Cursor
 
 class ChronoStoreFileReader : AutoCloseable {
 
@@ -16,13 +14,17 @@ class ChronoStoreFileReader : AutoCloseable {
     private val blockReadMode: BlockReadMode
 
     val fileHeader: FileHeader
-    private val blockCache: Cache<Int, Optional<DataBlock>>
+    private val blockCache: BlockCache
 
-    constructor(driver: RandomFileAccessDriver, blockReadMode: BlockReadMode) {
+    constructor(
+        driver: RandomFileAccessDriver,
+        blockReadMode: BlockReadMode,
+        blockCache: BlockCache
+    ) {
         this.driver = driver
         this.blockReadMode = blockReadMode
         this.fileHeader = loadFileHeader()
-        this.blockCache = CacheBuilder.newBuilder().maximumSize(100).build()
+        this.blockCache = blockCache
     }
 
     /**
@@ -32,7 +34,12 @@ class ChronoStoreFileReader : AutoCloseable {
      * overhead, which is skipped here because the file is immutable
      * and the reader we were copied from already did all the work for us.
      */
-    private constructor(driver: RandomFileAccessDriver, header: FileHeader, blockCache: Cache<Int, Optional<DataBlock>>, blockReadMode: BlockReadMode) {
+    private constructor(
+        driver: RandomFileAccessDriver,
+        header: FileHeader,
+        blockCache: BlockCache,
+        blockReadMode: BlockReadMode
+    ) {
         // skip all the validation, it has already been done for us.
         this.driver = driver
         this.blockReadMode = blockReadMode
@@ -53,7 +60,6 @@ class ChronoStoreFileReader : AutoCloseable {
         return fileFormatVersion.readFileHeader(this.driver)
     }
 
-
     fun get(keyAndTimestamp: KeyAndTimestamp): Command? {
         if (!this.fileHeader.metaData.mayContainKey(keyAndTimestamp.key)) {
             // key is definitely not in this file, no point in searching.
@@ -64,7 +70,7 @@ class ChronoStoreFileReader : AutoCloseable {
             return null
         }
         // the key may be contained, let's check.
-        var blockIndex = this.fileHeader.indexOfBlocks.getBlockIndexForKeyAndTimestamp(keyAndTimestamp)
+        var blockIndex = this.fileHeader.indexOfBlocks.getBlockIndexForKeyAndTimestampAscending(keyAndTimestamp)
             ?: return null // we don't have a block for this key and timestamp.
         var matchingCommandFromPreviousBlock: Command? = null
         while (true) {
@@ -84,47 +90,24 @@ class ChronoStoreFileReader : AutoCloseable {
     }
 
     private fun getBlockForIndex(blockIndex: Int): DataBlock? {
-        val cachedResult = this.blockCache.get(blockIndex) {
-            val (startPosition, length) = this.fileHeader.indexOfBlocks.getBlockStartPositionAndLengthOrNull(blockIndex)
-                ?: return@get Optional.empty()
-            val blockBytes = this.driver.readBytes(startPosition, length)
-            return@get Optional.of(DataBlock.createLazyLoadingInMemoryBlock(blockBytes.createInputStream(), this.fileHeader.metaData.settings.compression))
-        }
-        return cachedResult.orElse(null)
+        return this.blockCache.getBlock(blockIndex, ::getBlockForIndexUncached)
     }
 
-    // fun scan(from: KeyAndTimestamp?, to: KeyAndTimestamp?, order: Order, consumer: ScanClient) {
-    //     // does this file contain anything of value for the range?
-    //     val minKey = this.fileHeader.metaData.minKey
-    //         ?: return // file is empty
-    //     val maxKey = this.fileHeader.metaData.maxKey
-    //         ?: return // file is empty
-    //
-    //     val scanStart = (from?.key ?: minKey).coerceAtLeast(minKey)
-    //     val scanEnd = (to?.key ?: maxKey).coerceAtMost(maxKey)
-    //
-    //     if(scanStart > maxKey || scanEnd < minKey){
-    //         // this file contains no key we're interested in.
-    //         return
-    //     }
-    //
-    //     this.fileHeader.indexOfBlocks.getBlockIndexForKeyAndTimestamp(scanStart)
-    //
-    //
-    //     // determine the start block
-    //     val startBlock = if(from == null){
-    //         // start from the first block
-    //         this.getBlockForIndex(0)
-    //             ?: return
-    //     }else{
-    //         val blockIndex = this.fileHeader.indexOfBlocks.getBlockIndexForKeyAndTimestamp(from) ?: 0
-    //         this.getBlockForIndex(blockIndex)
-    //             ?: return
-    //
-    //     }
-    // }
+    private fun getBlockForIndexUncached(blockIndex: Int): DataBlock? {
+        val (startPosition, length) = this.fileHeader.indexOfBlocks.getBlockStartPositionAndLengthOrNull(blockIndex)
+            ?: return null
+        val blockBytes = this.driver.readBytes(startPosition, length)
+        val compressionAlgorithm = this.fileHeader.metaData.settings.compression
+        return when (this.blockReadMode) {
+            BlockReadMode.IN_MEMORY_EAGER -> DataBlock.createEagerLoadingInMemoryBlock(blockBytes.createInputStream(), compressionAlgorithm)
+            BlockReadMode.IN_MEMORY_LAZY -> DataBlock.createLazyLoadingInMemoryBlock(blockBytes.createInputStream(), compressionAlgorithm)
+            BlockReadMode.DISK_BASED -> DataBlock.createDiskBasedDataBlock(blockBytes.createInputStream(), compressionAlgorithm, startPosition)
+        }
+    }
 
-    // TODO: maybe cursor API instead of just scans?
+    fun openCursor(): Cursor<KeyAndTimestamp, Command> {
+        return ChronoStoreFileCursor()
+    }
 
     /**
      * Creates a copy of this reader.
@@ -157,50 +140,189 @@ class ChronoStoreFileReader : AutoCloseable {
         this.driver.close()
     }
 
-    enum class ScanControl {
+    private inner class ChronoStoreFileCursor : Cursor<KeyAndTimestamp, Command> {
 
-        CONTINUE,
+        override var modCount: Long = 0
 
-        STOP;
+        override var isOpen: Boolean = true
 
-    }
+        override var isValidPosition: Boolean = true
 
-    fun interface ScanClient {
+        private var currentBlock: DataBlock? = null
+        private var currentCursor: Cursor<KeyAndTimestamp, Command>? = null
 
-        fun inspect(command: Command): ScanControl
+        private val driver: RandomFileAccessDriver
+            get() = this@ChronoStoreFileReader.driver
 
-    }
-
-    private class ScanUntilUpperLimitClient(
-        private val consumer: ScanClient,
-        private val upperBound: KeyAndTimestamp,
-        private val upperBoundInclusive: Boolean,
-    ) : ScanClient {
-
-        override fun inspect(command: Command): ScanControl {
-            val cmp = command.keyAndTimestamp.compareTo(this.upperBound)
-            return when {
-                cmp < 0 -> {
-                    // upper bound hasn't been reached, keep going
-                    this.consumer.inspect(command)
-                }
-
-                cmp > 0 -> {
-                    // upper bound has been exceeded
-                    ScanControl.STOP
-                }
-
-                else -> {
-                    // we're AT the upper bound, now it depends if we want to see it
-                    if (upperBoundInclusive) {
-                        this.consumer.inspect(command)
-                    } else {
-                        ScanControl.STOP
-                    }
-                }
-            }
+        override fun invalidatePosition() {
+            check(this.isOpen, this::getAlreadyClosedMessage)
+            this.currentCursor?.close()
+            this.currentCursor = null
+            this.currentBlock = null
+            this.isValidPosition = false
+            this.modCount++
         }
 
-    }
+        override fun first(): Boolean {
+            check(this.isOpen, this::getAlreadyClosedMessage)
+            this.invalidatePosition()
+            val firstBlock = this@ChronoStoreFileReader.getBlockForIndex(0)
+            if (firstBlock == null || firstBlock.isEmpty()) {
+                this.isValidPosition = false
+                return false
+            }
+            this.currentBlock = firstBlock
+            val cursor = firstBlock.cursor(this.driver)
+            this.currentCursor = cursor
+            // the block isn't empty, so we have a first element.
+            cursor.firstOrThrow()
+            this.isValidPosition = true
+            return true
+        }
 
+        override fun last(): Boolean {
+            check(this.isOpen, this::getAlreadyClosedMessage)
+            this.invalidatePosition()
+            val numberOfBlocks = fileHeader.metaData.numberOfBlocks
+            val lastBlock = getBlockForIndex(numberOfBlocks - 1)
+            if (lastBlock == null || lastBlock.isEmpty()) {
+                this.isValidPosition = false
+                return false
+            }
+            this.currentBlock = lastBlock
+            val cursor = lastBlock.cursor(this.driver)
+            this.currentCursor = cursor
+            // the block isn't empty, so we have a last element.
+            cursor.lastOrThrow()
+            this.isValidPosition = true
+            return true
+        }
+
+        override fun next(): Boolean {
+            check(this.isOpen, this::getAlreadyClosedMessage)
+            if (!this.isValidPosition) {
+                return false
+            }
+            val block = this.currentBlock
+            val cursor = this.currentCursor
+            if (block == null || cursor == null) {
+                return false
+            }
+            if (cursor.next()) {
+                this.modCount++
+                return true
+            }
+            // open the cursor on the next block
+            val nextBlockIndex = block.metaData.blockSequenceNumber + 1
+            if (nextBlockIndex >= fileHeader.metaData.numberOfBlocks) {
+                // there is no next position; keep the current cursor
+                this.modCount++
+                return false
+            }
+            val newBlock = getBlockForIndex(nextBlockIndex)
+                ?: throw IllegalStateException("Could not get block with index ${nextBlockIndex} in file '${driver.filePath}'!")
+            val newCursor = newBlock.cursor(this.driver)
+            newCursor.firstOrThrow()
+            this.invalidatePosition()
+            this.currentBlock = newBlock
+            this.currentCursor = newCursor
+            return true
+        }
+
+        override fun previous(): Boolean {
+            check(this.isOpen, this::getAlreadyClosedMessage)
+            if (!this.isValidPosition) {
+                return false
+            }
+            val block = this.currentBlock
+            val cursor = this.currentCursor
+            if (block == null || cursor == null) {
+                return false
+            }
+            if (cursor.previous()) {
+                this.modCount++
+                return true
+            }
+            // open the cursor on the previous block
+            val previousBlockIndex = block.metaData.blockSequenceNumber - 1
+            if (previousBlockIndex < 0) {
+                // there is no previous position; keep the current cursor
+                this.modCount++
+                return false
+            }
+            val newBlock = getBlockForIndex(previousBlockIndex)
+                ?: throw IllegalStateException("Could not get block with index ${previousBlockIndex} in file '${driver.filePath}'!")
+            val newCursor = newBlock.cursor(this.driver)
+            newCursor.lastOrThrow()
+            this.invalidatePosition()
+            this.currentBlock = newBlock
+            this.currentCursor = newCursor
+            return true
+        }
+
+        override val keyOrNull: KeyAndTimestamp?
+            get() {
+                check(this.isOpen, this::getAlreadyClosedMessage)
+                if(!this.isValidPosition){
+                    return null
+                }
+                return this.currentCursor?.keyOrNull
+            }
+
+        override val valueOrNull: Command?
+            get() {
+                check(this.isOpen, this::getAlreadyClosedMessage)
+                if(!this.isValidPosition){
+                    return null
+                }
+                return this.currentCursor?.valueOrNull
+            }
+
+        override fun close() {
+            if (!this.isOpen) {
+                return
+            }
+            this.isOpen = false
+            this.currentCursor?.close()
+        }
+
+        override fun seekExactlyOrNext(key: KeyAndTimestamp): Boolean {
+            check(this.isOpen, this::getAlreadyClosedMessage)
+            this.invalidatePosition()
+            val blockIndex = fileHeader.indexOfBlocks.getBlockIndexForKeyAndTimestampAscending(key)
+                ?: return false
+            val block = getBlockForIndex(blockIndex)
+                ?: return false
+            val cursor = block.cursor(this.driver)
+
+            if(!cursor.seekExactlyOrNext(key)){
+                cursor.close()
+                return false
+            }
+            this.currentBlock = block
+            this.currentCursor = cursor
+            return true
+        }
+
+        override fun seekExactlyOrPrevious(key: KeyAndTimestamp): Boolean {
+            check(this.isOpen, this::getAlreadyClosedMessage)
+            this.invalidatePosition()
+            val blockIndex = fileHeader.indexOfBlocks.getBlockIndexForKeyAndTimestampDescending(key)
+                ?: return false
+            val block = getBlockForIndex(blockIndex)
+                ?: return false
+            val cursor = block.cursor(this.driver)
+            if(!cursor.seekExactlyOrPrevious(key)){
+                cursor.close()
+                return false
+            }
+            this.currentBlock = block
+            this.currentCursor = cursor
+            return true
+        }
+
+        private fun getAlreadyClosedMessage(): String {
+            return "This cursor on ${this.driver.filePath} has already been closed!"
+        }
+    }
 }

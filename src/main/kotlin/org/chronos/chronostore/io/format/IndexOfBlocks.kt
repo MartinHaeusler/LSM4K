@@ -53,10 +53,16 @@ class IndexOfBlocks {
         }
     }
 
-    fun getBlockIndexForKeyAndTimestamp(keyAndTimestamp: KeyAndTimestamp): Int? {
+    fun getBlockIndexForKeyAndTimestampAscending(keyAndTimestamp: KeyAndTimestamp): Int? {
         val floorEntry = this.minKeyAndTimestampToBlockIndex.floorEntry(keyAndTimestamp)
             ?: return null // the key is too small to exist in this file
         return floorEntry.value
+    }
+
+    fun getBlockIndexForKeyAndTimestampDescending(keyAndTimestamp: KeyAndTimestamp): Int? {
+        val ceilEntry = this.minKeyAndTimestampToBlockIndex.ceilingEntry(keyAndTimestamp)
+            ?: return null // the key is too large to exist in this file
+        return ceilEntry.value
     }
 
 }
