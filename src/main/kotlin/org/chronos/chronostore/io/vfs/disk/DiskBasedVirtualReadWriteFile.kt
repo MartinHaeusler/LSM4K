@@ -6,6 +6,7 @@ import org.chronos.chronostore.util.IOExtensions.sync
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
+import java.io.OutputStream
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 
@@ -20,8 +21,10 @@ class DiskBasedVirtualReadWriteFile(
 
     }
 
+    val overwriteFile = File(file.path + ".tmp")
+
     override fun create() {
-        if(this.exists()){
+        if (this.exists()) {
             return
         }
         this.parent?.mkdirs()
@@ -41,18 +44,25 @@ class DiskBasedVirtualReadWriteFile(
     }
 
     override fun createOverWriter(): VirtualReadWriteFile.OverWriter {
-        val tempFile = File(file.path + ".tmp")
-        if (tempFile.exists()) {
-            throw IOException("temp path $tempFile already exists")
+        if (this.overwriteFile.exists()) {
+            throw IOException("File Overwrite temp path '${this.overwriteFile.absolutePath}' already exists")
         }
-        return FileOverWriter(tempFile, FileOutputStream(tempFile))
+        return FileOverWriter(this.overwriteFile)
     }
 
-    private inner class FileOverWriter(private val tempFile: File, private val stream: FileOutputStream) : VirtualReadWriteFile.OverWriter {
+    override fun deleteOverWriterFileIfExists() {
+        val tempFile = File(file.path + ".tmp")
+        Files.deleteIfExists(tempFile.toPath())
+    }
+
+    private inner class FileOverWriter(private val tempFile: File) : VirtualReadWriteFile.OverWriter {
 
         private var inProgress = true
 
-        override val outputStream: FileOutputStream
+        private val fileOutputStream: FileOutputStream = this.tempFile.outputStream()
+        private val stream = fileOutputStream.buffered()
+
+        override val outputStream: OutputStream
             get() {
                 assertNotClosed()
                 return stream
@@ -68,8 +78,10 @@ class DiskBasedVirtualReadWriteFile(
             inProgress = false
             try {
                 this.stream.flush()
-                this.stream.sync()
+                this.fileOutputStream.flush()
+                this.fileOutputStream.sync()
                 this.stream.close()
+                this.fileOutputStream.close()
                 Files.move(tempFile.toPath(), file.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
             } catch (e: IOException) {
                 rollback()

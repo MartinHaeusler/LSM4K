@@ -30,6 +30,10 @@ class InMemoryVirtualReadWriteFile(
         return OverWriterImpl()
     }
 
+    override fun deleteOverWriterFileIfExists() {
+        // no-op
+    }
+
     inner class OverWriterImpl : VirtualReadWriteFile.OverWriter {
 
         private var isOpen: Boolean = true

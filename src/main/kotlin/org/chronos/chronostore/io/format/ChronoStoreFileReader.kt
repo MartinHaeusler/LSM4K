@@ -10,6 +10,25 @@ import org.chronos.chronostore.util.cursor.Cursor
 
 class ChronoStoreFileReader : AutoCloseable {
 
+    companion object {
+
+        @JvmStatic
+        fun loadFileHeader(driver: RandomFileAccessDriver): FileHeader {
+            // read and validate the magic bytes
+            val magicBytesAndVersion = driver.readBytes(0, ChronoStoreFileFormat.FILE_MAGIC_BYTES.size + Int.SIZE_BYTES)
+            val magicBytes = magicBytesAndVersion.slice(0 until ChronoStoreFileFormat.FILE_MAGIC_BYTES.size)
+
+            if (magicBytes != ChronoStoreFileFormat.FILE_MAGIC_BYTES) {
+                throw IllegalStateException("The file '${driver.filePath}' has an unknown file format.")
+            }
+            val versionInt = magicBytesAndVersion.readLittleEndianInt(ChronoStoreFileFormat.FILE_MAGIC_BYTES.size)
+            val fileFormatVersion = ChronoStoreFileFormat.Version.fromInt(versionInt)
+            return fileFormatVersion.readFileHeader(driver)
+        }
+
+    }
+
+
     private val driver: RandomFileAccessDriver
     private val blockReadMode: BlockReadMode
 
@@ -23,18 +42,11 @@ class ChronoStoreFileReader : AutoCloseable {
     ) {
         this.driver = driver
         this.blockReadMode = blockReadMode
-        this.fileHeader = loadFileHeader()
+        this.fileHeader = loadFileHeader(driver)
         this.blockCache = blockCache
     }
 
-    /**
-     * Internal constructor for copying a reader.
-     *
-     * The initialization phase of a ChronoStore file comes with some
-     * overhead, which is skipped here because the file is immutable
-     * and the reader we were copied from already did all the work for us.
-     */
-    private constructor(
+    constructor(
         driver: RandomFileAccessDriver,
         header: FileHeader,
         blockCache: BlockCache,
@@ -45,19 +57,6 @@ class ChronoStoreFileReader : AutoCloseable {
         this.blockReadMode = blockReadMode
         this.fileHeader = header
         this.blockCache = blockCache
-    }
-
-    private fun loadFileHeader(): FileHeader {
-        // read and validate the magic bytes
-        val magicBytesAndVersion = driver.readBytes(0, ChronoStoreFileFormat.FILE_MAGIC_BYTES.size + Int.SIZE_BYTES)
-        val magicBytes = magicBytesAndVersion.slice(0 until ChronoStoreFileFormat.FILE_MAGIC_BYTES.size)
-
-        if (magicBytes != ChronoStoreFileFormat.FILE_MAGIC_BYTES) {
-            throw IllegalStateException("The file '${driver.filePath}' has an unknown file format.")
-        }
-        val versionInt = magicBytesAndVersion.readLittleEndianInt(ChronoStoreFileFormat.FILE_MAGIC_BYTES.size)
-        val fileFormatVersion = ChronoStoreFileFormat.Version.fromInt(versionInt)
-        return fileFormatVersion.readFileHeader(this.driver)
     }
 
     fun get(keyAndTimestamp: KeyAndTimestamp): Command? {
@@ -263,7 +262,7 @@ class ChronoStoreFileReader : AutoCloseable {
         override val keyOrNull: KeyAndTimestamp?
             get() {
                 check(this.isOpen, this::getAlreadyClosedMessage)
-                if(!this.isValidPosition){
+                if (!this.isValidPosition) {
                     return null
                 }
                 return this.currentCursor?.keyOrNull
@@ -272,7 +271,7 @@ class ChronoStoreFileReader : AutoCloseable {
         override val valueOrNull: Command?
             get() {
                 check(this.isOpen, this::getAlreadyClosedMessage)
-                if(!this.isValidPosition){
+                if (!this.isValidPosition) {
                     return null
                 }
                 return this.currentCursor?.valueOrNull
@@ -295,7 +294,7 @@ class ChronoStoreFileReader : AutoCloseable {
                 ?: return false
             val cursor = block.cursor(this.driver)
 
-            if(!cursor.seekExactlyOrNext(key)){
+            if (!cursor.seekExactlyOrNext(key)) {
                 cursor.close()
                 return false
             }
@@ -312,7 +311,7 @@ class ChronoStoreFileReader : AutoCloseable {
             val block = getBlockForIndex(blockIndex)
                 ?: return false
             val cursor = block.cursor(this.driver)
-            if(!cursor.seekExactlyOrPrevious(key)){
+            if (!cursor.seekExactlyOrPrevious(key)) {
                 cursor.close()
                 return false
             }

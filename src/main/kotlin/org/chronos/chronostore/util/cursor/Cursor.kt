@@ -519,4 +519,14 @@ interface Cursor<K, V> : AutoCloseable {
         }
     }
 
+
+    /**
+     * Wraps this cursor into another one which performs the given action when it is [closed][close].
+     *
+     * @param action The action to perform on close.
+     */
+    fun onClose(action: () -> Unit): Cursor<K, V> {
+        return CursorWithCloseHandler(this, action)
+    }
+
 }

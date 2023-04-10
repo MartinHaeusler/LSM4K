@@ -20,6 +20,8 @@ interface VirtualReadWriteFile : VirtualFile {
 
     fun createOverWriter(): OverWriter
 
+    fun deleteOverWriterFileIfExists()
+
     interface OverWriter : AutoCloseable {
 
         val outputStream: OutputStream
