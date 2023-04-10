@@ -4,8 +4,8 @@ import com.google.common.collect.Iterators
 import com.google.common.collect.PeekingIterator
 import com.google.common.hash.BloomFilter
 import com.google.common.hash.Funnels
-import org.chronos.chronostore.command.Command
-import org.chronos.chronostore.command.KeyAndTimestamp
+import org.chronos.chronostore.model.command.Command
+import org.chronos.chronostore.model.command.KeyAndTimestamp
 import org.chronos.chronostore.util.BloomFilterExtensions.toBytes
 import org.chronos.chronostore.util.Bytes
 import org.chronos.chronostore.util.Bytes.Companion.put

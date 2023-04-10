@@ -1,13 +1,10 @@
 package org.chronos.chronostore.benchmark
 
 import com.fasterxml.jackson.databind.ObjectMapper
-import org.chronos.chronostore.command.Command
-import org.chronos.chronostore.io.fileaccess.MemorySegmentFileDriver
-import org.chronos.chronostore.io.format.ChronoStoreFileReader
+import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.io.format.ChronoStoreFileSettings
 import org.chronos.chronostore.io.format.ChronoStoreFileWriter
 import org.chronos.chronostore.io.format.CompressionAlgorithm
-import org.chronos.chronostore.io.format.datablock.BlockReadMode
 import org.chronos.chronostore.io.vfs.VirtualReadWriteFile.Companion.withOverWriter
 import org.chronos.chronostore.io.vfs.disk.DiskBasedVirtualFileSystem
 import org.chronos.chronostore.util.Bytes

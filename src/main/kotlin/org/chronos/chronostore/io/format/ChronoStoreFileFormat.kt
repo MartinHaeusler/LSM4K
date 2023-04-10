@@ -1,13 +1,11 @@
 package org.chronos.chronostore.io.format
 
-import org.chronos.chronostore.command.KeyAndTimestamp
+import org.chronos.chronostore.model.command.KeyAndTimestamp
 import org.chronos.chronostore.io.fileaccess.RandomFileAccessDriver
 import org.chronos.chronostore.util.Bytes
 import org.chronos.chronostore.util.IOExtensions.withInputStream
-import org.chronos.chronostore.util.LittleEndianExtensions.readLittleEndianInt
 import org.chronos.chronostore.util.LittleEndianExtensions.readLittleEndianIntOrNull
 import org.chronos.chronostore.util.LittleEndianExtensions.readLittleEndianLong
-import java.util.*
 
 object ChronoStoreFileFormat {
 

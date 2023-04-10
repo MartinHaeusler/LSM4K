@@ -1,7 +1,7 @@
 package org.chronos.chronostore.io.format.datablock
 
-import org.chronos.chronostore.command.Command
-import org.chronos.chronostore.command.KeyAndTimestamp
+import org.chronos.chronostore.model.command.Command
+import org.chronos.chronostore.model.command.KeyAndTimestamp
 import org.chronos.chronostore.io.fileaccess.RandomFileAccessDriver
 import org.chronos.chronostore.io.format.BlockMetaData
 import org.chronos.chronostore.util.cursor.Cursor

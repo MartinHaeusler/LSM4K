@@ -1,4 +1,4 @@
-package org.chronos.chronostore.command
+package org.chronos.chronostore.model.command
 
 import org.chronos.chronostore.util.Bytes
 import org.chronos.chronostore.util.IOExtensions.withInputStream

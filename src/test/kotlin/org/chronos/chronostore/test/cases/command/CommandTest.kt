@@ -2,7 +2,7 @@ package org.chronos.chronostore.test.cases.command
 
 import com.google.common.hash.BloomFilter
 import com.google.common.hash.Funnels
-import org.chronos.chronostore.command.Command
+import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.util.Bytes
 import org.chronos.chronostore.util.Bytes.Companion.mightContain
 import org.chronos.chronostore.util.Bytes.Companion.put

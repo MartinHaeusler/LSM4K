@@ -1,8 +1,7 @@
 package org.chronos.chronostore.io.format
 
-import org.chronos.chronostore.command.Command
-import org.chronos.chronostore.command.KeyAndTimestamp
-import org.chronos.chronostore.util.Bytes
+import org.chronos.chronostore.model.command.Command
+import org.chronos.chronostore.model.command.KeyAndTimestamp
 
 class BlockIndexBuilder(
     /** The rate at which to index. Every n-th incoming command will be indexed.*/

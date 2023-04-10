@@ -1,7 +1,7 @@
 package org.chronos.chronostore.lsm
 
-import org.chronos.chronostore.command.Command
-import org.chronos.chronostore.command.KeyAndTimestamp
+import org.chronos.chronostore.model.command.Command
+import org.chronos.chronostore.model.command.KeyAndTimestamp
 import org.chronos.chronostore.io.fileaccess.RandomFileAccessDriverFactory
 import org.chronos.chronostore.io.fileaccess.RandomFileAccessDriverFactory.Companion.withDriver
 import org.chronos.chronostore.io.format.ChronoStoreFileReader
