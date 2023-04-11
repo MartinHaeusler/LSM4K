@@ -1,11 +1,10 @@
 package org.chronos.chronostore.wal
 
-import org.chronos.chronostore.util.Bytes
+import org.chronos.chronostore.model.command.Command
+import org.chronos.chronostore.util.*
 import org.chronos.chronostore.util.Bytes.Companion.write
 import org.chronos.chronostore.util.LittleEndianExtensions.readLittleEndianLong
 import org.chronos.chronostore.util.LittleEndianExtensions.writeLittleEndianLong
-import org.chronos.chronostore.util.PrefixIO
-import org.chronos.chronostore.util.Timestamp
 import org.chronos.chronostore.util.UUIDExtensions.readUUIDFrom
 import org.chronos.chronostore.util.UUIDExtensions.toBytes
 import java.io.InputStream
@@ -16,38 +15,20 @@ sealed interface WriteAheadLogEntry {
 
     companion object {
 
-        fun beginTransaction(transactionId: UUID): BeginTransactionEntry {
+        fun beginTransaction(transactionId: TransactionId): BeginTransactionEntry {
             return BeginTransactionEntry(transactionId)
         }
 
-        fun put(transactionId: UUID, key: Bytes, value: Bytes): PutEntry {
-            return PutEntry(transactionId, key, value)
+        fun put(transactionId: TransactionId, storeId: StoreId, key: Bytes, value: Bytes): PutEntry {
+            return PutEntry(transactionId, storeId, key, value)
         }
 
-        fun delete(transactionId: UUID, key: Bytes): DeleteEntry {
-            return DeleteEntry(transactionId, key)
+        fun delete(transactionId: TransactionId, storeId: StoreId, key: Bytes): DeleteEntry {
+            return DeleteEntry(transactionId, storeId, key)
         }
 
-        fun commit(transactionId: UUID, commitTimestamp: Timestamp): CommitTransactionEntry {
-            return CommitTransactionEntry(transactionId, commitTimestamp)
-        }
-
-        fun createWriteAheadLogForTransaction(
-            transactionId: UUID,
-            puts: Map<Bytes, Bytes>,
-            deletes: Set<Bytes>,
-            commitTimestamp: Timestamp,
-        ): List<WriteAheadLogEntry> {
-            val list = mutableListOf<WriteAheadLogEntry>()
-            list.add(beginTransaction(transactionId))
-            for ((key, value) in puts) {
-                list.add(put(transactionId, key, value))
-            }
-            for (key in deletes) {
-                list.add(delete(transactionId, key))
-            }
-            list.add(commit(transactionId, commitTimestamp))
-            return list
+        fun commit(transactionId: TransactionId, commitTimestamp: Timestamp, commitMetadata: Bytes): CommitTransactionEntry {
+            return CommitTransactionEntry(transactionId, commitTimestamp, commitMetadata)
         }
 
         fun readSingleEntryFrom(inputStream: InputStream): WriteAheadLogEntry {
@@ -74,11 +55,82 @@ sealed interface WriteAheadLogEntry {
             }
         }
 
+        fun readTransactionActionsFrom(inputStream: InputStream): List<WriteAheadLogEntry> {
+            val transactionActions = mutableListOf<WriteAheadLogEntry>()
+            val firstAction = readSingleEntryFrom(inputStream)
+            if (firstAction !is BeginTransactionEntry) {
+                throw IllegalStateException(
+                    "The first WAL entry read from the input stream is not" +
+                        " a BeginTransactionEntry (it is of type '${firstAction::class.simpleName}')!"
+                )
+            }
+            transactionActions.add(firstAction)
+            val transactionId = firstAction.transactionId
+            while (true) {
+                val entry = readSingleEntryFrom(inputStream)
+                if (entry.transactionId != transactionId) {
+                    throw IllegalStateException(
+                        "Found WAL entry which is out of order: expected" +
+                            " transaction ID '${transactionId}', but found '${entry.transactionId}'!"
+                    )
+                }
+                transactionActions.add(entry)
+                if (entry is CommitTransactionEntry) {
+                    break
+                }
+            }
+            return transactionActions
+        }
+
+        fun readTransactionFrom(inputStream: InputStream): WriteAheadLogTransaction {
+            val walEntries = readTransactionActionsFrom(inputStream)
+            val commitEntry = walEntries.last() as CommitTransactionEntry
+            val transactionId = commitEntry.transactionId
+            val commitTimestamp = commitEntry.commitTimestamp
+            val storeIdToCommands = walEntries.asSequence().mapNotNull {
+                when (it) {
+                    is BeginTransactionEntry -> null
+                    is CommitTransactionEntry -> null
+                    is DeleteEntry -> CommandAndStoreId(it.storeId, Command.del(it.key, commitTimestamp))
+                    is PutEntry -> CommandAndStoreId(it.storeId, Command.put(it.key, commitTimestamp, it.value))
+                }
+            }.groupBy({ it.storeId }, { it.command })
+            return WriteAheadLogTransaction(
+                transactionId,
+                commitTimestamp,
+                storeIdToCommands,
+                commitEntry.commitMetadata,
+            )
+        }
+
+        fun writeTransaction(outputStream: OutputStream, transaction: WriteAheadLogTransaction) {
+            beginTransaction(transaction.transactionId).writeTo(outputStream)
+            for((storeId, commands) in transaction.storeIdToCommands){
+                for(command in commands){
+                    val walEntry = when (command.opCode) {
+                        Command.OpCode.PUT -> put(transaction.transactionId, storeId, command.key, command.value)
+                        Command.OpCode.DEL -> delete(transaction.transactionId, storeId, command.key)
+                    }
+                    walEntry.writeTo(outputStream)
+                }
+            }
+            commit(transaction.transactionId, transaction.commitTimestamp, transaction.commitMetadata).writeTo(outputStream)
+        }
+
     }
 
     val transactionId: UUID
 
     fun writeTo(outputStream: OutputStream)
+
+
+    sealed interface ModifyingTransactionEntry : WriteAheadLogEntry {
+
+        val storeId: StoreId
+
+        val key: Bytes
+
+    }
 
 
     data class BeginTransactionEntry(
@@ -104,10 +156,11 @@ sealed interface WriteAheadLogEntry {
     }
 
     data class PutEntry(
-        override val transactionId: UUID,
-        val key: Bytes,
+        override val transactionId: TransactionId,
+        override val storeId: StoreId,
+        override val key: Bytes,
         val value: Bytes,
-    ) : WriteAheadLogEntry {
+    ) : ModifyingTransactionEntry {
 
         companion object {
 
@@ -115,9 +168,10 @@ sealed interface WriteAheadLogEntry {
 
             fun readFromWithoutTypeByte(inputStream: InputStream): PutEntry {
                 val transactionId = readUUIDFrom(inputStream.readNBytes(Long.SIZE_BYTES * 2))
+                val storeId = readUUIDFrom(inputStream.readNBytes(Long.SIZE_BYTES * 2))
                 val key = PrefixIO.readBytes(inputStream)
                 val value = PrefixIO.readBytes(inputStream)
-                return PutEntry(transactionId, key, value)
+                return PutEntry(transactionId, storeId, key, value)
             }
 
         }
@@ -125,6 +179,7 @@ sealed interface WriteAheadLogEntry {
         override fun writeTo(outputStream: OutputStream) {
             outputStream.write(TYPE_BYTE)
             outputStream.write(transactionId.toBytes())
+            outputStream.write(storeId.toBytes())
             PrefixIO.writeBytes(outputStream, this.key)
             PrefixIO.writeBytes(outputStream, this.value)
         }
@@ -132,9 +187,10 @@ sealed interface WriteAheadLogEntry {
     }
 
     data class DeleteEntry(
-        override val transactionId: UUID,
-        val key: Bytes,
-    ) : WriteAheadLogEntry {
+        override val transactionId: TransactionId,
+        override val storeId: StoreId,
+        override val key: Bytes,
+    ) : ModifyingTransactionEntry {
 
         companion object {
 
@@ -142,8 +198,9 @@ sealed interface WriteAheadLogEntry {
 
             fun readFromWithoutTypeByte(inputStream: InputStream): DeleteEntry {
                 val transactionId = readUUIDFrom(inputStream.readNBytes(Long.SIZE_BYTES * 2))
+                val storeId = readUUIDFrom(inputStream.readNBytes(Long.SIZE_BYTES * 2))
                 val key = PrefixIO.readBytes(inputStream)
-                return DeleteEntry(transactionId, key)
+                return DeleteEntry(transactionId, storeId, key)
             }
 
         }
@@ -151,14 +208,16 @@ sealed interface WriteAheadLogEntry {
         override fun writeTo(outputStream: OutputStream) {
             outputStream.write(TYPE_BYTE)
             outputStream.write(transactionId.toBytes())
+            outputStream.write(storeId.toBytes())
             PrefixIO.writeBytes(outputStream, this.key)
         }
 
     }
 
     data class CommitTransactionEntry(
-        override val transactionId: UUID,
+        override val transactionId: TransactionId,
         val commitTimestamp: Timestamp,
+        val commitMetadata: Bytes,
     ) : WriteAheadLogEntry {
 
         companion object {
@@ -168,7 +227,8 @@ sealed interface WriteAheadLogEntry {
             fun readFromWithoutTypeByte(inputStream: InputStream): CommitTransactionEntry {
                 val transactionId = readUUIDFrom(inputStream.readNBytes(Long.SIZE_BYTES * 2))
                 val commitTimestamp = inputStream.readLittleEndianLong()
-                return CommitTransactionEntry(transactionId, commitTimestamp)
+                val commitMetadata = PrefixIO.readBytes(inputStream)
+                return CommitTransactionEntry(transactionId, commitTimestamp, commitMetadata)
             }
 
         }
@@ -184,6 +244,7 @@ sealed interface WriteAheadLogEntry {
             outputStream.write(TYPE_BYTE)
             outputStream.write(transactionId.toBytes())
             outputStream.writeLittleEndianLong(commitTimestamp)
+            PrefixIO.writeBytes(outputStream, commitMetadata)
         }
 
     }

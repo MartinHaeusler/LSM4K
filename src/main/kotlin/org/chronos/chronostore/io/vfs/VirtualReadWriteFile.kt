@@ -12,7 +12,7 @@ interface VirtualReadWriteFile : VirtualFile {
 
     }
 
-    fun createAppendOutputStream(): OutputStream
+    fun <T> append(action: (OutputStream) -> T): T
 
     fun delete()
 

@@ -11,12 +11,16 @@ class InMemoryVirtualReadWriteFile(
     name: String,
 ) : InMemoryVirtualFile(parent, fileSystem, name), VirtualReadWriteFile {
 
-    override fun createAppendOutputStream(): OutputStream {
-        return this.fileSystem.openAppendOutputStream(this.path)
+
+    override fun <T> append(action: (OutputStream) -> T): T {
+        if(!this.fileSystem.isExistingPath(this.path)){
+            this.fileSystem.createNewFile(this.path)
+        }
+        return this.fileSystem.openAppendOutputStream(this.path).use(action)
     }
 
     override fun create() {
-        if(this.exists()){
+        if (this.exists()) {
             return
         }
         this.fileSystem.createNewFile(this.path)
@@ -53,7 +57,7 @@ class InMemoryVirtualReadWriteFile(
             this.assertIsOpen()
             val file = this@InMemoryVirtualReadWriteFile
             this.outputStream.flush()
-            if(!file.exists()){
+            if (!file.exists()) {
                 file.parent?.mkdirs()
                 file.create()
             }
@@ -63,7 +67,7 @@ class InMemoryVirtualReadWriteFile(
         }
 
         override fun rollback() {
-            if(!this.isOpen){
+            if (!this.isOpen) {
                 return
             }
             this.outputStream.close()

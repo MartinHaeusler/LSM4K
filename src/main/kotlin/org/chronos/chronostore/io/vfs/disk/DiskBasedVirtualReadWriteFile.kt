@@ -39,8 +39,18 @@ class DiskBasedVirtualReadWriteFile(
         }
     }
 
-    override fun createAppendOutputStream(): FileOutputStream {
-        return FileOutputStream(file, true)
+    override fun <T> append(action: (OutputStream) -> T): T {
+        val outputStream = FileOutputStream(file, true)
+        try {
+            val bufferedOutputStream = outputStream.buffered()
+            val result = action(bufferedOutputStream)
+            bufferedOutputStream.flush()
+            return result
+        } finally {
+            outputStream.flush()
+            outputStream.sync()
+            outputStream.close()
+        }
     }
 
     override fun createOverWriter(): VirtualReadWriteFile.OverWriter {
