@@ -173,7 +173,15 @@ interface DataBlock {
                 bloomFilter = bloomFilter,
                 blockIndex = blockIndex,
                 blockStartOffset = blockStartOffset,
-                blockEndOffset = blockStartOffset + blockSize
+                blockEndOffset = blockStartOffset + blockSize,
+                blockDataStartOffset =
+                blockStartOffset
+                    + ChronoStoreFileFormat.BLOCK_MAGIC_BYTES.size // skip magic bytes at the start of the block
+                    + Int.SIZE_BYTES // skip block size
+                    + Int.SIZE_BYTES + blockMetadataBytes.size // skip block metadata
+                    + Int.SIZE_BYTES + bloomFilterBytes.size // skip bloom filter
+                    + Int.SIZE_BYTES + blockIndexBytes.size // skip block index
+                    + Int.SIZE_BYTES, // skip compressed size
             )
         }
 

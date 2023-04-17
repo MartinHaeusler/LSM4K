@@ -14,6 +14,7 @@ import org.chronos.chronostore.util.LittleEndianExtensions.writeLittleEndianInt
 import org.chronos.chronostore.util.LittleEndianExtensions.writeLittleEndianLong
 import org.chronos.chronostore.util.PositionTrackingStream
 import org.chronos.chronostore.util.Timestamp
+import org.chronos.chronostore.util.iterator.IteratorExtensions.checkOrdered
 import org.chronos.chronostore.util.sequence.OrderCheckingSequence.Companion.checkOrdered
 import java.io.ByteArrayOutputStream
 import java.io.OutputStream
@@ -56,7 +57,7 @@ class ChronoStoreFileWriter : AutoCloseable {
      *
      * @param orderedCommands The sequence of commands to write. **MUST** be ordered!
      */
-    fun writeFile(orderedCommands: Sequence<Command>) {
+    fun writeFile(orderedCommands: Iterator<Command>) {
         // grab the system clock time (will be written into the file later on)
         val wallClockTime = System.currentTimeMillis()
 
@@ -105,7 +106,7 @@ class ChronoStoreFileWriter : AutoCloseable {
         this.outputStream.flush()
     }
 
-    private fun writeBlocks(orderedCommands: Sequence<Command>): BlockWriteResult {
+    private fun writeBlocks(orderedCommands: Iterator<Command>): BlockWriteResult {
         // ensure that the commands we receive really are ordered,
         // as a command which appears out of order would be fatal.
         // Note that "checkOrdered" doesn't "sort" the input, it
@@ -148,9 +149,12 @@ class ChronoStoreFileWriter : AutoCloseable {
 
         var blockSequenceNumber = 0
         while (commands.hasNext()) {
+            println("Starting block #${blockSequenceNumber} at offset ${this.outputStream.position}.")
+            val blockStart = this.outputStream.position
             val minKeyAndTimestamp = commands.peek().keyAndTimestamp
             blockIndexToStartPositionAndMinKey += Triple(blockSequenceNumber, this.outputStream.position, minKeyAndTimestamp)
             writeBlock(commands, blockSequenceNumber)
+            println("  -> Finished writing block (size: ${this.outputStream.position - blockStart})")
             blockSequenceNumber++
         }
 
@@ -252,6 +256,7 @@ class ChronoStoreFileWriter : AutoCloseable {
         outputStream.write(blockIndexBytes)
         // write the compressed size of the block
         this.outputStream.writeLittleEndianInt(compressedSize)
+        println("  -> Block data starts at: ${this.outputStream.position}")
         // write the compressed block bytes
         this.outputStream.write(blockDataArrayCompressed)
     }

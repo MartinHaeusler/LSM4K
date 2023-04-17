@@ -27,7 +27,7 @@ class ChronoStoreFileTest {
                     settings = ChronoStoreFileSettings(CompressionAlgorithm.NONE, 1024 * 1024 * 16, 100),
                     metadata = emptyMap()
                 )
-                writer.writeFile(orderedCommands = emptySequence())
+                writer.writeFile(orderedCommands = emptySequence<Command>().iterator())
                 overWriter.commit()
             }
 
@@ -93,7 +93,7 @@ class ChronoStoreFileTest {
                         Command.put(theKey, (i + 1) * 1000L, Bytes.random(random, 1024))
                     }
                 }
-                writer.writeFile(orderedCommands = commands)
+                writer.writeFile(orderedCommands = commands.iterator())
                 overWriter.commit()
             }
 

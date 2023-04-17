@@ -19,6 +19,7 @@ class DiskBasedDataBlock(
     private val blockIndex: NavigableMap<KeyAndTimestamp, Int>,
     private val blockStartOffset: Long,
     private val blockEndOffset: Long,
+    private val blockDataStartOffset: Long,
 ) : DataBlock {
 
     private val blockSize = (blockEndOffset - blockStartOffset).toInt()
@@ -27,6 +28,7 @@ class DiskBasedDataBlock(
         require(blockStartOffset > 0) { "Argument 'blockStartOffset' (${blockStartOffset}) must not be negative!" }
         require(blockEndOffset > 0) { "Argument 'blockEndOffset' (${blockEndOffset}) must not be negative!" }
         require(blockStartOffset < blockEndOffset) { "Argument 'blockEndOffset' (${blockEndOffset}) must be larger than argument 'blockStartOffset' (${blockStartOffset})!" }
+        require(blockDataStartOffset <= blockEndOffset) { "Argument 'blockDataStartOffset' (${blockDataStartOffset}) must be less than or equal to argument 'blockEndOffset' (${blockEndOffset})!" }
     }
 
     override fun isEmpty(): Boolean {
@@ -49,18 +51,20 @@ class DiskBasedDataBlock(
 
         val relativeSectionEnd = blockIndex.higherEntry(key)?.value ?: blockSize
 
-        val absoluteSectionStart = this.blockStartOffset + relativeSectionStart
+        val absoluteSectionStart = this.blockDataStartOffset + relativeSectionStart
         val sectionLength = relativeSectionEnd - relativeSectionStart
 
         val bytes = driver.readBytes(absoluteSectionStart, sectionLength)
+        println(String(bytes.toByteArray()))
         bytes.withInputStream {
+            println("Seeking in block at offset ${absoluteSectionStart} (section size: ${sectionLength})")
             return seekInData(it, key)
         }
     }
 
     override fun cursor(driver: RandomFileAccessDriver): Cursor<KeyAndTimestamp, Command> {
         // we have to read the entire block to create a cursor, there's no other choice.
-        val bytes = driver.readBytes(this.blockStartOffset, this.blockSize)
+        val bytes = driver.readBytes(this.blockDataStartOffset, this.blockSize)
         val commandList = mutableListOf<Command>()
         bytes.withInputStream { inputStream ->
             while (inputStream.available() > 0) {
