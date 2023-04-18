@@ -22,7 +22,7 @@ class DiskBasedDataBlock(
     private val blockDataStartOffset: Long,
 ) : DataBlock {
 
-    private val blockSize = (blockEndOffset - blockStartOffset).toInt()
+    private val blockDataSize = (blockEndOffset - blockDataStartOffset).toInt()
 
     init {
         require(blockStartOffset > 0) { "Argument 'blockStartOffset' (${blockStartOffset}) must not be negative!" }
@@ -49,22 +49,20 @@ class DiskBasedDataBlock(
         val (_, relativeSectionStart) = blockIndex.floorEntry(key)
             ?: return null // request key is too small
 
-        val relativeSectionEnd = blockIndex.higherEntry(key)?.value ?: blockSize
+        val relativeSectionEnd = blockIndex.higherEntry(key)?.value ?: blockDataSize
 
         val absoluteSectionStart = this.blockDataStartOffset + relativeSectionStart
         val sectionLength = relativeSectionEnd - relativeSectionStart
 
         val bytes = driver.readBytes(absoluteSectionStart, sectionLength)
-        println(String(bytes.toByteArray()))
         bytes.withInputStream {
-            println("Seeking in block at offset ${absoluteSectionStart} (section size: ${sectionLength})")
             return seekInData(it, key)
         }
     }
 
     override fun cursor(driver: RandomFileAccessDriver): Cursor<KeyAndTimestamp, Command> {
         // we have to read the entire block to create a cursor, there's no other choice.
-        val bytes = driver.readBytes(this.blockDataStartOffset, this.blockSize)
+        val bytes = driver.readBytes(this.blockDataStartOffset, this.blockDataSize)
         val commandList = mutableListOf<Command>()
         bytes.withInputStream { inputStream ->
             while (inputStream.available() > 0) {

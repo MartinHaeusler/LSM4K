@@ -6,6 +6,7 @@ import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.util.Bytes
 import org.chronos.chronostore.util.Bytes.Companion.mightContain
 import org.chronos.chronostore.util.Bytes.Companion.put
+import org.chronos.chronostore.util.Bytes.Companion.write
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import strikt.api.expectThat
@@ -37,6 +38,27 @@ class CommandTest {
         val serialized = cmd.toBytes()
         val deserialized = Command.readFromBytes(serialized)
         expectThat(deserialized).isEqualTo(cmd)
+    }
+
+    @Test
+    fun canSerializeAndDeserializeMultipleCommands(){
+        val commands = mutableListOf(
+            Command.put("foo", 123456, "bar"),
+            Command.del("foo", 123500),
+            Command.put("foo", 123512, "baz"),
+            Command.put("hello", 123456, "world")
+        )
+        val out = ByteArrayOutputStream()
+        for(command in commands){
+            out.write(command.toBytes())
+        }
+        val serialized = out.toByteArray()
+        val input = ByteArrayInputStream(serialized)
+        val deserialized = mutableListOf<Command>()
+        while(input.available() > 0){
+            deserialized += Command.readFromStream(input)
+        }
+        expectThat(deserialized).containsExactly(commands)
     }
 
     @Test

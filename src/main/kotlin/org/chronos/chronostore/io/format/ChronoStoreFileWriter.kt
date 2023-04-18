@@ -15,7 +15,6 @@ import org.chronos.chronostore.util.LittleEndianExtensions.writeLittleEndianLong
 import org.chronos.chronostore.util.PositionTrackingStream
 import org.chronos.chronostore.util.Timestamp
 import org.chronos.chronostore.util.iterator.IteratorExtensions.checkOrdered
-import org.chronos.chronostore.util.sequence.OrderCheckingSequence.Companion.checkOrdered
 import java.io.ByteArrayOutputStream
 import java.io.OutputStream
 import java.lang.UnsupportedOperationException
@@ -149,12 +148,10 @@ class ChronoStoreFileWriter : AutoCloseable {
 
         var blockSequenceNumber = 0
         while (commands.hasNext()) {
-            println("Starting block #${blockSequenceNumber} at offset ${this.outputStream.position}.")
             val blockStart = this.outputStream.position
             val minKeyAndTimestamp = commands.peek().keyAndTimestamp
             blockIndexToStartPositionAndMinKey += Triple(blockSequenceNumber, this.outputStream.position, minKeyAndTimestamp)
             writeBlock(commands, blockSequenceNumber)
-            println("  -> Finished writing block (size: ${this.outputStream.position - blockStart})")
             blockSequenceNumber++
         }
 
@@ -206,6 +203,9 @@ class ChronoStoreFileWriter : AutoCloseable {
 
         // these are the uncompressed bytes of the block.
         blockPositionTrackingStream.flush()
+        blockPositionTrackingStream.close()
+        blockDataOutputStream.flush()
+        blockDataOutputStream.close()
         val blockDataArrayRaw = blockDataOutputStream.toByteArray()
         // compress the data
         val blockDataArrayCompressed = this.settings.compression.compress(blockDataArrayRaw)
@@ -234,14 +234,13 @@ class ChronoStoreFileWriter : AutoCloseable {
         // write the "magic bytes" that demarcate the beginning of a block
         this.outputStream.write(ChronoStoreFileFormat.BLOCK_MAGIC_BYTES)
         // write the total size of the block
-        this.outputStream.writeLittleEndianInt(
-            computeTotalBlockSize(
-                blockMetaDataSize = blockMetaData.byteSize,
-                bloomFilterBytes = bloomFilterBytes.size,
-                blockIndexBytesSize = blockIndexBytes.size,
-                blockDataArrayCompressedSize = blockDataArrayCompressed.size
-            )
+        val computedTotalBlockSize = computeTotalBlockSize(
+            blockMetaDataSize = blockMetaData.byteSize,
+            bloomFilterBytes = bloomFilterBytes.size,
+            blockIndexBytesSize = blockIndexBytes.size,
+            blockDataArrayCompressedSize = blockDataArrayCompressed.size
         )
+        this.outputStream.writeLittleEndianInt(computedTotalBlockSize)
         // write the size of the block metadata
         this.outputStream.writeLittleEndianInt(blockMetaData.byteSize)
         // write the metadata of the block
@@ -256,7 +255,6 @@ class ChronoStoreFileWriter : AutoCloseable {
         outputStream.write(blockIndexBytes)
         // write the compressed size of the block
         this.outputStream.writeLittleEndianInt(compressedSize)
-        println("  -> Block data starts at: ${this.outputStream.position}")
         // write the compressed block bytes
         this.outputStream.write(blockDataArrayCompressed)
     }

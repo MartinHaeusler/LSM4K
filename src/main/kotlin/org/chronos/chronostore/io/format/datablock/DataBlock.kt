@@ -168,16 +168,17 @@ interface DataBlock {
             val bloomFilter = BloomFilter.readFrom(ByteArrayInputStream(bloomFilterBytes), Funnels.byteArrayFunnel())
             val blockIndex = readBlockIndexFromBytes(blockIndexBytes)
 
+            val actualBlockStartOffset = blockStartOffset +
+                ChronoStoreFileFormat.BLOCK_MAGIC_BYTES.size + // skip magic bytes at the start of the block
+                Int.SIZE_BYTES // skip block size
+
             return DiskBasedDataBlock(
                 metaData = blockMetaData,
                 bloomFilter = bloomFilter,
                 blockIndex = blockIndex,
-                blockStartOffset = blockStartOffset,
-                blockEndOffset = blockStartOffset + blockSize,
-                blockDataStartOffset =
-                blockStartOffset
-                    + ChronoStoreFileFormat.BLOCK_MAGIC_BYTES.size // skip magic bytes at the start of the block
-                    + Int.SIZE_BYTES // skip block size
+                blockStartOffset = actualBlockStartOffset,
+                blockEndOffset = actualBlockStartOffset + blockSize,
+                blockDataStartOffset = actualBlockStartOffset
                     + Int.SIZE_BYTES + blockMetadataBytes.size // skip block metadata
                     + Int.SIZE_BYTES + bloomFilterBytes.size // skip bloom filter
                     + Int.SIZE_BYTES + blockIndexBytes.size // skip block index

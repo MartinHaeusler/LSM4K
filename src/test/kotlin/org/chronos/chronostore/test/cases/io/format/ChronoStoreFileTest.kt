@@ -1,5 +1,6 @@
 package org.chronos.chronostore.test.cases.io.format
 
+import org.chronos.chronostore.io.fileaccess.FileChannelDriver
 import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.model.command.KeyAndTimestamp
 import org.chronos.chronostore.io.fileaccess.MemorySegmentFileDriver
@@ -74,7 +75,21 @@ class ChronoStoreFileTest {
     }
 
     @VirtualFileSystemTest
-    fun canCreateAndReadFileWith1000VersionsOfSameKey(mode: VFSMode) {
+    fun canCreateAndReadFileWith1000VersionsOfSameKeyDiskBased(mode: VFSMode) {
+        runCreateAndReadFileWith1000VersionsOfSameKeyTest(mode, BlockReadMode.DISK_BASED)
+    }
+
+    @VirtualFileSystemTest
+    fun canCreateAndReadFileWith1000VersionsOfSameKeyInMemoryLazy(mode: VFSMode) {
+        runCreateAndReadFileWith1000VersionsOfSameKeyTest(mode, BlockReadMode.IN_MEMORY_LAZY)
+    }
+
+    @VirtualFileSystemTest
+    fun canCreateAndReadFileWith1000VersionsOfSameKeyInMemoryEager(mode: VFSMode) {
+        runCreateAndReadFileWith1000VersionsOfSameKeyTest(mode, BlockReadMode.IN_MEMORY_EAGER)
+    }
+
+    private fun runCreateAndReadFileWith1000VersionsOfSameKeyTest(mode: VFSMode, blockReadMode: BlockReadMode) {
         mode.withVFS { vfs ->
             val file = vfs.file("test.chronostore")
 
@@ -102,9 +117,9 @@ class ChronoStoreFileTest {
                 get { this.length }.isGreaterThan(0L)
             }
 
-            val factory = MemorySegmentFileDriver.Factory()
+            val factory = FileChannelDriver.Factory()
             factory.createDriver(file).use { driver ->
-                ChronoStoreFileReader(driver, BlockReadMode.DISK_BASED, BlockCache.NONE).use { reader ->
+                ChronoStoreFileReader(driver, blockReadMode, BlockCache.NONE).use { reader ->
                     val min = reader.fileHeader.metaData.minTimestamp!!
                     val max = reader.fileHeader.metaData.maxTimestamp!!
 
