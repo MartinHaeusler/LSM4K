@@ -145,7 +145,7 @@ class ChronoStoreFileReader : AutoCloseable {
 
         override var isOpen: Boolean = true
 
-        override var isValidPosition: Boolean = true
+        override var isValidPosition: Boolean = false
 
         private var currentBlock: DataBlock? = null
         private var currentCursor: Cursor<KeyAndTimestamp, Command>? = null
@@ -222,7 +222,6 @@ class ChronoStoreFileReader : AutoCloseable {
                 ?: throw IllegalStateException("Could not get block with index ${nextBlockIndex} in file '${driver.filePath}'!")
             val newCursor = newBlock.cursor(this.driver)
             newCursor.firstOrThrow()
-            this.invalidatePosition()
             this.currentBlock = newBlock
             this.currentCursor = newCursor
             return true
@@ -253,7 +252,6 @@ class ChronoStoreFileReader : AutoCloseable {
                 ?: throw IllegalStateException("Could not get block with index ${previousBlockIndex} in file '${driver.filePath}'!")
             val newCursor = newBlock.cursor(this.driver)
             newCursor.lastOrThrow()
-            this.invalidatePosition()
             this.currentBlock = newBlock
             this.currentCursor = newCursor
             return true

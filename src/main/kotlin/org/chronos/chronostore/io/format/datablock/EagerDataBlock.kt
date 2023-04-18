@@ -48,7 +48,7 @@ class EagerDataBlock(
         } else {
             IndexBasedCursor(
                 minIndex = 0,
-                maxIndex = this.dataList.size,
+                maxIndex = this.dataList.lastIndex,
                 getEntryAtIndex = this.dataList::get,
                 getCursorName = { "Data Block #${this.metaData.blockSequenceNumber}" }
             )

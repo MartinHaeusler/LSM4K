@@ -76,7 +76,7 @@ class DiskBasedDataBlock(
         } else {
             IndexBasedCursor(
                 minIndex = 0,
-                maxIndex = commandList.size,
+                maxIndex = commandList.lastIndex,
                 getEntryAtIndex = { index ->
                     val command = commandList[index]
                     command.keyAndTimestamp to command

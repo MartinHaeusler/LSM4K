@@ -186,4 +186,64 @@ class ChronoStoreFileTest {
         }
     }
 
+    @VirtualFileSystemTest
+    fun canIterateOverFileWith1000VersionsOfSameKeyWithCursorDiskBased(mode: VFSMode) {
+        canIterateOverFileWith1000VersionsOfSameKeyWithCursor(mode, BlockReadMode.DISK_BASED)
+    }
+
+    @VirtualFileSystemTest
+    fun canIterateOverFileWith1000VersionsOfSameKeyWithCursorInMemoryLazy(mode: VFSMode) {
+        canIterateOverFileWith1000VersionsOfSameKeyWithCursor(mode, BlockReadMode.IN_MEMORY_LAZY)
+    }
+
+    @VirtualFileSystemTest
+    fun canIterateOverFileWith1000VersionsOfSameKeyWithCursorInMemoryEager(mode: VFSMode) {
+        canIterateOverFileWith1000VersionsOfSameKeyWithCursor(mode, BlockReadMode.IN_MEMORY_EAGER)
+    }
+
+    private fun canIterateOverFileWith1000VersionsOfSameKeyWithCursor(mode: VFSMode, blockReadMode: BlockReadMode) {
+        mode.withVFS { vfs ->
+            val file = vfs.file("test.chronostore")
+
+            val theKey = Bytes("theKey")
+            file.withOverWriter { overWriter ->
+                val writer = ChronoStoreFileWriter(
+                    outputStream = overWriter.outputStream.buffered(),
+                    settings = ChronoStoreFileSettings(CompressionAlgorithm.NONE, 1024 * 16, 4),
+                    metadata = emptyMap()
+                )
+                val random = Random()
+                val commands = (0 until 1000).asSequence().map { i ->
+                    if (i.mod(100) == 0 && i > 0) {
+                        Command.del(theKey, (i + 1) * 1000L)
+                    } else {
+                        Command.put(theKey, (i + 1) * 1000L, Bytes.random(random, 1024))
+                    }
+                }
+                writer.writeFile(orderedCommands = commands.iterator())
+                overWriter.commit()
+            }
+
+            expectThat(file) {
+                get { this.exists() }.isTrue()
+                get { this.length }.isGreaterThan(0L)
+            }
+
+            val factory = FileChannelDriver.Factory()
+            factory.createDriver(file).use { driver ->
+                ChronoStoreFileReader(driver, blockReadMode, BlockCache.NONE).use { reader ->
+                    reader.openCursor().use { cursor ->
+                        assert(!cursor.isValidPosition) { "cursor.isValidPosition returned TRUE after initialization!" }
+                        assert(cursor.first()) { "cursor.first returned FALSE!" }
+                        assert(cursor.isValidPosition) { "cursor.isValidPosition returned FALSE after first()!" }
+                        assert(!cursor.previous()) { "could navigate to previous() from first()!" }
+                        val entries = cursor.ascendingEntrySequenceFromHere().toList()
+                        expectThat(entries).hasSize(1000)
+
+                    }
+                }
+            }
+        }
+    }
+
 }
