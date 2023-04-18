@@ -241,4 +241,8 @@ class InMemoryVirtualFileSystem : VirtualFileSystem {
 
     }
 
+    override fun toString(): String {
+        return PATH_PREFIX
+    }
+
 }

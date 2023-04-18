@@ -5,7 +5,7 @@ import org.chronos.chronostore.model.command.KeyAndTimestamp
 import org.chronos.chronostore.io.fileaccess.RandomFileAccessDriver
 import org.chronos.chronostore.io.format.datablock.BlockReadMode
 import org.chronos.chronostore.io.format.datablock.DataBlock
-import org.chronos.chronostore.lsm.BlockCache
+import org.chronos.chronostore.lsm.LocalBlockCache
 import org.chronos.chronostore.util.cursor.Cursor
 
 class ChronoStoreFileReader : AutoCloseable {
@@ -33,12 +33,12 @@ class ChronoStoreFileReader : AutoCloseable {
     private val blockReadMode: BlockReadMode
 
     val fileHeader: FileHeader
-    private val blockCache: BlockCache
+    private val blockCache: LocalBlockCache
 
     constructor(
         driver: RandomFileAccessDriver,
         blockReadMode: BlockReadMode,
-        blockCache: BlockCache
+        blockCache: LocalBlockCache
     ) {
         this.driver = driver
         this.blockReadMode = blockReadMode
@@ -49,7 +49,7 @@ class ChronoStoreFileReader : AutoCloseable {
     constructor(
         driver: RandomFileAccessDriver,
         header: FileHeader,
-        blockCache: BlockCache,
+        blockCache: LocalBlockCache,
         blockReadMode: BlockReadMode
     ) {
         // skip all the validation, it has already been done for us.

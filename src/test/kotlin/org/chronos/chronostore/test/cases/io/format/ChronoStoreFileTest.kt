@@ -7,7 +7,7 @@ import org.chronos.chronostore.io.fileaccess.MemorySegmentFileDriver
 import org.chronos.chronostore.io.format.*
 import org.chronos.chronostore.io.format.datablock.BlockReadMode
 import org.chronos.chronostore.io.vfs.VirtualReadWriteFile.Companion.withOverWriter
-import org.chronos.chronostore.lsm.BlockCache
+import org.chronos.chronostore.lsm.LocalBlockCache
 import org.chronos.chronostore.test.util.VFSMode
 import org.chronos.chronostore.test.util.VirtualFileSystemTest
 import org.chronos.chronostore.util.Bytes
@@ -39,7 +39,7 @@ class ChronoStoreFileTest {
 
             val factory = MemorySegmentFileDriver.Factory()
             factory.createDriver(file).use { driver ->
-                ChronoStoreFileReader(driver, BlockReadMode.DISK_BASED, BlockCache.NONE).use { reader ->
+                ChronoStoreFileReader(driver, BlockReadMode.DISK_BASED, LocalBlockCache.NONE).use { reader ->
                     expectThat(reader) {
                         get { fileHeader }.and {
                             get { this.indexOfBlocks.isEmpty }.isTrue()
@@ -119,7 +119,7 @@ class ChronoStoreFileTest {
 
             val factory = FileChannelDriver.Factory()
             factory.createDriver(file).use { driver ->
-                ChronoStoreFileReader(driver, blockReadMode, BlockCache.NONE).use { reader ->
+                ChronoStoreFileReader(driver, blockReadMode, LocalBlockCache.NONE).use { reader ->
                     val min = reader.fileHeader.metaData.minTimestamp!!
                     val max = reader.fileHeader.metaData.maxTimestamp!!
 
@@ -231,7 +231,7 @@ class ChronoStoreFileTest {
 
             val factory = FileChannelDriver.Factory()
             factory.createDriver(file).use { driver ->
-                ChronoStoreFileReader(driver, blockReadMode, BlockCache.NONE).use { reader ->
+                ChronoStoreFileReader(driver, blockReadMode, LocalBlockCache.NONE).use { reader ->
                     reader.openCursor().use { cursor ->
                         assert(!cursor.isValidPosition) { "cursor.isValidPosition returned TRUE after initialization!" }
                         assert(cursor.first()) { "cursor.first returned FALSE!" }

@@ -14,7 +14,7 @@ class LSMTreeFile(
     val index: Int,
     val driverFactory: RandomFileAccessDriverFactory,
     val blockReadMode: BlockReadMode,
-    val blockCache: BlockCache,
+    val blockCache: LocalBlockCache,
 ) {
 
     companion object {

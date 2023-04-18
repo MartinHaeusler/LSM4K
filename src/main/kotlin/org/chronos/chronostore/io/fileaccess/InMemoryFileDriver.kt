@@ -41,7 +41,7 @@ class InMemoryFileDriver(
         this.closed = true
     }
 
-    class Factory : RandomFileAccessDriverFactory {
+    object Factory : RandomFileAccessDriverFactory {
 
         override fun createDriver(file: VirtualFile): RandomFileAccessDriver {
             return when (file) {

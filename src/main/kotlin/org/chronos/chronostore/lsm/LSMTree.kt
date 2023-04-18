@@ -8,6 +8,7 @@ import org.chronos.chronostore.io.vfs.VirtualDirectory
 import org.chronos.chronostore.lsm.LSMTreeFile.Companion.FILE_EXTENSION
 import org.chronos.chronostore.lsm.event.InMemoryLsmInsertEvent
 import org.chronos.chronostore.lsm.event.LsmCursorClosedEvent
+import org.chronos.chronostore.util.Timestamp
 import org.chronos.chronostore.util.cursor.Cursor
 import org.chronos.chronostore.util.cursor.IndexBasedCursor
 import org.chronos.chronostore.util.cursor.OverlayCursor
@@ -19,10 +20,9 @@ import kotlin.concurrent.read
 import kotlin.concurrent.write
 
 class LSMTree(
-    private val id: UUID,
     private val directory: VirtualDirectory,
     private val mergeStrategy: MergeStrategy,
-    private val blockCache: BlockCache,
+    private val blockCache: LocalBlockCache,
     private val driverFactory: RandomFileAccessDriverFactory,
     private val blockReadMode: BlockReadMode,
 ) {
@@ -142,5 +142,10 @@ class LSMTree(
         )
     }
 
+    fun getMaxPersistedTimestamp(): Timestamp {
+        return fileList.asSequence()
+            .mapNotNull { it.header.metaData.maxTimestamp }
+            .maxOrNull() ?: -1
+    }
 
 }

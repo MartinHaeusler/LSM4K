@@ -15,6 +15,10 @@ dependencies {
     implementation("io.github.microutils:kotlin-logging:2.1.23")
     implementation("com.google.guava:guava:31.1-jre")
 
+    implementation("com.fasterxml.jackson.core:jackson-core:${BuildVersions.jackson}")
+    implementation("com.fasterxml.jackson.core:jackson-databind:${BuildVersions.jackson}")
+    implementation("com.fasterxml.jackson.module:jackson-module-kotlin:${BuildVersions.jackson}")
+
     // compression
     implementation("org.xerial.snappy:snappy-java:1.1.9.1")
     implementation("org.anarres.lzo:lzo-core:1.0.6")
@@ -25,8 +29,6 @@ dependencies {
     testImplementation("org.junit.jupiter:junit-jupiter-engine")
     testImplementation("io.strikt","strikt-core", BuildVersions.strikt)
     testImplementation("ch.qos.logback", "logback-classic", BuildVersions.logback)
-    testImplementation("com.fasterxml.jackson.core:jackson-core:${BuildVersions.jackson}")
-    testImplementation("com.fasterxml.jackson.core:jackson-databind:${BuildVersions.jackson}")
 
     testImplementation(kotlin("reflect"))
 }

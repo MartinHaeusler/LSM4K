@@ -22,5 +22,8 @@ class DiskBasedVirtualFileSystem(
         return DiskBasedVirtualReadWriteFile(parent = null, File(this.rootDir, name))
     }
 
+    override fun toString(): String {
+        return this.rootDir.absolutePath
+    }
 
 }

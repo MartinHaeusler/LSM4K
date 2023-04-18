@@ -28,9 +28,9 @@ interface StoreManager {
 
     fun createNewStore(name: String, versioned: Boolean): Store
 
-    fun renameStore(oldName: String, newName: String)
+    fun renameStore(oldName: String, newName: String): Boolean
 
-    fun renameStore(storeId: StoreId, newName: String)
+    fun renameStore(storeId: StoreId, newName: String): Boolean
 
     fun deleteStoreByName(name: String): Boolean
 

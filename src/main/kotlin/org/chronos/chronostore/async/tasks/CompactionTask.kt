@@ -8,10 +8,9 @@ import org.chronos.chronostore.io.format.ChronoStoreFileReader
 import org.chronos.chronostore.io.format.ChronoStoreFileSettings
 import org.chronos.chronostore.io.format.ChronoStoreFileWriter
 import org.chronos.chronostore.io.format.datablock.BlockReadMode
-import org.chronos.chronostore.io.vfs.VirtualFile
 import org.chronos.chronostore.io.vfs.VirtualReadWriteFile
 import org.chronos.chronostore.io.vfs.VirtualReadWriteFile.Companion.withOverWriter
-import org.chronos.chronostore.lsm.BlockCache
+import org.chronos.chronostore.lsm.LocalBlockCache
 import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.model.command.KeyAndTimestamp
 import org.chronos.chronostore.util.Bytes
@@ -25,7 +24,7 @@ class CompactionTask(
     private val targetMetadata: Map<Bytes, Bytes>,
     private val driverFactory: RandomFileAccessDriverFactory,
     private val blockReadMode: BlockReadMode,
-    private val blockCache: BlockCache,
+    private val blockCache: LocalBlockCache,
     override val name: String
 ) : AsyncTask {
 

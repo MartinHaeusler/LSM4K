@@ -53,7 +53,7 @@ class FileChannelDriver(
         this.channel.close()
     }
 
-    class Factory : RandomFileAccessDriverFactory {
+    object Factory : RandomFileAccessDriverFactory {
 
         override fun createDriver(file: VirtualFile): RandomFileAccessDriver {
             return when (file) {

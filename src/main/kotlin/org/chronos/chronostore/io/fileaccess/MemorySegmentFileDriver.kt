@@ -2,6 +2,7 @@ package org.chronos.chronostore.io.fileaccess
 
 import jdk.incubator.foreign.MemorySegment
 import jdk.incubator.foreign.ResourceScope
+import mu.KotlinLogging
 import org.chronos.chronostore.io.vfs.VirtualFile
 import org.chronos.chronostore.io.vfs.disk.DiskBasedVirtualFile
 import org.chronos.chronostore.io.vfs.inmemory.InMemoryVirtualFile
@@ -61,26 +62,29 @@ class MemorySegmentFileDriver(
         this.scope.close()
     }
 
-    class Factory : RandomFileAccessDriverFactory {
+    object Factory : RandomFileAccessDriverFactory {
 
-        companion object {
+        private val log = KotlinLogging.logger { }
 
-            val isAvailable: Boolean by lazy {
-                // checks if the MemorySegment API is available in the current context.
-                // It requires the JVM option "--add-modules jdk.incubator.foreign".
-                try {
-                    MemorySegment::class.qualifiedName
-                    return@lazy true
-                } catch (e: Throwable) {
-                    return@lazy false
-                }
+        val isAvailable: Boolean by lazy {
+            // checks if the MemorySegment API is available in the current context.
+            // It requires the JVM option "--add-modules jdk.incubator.foreign".
+            try {
+                MemorySegment::class.qualifiedName
+                return@lazy true
+            } catch (e: Throwable) {
+                log.warn { "Memory Segment API is not available (JRE is too old or the feature flag is disabled). Falling back to File Channels." }
+                return@lazy false
             }
-
         }
 
         override fun createDriver(file: VirtualFile): RandomFileAccessDriver {
             return when (file) {
-                is DiskBasedVirtualFile -> MemorySegmentFileDriver(file.fileOnDisk)
+                is DiskBasedVirtualFile -> if (isAvailable) {
+                    MemorySegmentFileDriver(file.fileOnDisk)
+                } else {
+                    FileChannelDriver(file.fileOnDisk)
+                }
                 // fall back to in-memory driver
                 is InMemoryVirtualFile -> InMemoryFileDriver(file)
                 else -> throw IllegalArgumentException("Unknown subclass of ${VirtualFile::class.simpleName}: ${file::class.qualifiedName}")
