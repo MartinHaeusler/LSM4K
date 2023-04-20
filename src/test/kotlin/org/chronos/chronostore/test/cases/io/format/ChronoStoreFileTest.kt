@@ -37,7 +37,7 @@ class ChronoStoreFileTest {
                 get { this.length }.isGreaterThan(0L)
             }
 
-            val factory = MemorySegmentFileDriver.Factory()
+            val factory = MemorySegmentFileDriver.Factory
             factory.createDriver(file).use { driver ->
                 ChronoStoreFileReader(driver, BlockReadMode.DISK_BASED, LocalBlockCache.NONE).use { reader ->
                     expectThat(reader) {
@@ -117,7 +117,7 @@ class ChronoStoreFileTest {
                 get { this.length }.isGreaterThan(0L)
             }
 
-            val factory = FileChannelDriver.Factory()
+            val factory = FileChannelDriver.Factory
             factory.createDriver(file).use { driver ->
                 ChronoStoreFileReader(driver, blockReadMode, LocalBlockCache.NONE).use { reader ->
                     val min = reader.fileHeader.metaData.minTimestamp!!
@@ -229,7 +229,7 @@ class ChronoStoreFileTest {
                 get { this.length }.isGreaterThan(0L)
             }
 
-            val factory = FileChannelDriver.Factory()
+            val factory = FileChannelDriver.Factory
             factory.createDriver(file).use { driver ->
                 ChronoStoreFileReader(driver, blockReadMode, LocalBlockCache.NONE).use { reader ->
                     reader.openCursor().use { cursor ->

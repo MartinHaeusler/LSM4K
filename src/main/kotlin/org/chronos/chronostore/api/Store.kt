@@ -2,7 +2,8 @@ package org.chronos.chronostore.api
 
 import org.chronos.chronostore.io.vfs.VirtualDirectory
 import org.chronos.chronostore.util.StoreId
-import java.util.*
+import org.chronos.chronostore.util.Timestamp
+import org.chronos.chronostore.util.TransactionId
 
 interface Store {
 
@@ -13,5 +14,14 @@ interface Store {
     val retainOldVersions: Boolean
 
     val directory: VirtualDirectory
+
+    val validFrom: Timestamp
+
+    val validTo: Timestamp?
+
+    val createdByTransactionId: TransactionId
+
+    val isTerminated: Boolean
+        get() = this.validTo != null
 
 }

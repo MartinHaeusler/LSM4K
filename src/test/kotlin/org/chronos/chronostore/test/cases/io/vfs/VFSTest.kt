@@ -137,13 +137,13 @@ class VFSTest {
 
     @VirtualFileSystemTest
     fun canUseInMemoryRandomFileAccessDriver(mode: VFSMode) {
-        val driverFactory = InMemoryFileDriver.Factory()
+        val driverFactory = InMemoryFileDriver.Factory
         runRandomFileAccessDriverTest(mode, driverFactory)
     }
 
     @VirtualFileSystemTest
     fun canUseMemoryMappedRandomFileAccessDriver(mode: VFSMode) {
-        val driverFactory = MemoryMappedFileDriver.Factory()
+        val driverFactory = MemoryMappedFileDriver.Factory
         runRandomFileAccessDriverTest(mode, driverFactory)
     }
 
@@ -153,7 +153,7 @@ class VFSTest {
             "The MemorySegment API is not available for this run." +
                 " Please attach the JVM option \"--add-modules jdk.incubator.foreign\" to enable it (JDK 17+ required)."
         }
-        val driverFactory = MemorySegmentFileDriver.Factory()
+        val driverFactory = MemorySegmentFileDriver.Factory
         runRandomFileAccessDriverTest(mode, driverFactory)
     }
 

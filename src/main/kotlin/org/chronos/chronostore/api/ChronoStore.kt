@@ -31,8 +31,6 @@ interface ChronoStore : AutoCloseable {
 
     }
 
-    val storeManager: StoreManager
-
     fun beginTransaction(): ChronoStoreTransaction
 
 }

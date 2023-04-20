@@ -4,39 +4,39 @@ import org.chronos.chronostore.util.StoreId
 
 interface StoreManager {
 
-    fun getStoreByName(name: String): Store {
-        return getStoreByNameOrNull(name)
+    fun getStoreByName(transaction: ChronoStoreTransaction, name: String): Store {
+        return getStoreByNameOrNull(transaction, name)
             ?: throw IllegalArgumentException("There is no store with name '${name}'!")
     }
 
-    fun getStoreByNameOrNull(name: String): Store?
+    fun getStoreByNameOrNull(transaction: ChronoStoreTransaction, name: String): Store?
 
-    fun getStoreById(storeId: StoreId): Store {
-        return getStoreByIdOrNull(storeId)
+    fun getStoreById(transaction: ChronoStoreTransaction, storeId: StoreId): Store {
+        return getStoreByIdOrNull(transaction, storeId)
             ?: throw IllegalArgumentException("There is no store with ID '${storeId}'!")
     }
 
-    fun getStoreByIdOrNull(storeId: StoreId): Store?
+    fun getStoreByIdOrNull(transaction: ChronoStoreTransaction, storeId: StoreId): Store?
 
-    fun existsStoreByName(name: String): Boolean {
-        return this.getStoreByNameOrNull(name) != null
+    fun existsStoreByName(transaction: ChronoStoreTransaction, name: String): Boolean {
+        return this.getStoreByNameOrNull(transaction, name) != null
     }
 
-    fun existsStoreById(storeId: StoreId): Boolean {
-        return this.getStoreByIdOrNull(storeId) != null
+    fun existsStoreById(transaction: ChronoStoreTransaction, storeId: StoreId): Boolean {
+        return this.getStoreByIdOrNull(transaction, storeId) != null
     }
 
-    fun createNewStore(name: String, versioned: Boolean): Store
+    fun createNewStore(transaction: ChronoStoreTransaction, name: String, versioned: Boolean): Store
 
-    fun renameStore(oldName: String, newName: String): Boolean
+    fun renameStore(transaction: ChronoStoreTransaction, oldName: String, newName: String): Boolean
 
-    fun renameStore(storeId: StoreId, newName: String): Boolean
+    fun renameStore(transaction: ChronoStoreTransaction, storeId: StoreId, newName: String): Boolean
 
-    fun deleteStoreByName(name: String): Boolean
+    fun deleteStoreByName(transaction: ChronoStoreTransaction, name: String): Boolean
 
-    fun deleteStoreById(storeId: StoreId): Boolean
+    fun deleteStoreById(transaction: ChronoStoreTransaction, storeId: StoreId): Boolean
 
-    fun getAllStores(): List<Store>
+    fun getAllStores(transaction: ChronoStoreTransaction): List<Store>
 
 
 }

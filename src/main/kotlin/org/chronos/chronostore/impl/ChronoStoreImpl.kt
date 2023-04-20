@@ -9,10 +9,7 @@ import org.chronos.chronostore.async.executor.AsyncTaskManagerImpl
 import org.chronos.chronostore.impl.store.StoreImpl
 import org.chronos.chronostore.io.structure.ChronoStoreStructure
 import org.chronos.chronostore.io.vfs.VirtualFileSystem
-import org.chronos.chronostore.lsm.cache.BlockCacheManager
 import org.chronos.chronostore.lsm.cache.BlockCacheManagerImpl
-import org.chronos.chronostore.util.StoreId
-import org.chronos.chronostore.util.Timestamp
 import org.chronos.chronostore.wal.WriteAheadLog
 import java.util.concurrent.Executors
 
@@ -27,12 +24,15 @@ class ChronoStoreImpl(
 
     }
 
+    @Transient
     private var isOpen = true
 
+    private val timeManager = TimeManager()
     private val blockCacheManager = BlockCacheManagerImpl()
-    override val storeManager = StoreManagerImpl(
+    private val storeManager = StoreManagerImpl(
         vfs = this.vfs,
-        blockCache = this.blockCacheManager,
+        blockCacheManager = this.blockCacheManager,
+        timeManager = this.timeManager,
         blockReadMode = configuration.blockReadMode,
         mergeStrategy = configuration.mergeStrategy,
         driverFactory = configuration.randomFileAccessDriverFactory
@@ -65,7 +65,7 @@ class ChronoStoreImpl(
         this.writeAheadLog.performStartupRecoveryCleanup()
         // initialize the store manager so that we can read from it.
         this.storeManager.initialize(isEmptyDatabase = false)
-        val allStores = this.storeManager.getAllStores()
+        val allStores = this.storeManager.getAllStoresInternal()
         // with the store info, replay the changes found in the WAL.
         log.info { "Located ${allStores.size} stores belonging to this database." }
         this.replayWriteAheadLogChanges(allStores)
@@ -119,6 +119,10 @@ class ChronoStoreImpl(
             return
         }
         isOpen = false
+        log.info { "Initiating shut-down of ChronoStore at '${this.vfs}'." }
+        this.taskManager.close()
+        this.storeManager.close()
+        log.info { "Completed shut-down of ChronoStore at '${this.vfs}'." }
     }
 
 }

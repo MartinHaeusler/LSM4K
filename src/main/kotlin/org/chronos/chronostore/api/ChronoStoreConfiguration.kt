@@ -13,6 +13,6 @@ class ChronoStoreConfiguration {
 
     var randomFileAccessDriverFactory: RandomFileAccessDriverFactory = FileChannelDriver.Factory
 
-    var mergeStrategy: MergeStrategy // todo: default
+    var mergeStrategy: MergeStrategy = TODO("create a default strategy")
 
 }
