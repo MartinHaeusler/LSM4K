@@ -39,6 +39,7 @@ class ChronoStoreImpl(
     )
     private val taskManager = AsyncTaskManagerImpl(Executors.newFixedThreadPool(configuration.maxWriterThreads))
     private val writeAheadLog: WriteAheadLog
+    private val transactionManager: TransactionManager
 
     init {
         val walFile = this.vfs.file(ChronoStoreStructure.WAL_FILE_NAME)
@@ -51,6 +52,11 @@ class ChronoStoreImpl(
             // the WAL file exists, perform startup recovery.
             this.performStartupRecovery()
         }
+        this.transactionManager = TransactionManager(
+            storeManager = this.storeManager,
+            timeManager = this.timeManager,
+            writeAheadLog = this.writeAheadLog
+        )
     }
 
     private fun createNewEmptyDatabase() {
@@ -111,7 +117,7 @@ class ChronoStoreImpl(
 
 
     override fun beginTransaction(): ChronoStoreTransaction {
-        TODO("Not yet implemented")
+        return this.transactionManager.createNewTransaction()
     }
 
     override fun close() {
@@ -120,6 +126,7 @@ class ChronoStoreImpl(
         }
         isOpen = false
         log.info { "Initiating shut-down of ChronoStore at '${this.vfs}'." }
+        this.transactionManager.close()
         this.taskManager.close()
         this.storeManager.close()
         log.info { "Completed shut-down of ChronoStore at '${this.vfs}'." }
