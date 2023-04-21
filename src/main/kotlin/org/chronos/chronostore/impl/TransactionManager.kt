@@ -1,23 +1,24 @@
 package org.chronos.chronostore.impl
 
 import org.chronos.chronostore.api.ChronoStoreTransaction
-import org.chronos.chronostore.api.Store
 import org.chronos.chronostore.api.StoreManager
+import org.chronos.chronostore.impl.store.StoreImpl
+import org.chronos.chronostore.impl.transaction.ChronoStoreTransactionImpl
 import org.chronos.chronostore.util.Bytes
-import org.chronos.chronostore.util.StoreId
 import org.chronos.chronostore.util.Timestamp
 import org.chronos.chronostore.util.TransactionId
-import org.chronos.chronostore.util.cursor.Cursor
 import org.chronos.chronostore.wal.WriteAheadLog
+import java.util.concurrent.locks.ReentrantLock
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.concurrent.read
+import kotlin.concurrent.withLock
 import kotlin.concurrent.write
 
 class TransactionManager(
     val storeManager: StoreManager,
     val timeManager: TimeManager,
     val writeAheadLog: WriteAheadLog,
-): AutoCloseable {
+) : AutoCloseable {
 
     companion object {
 
@@ -25,18 +26,22 @@ class TransactionManager(
 
     }
 
-    private val lock = ReentrantReadWriteLock(true)
+    private val openTransactionsLock = ReentrantReadWriteLock(true)
     private val openTransactions = mutableMapOf<TransactionId, ChronoStoreTransaction>()
+
+    private val commitLock = ReentrantLock(true)
 
     @Transient
     private var isOpen = true
 
     fun createNewTransaction(): ChronoStoreTransaction {
-        check(this.isOpen){ DB_ALREADY_CLOSED }
-        this.lock.write {
+        check(this.isOpen) { DB_ALREADY_CLOSED }
+        this.openTransactionsLock.write {
             val newTx = ChronoStoreTransactionImpl(
                 id = TransactionId.randomUUID(),
-                lastVisibleTimestamp = System.currentTimeMillis()
+                lastVisibleTimestamp = System.currentTimeMillis(),
+                storeManager = this.storeManager,
+                transactionManager = this,
             )
             this.openTransactions[newTx.id] = newTx
             return newTx
@@ -45,101 +50,64 @@ class TransactionManager(
 
 
     fun getOpenTransactionIdsAndTimestamps(): Map<TransactionId, Timestamp> {
-        check(this.isOpen){ DB_ALREADY_CLOSED }
-        this.lock.read {
+        check(this.isOpen) { DB_ALREADY_CLOSED }
+        this.openTransactionsLock.read {
             return this.openTransactions.values.associate { it.id to it.lastVisibleTimestamp }
         }
     }
 
-    private fun rollbackTransaction(tx: ChronoStoreTransaction) {
-        this.lock.write {
+    private fun closeTransaction(tx: ChronoStoreTransaction) {
+        this.openTransactionsLock.write {
             this.openTransactions.remove(tx.id)
         }
     }
 
+    fun performCommit(tx: ChronoStoreTransactionImpl, commitMetadata: Bytes?): Timestamp {
+        this.commitLock.withLock {
+
+            // TODO: ensure first that all stores are indeed writeable, and LOCK THEM until we're done!
+
+            val commitTimestamp = this.timeManager.getUniqueWallClockTimestamp()
+            val walTransaction = tx.toWALTransaction(commitTimestamp, commitMetadata)
+            this.writeAheadLog.addCommittedTransaction(walTransaction)
+
+            for ((storeId, commands) in walTransaction.storeIdToCommands.entries) {
+
+                val store = this.storeManager.getStoreByIdOrNull(tx, storeId)?.takeIf { !it.isTerminated }
+                    // this must NEVER happen!
+                    ?: throw IllegalStateException("Cannot commit: store with ID '${storeId}' doesn't exist or is not writeable!")
+
+                if (storeMaxTimestamp > walTransaction.commitTimestamp) {
+                    // we already have these changes in our store.
+                    continue
+                }
+
+                // we don't have this change yet, apply it
+                val store = storeIdToStore[entry.key]
+                    ?: continue // the store doesn't exist anymore, skip
+
+                // we're missing the changes from this transaction,
+                // put them into the store.
+                (store as StoreImpl).tree.put(entry.value)
+                changed = true
+            }
+
+            // TODO: insert data to store trees!
+
+            return commitTimestamp
+        }
+    }
+
     override fun close() {
-        if(!this.isOpen){
+        if (!this.isOpen) {
             return
         }
         this.isOpen = false
-        this.lock.write {
-            for(transaction in this.openTransactions.values){
+        this.openTransactionsLock.write {
+            for (transaction in this.openTransactions.values) {
                 transaction.rollback()
             }
         }
     }
-
-    private inner class ChronoStoreTransactionImpl(
-        override val id: TransactionId,
-        override val lastVisibleTimestamp: Timestamp
-    ) : ChronoStoreTransaction {
-
-
-        override fun getStoreByNameOrNull(name: String): Store? {
-            TODO("Not yet implemented")
-        }
-
-        override fun getStoreByIdOrNull(storeId: StoreId): Store? {
-            TODO("Not yet implemented")
-        }
-
-        override fun createNewStore(name: String, versioned: Boolean): Store {
-            TODO("Not yet implemented")
-        }
-
-        override fun renameStore(oldName: String, newName: String): Boolean {
-            TODO("Not yet implemented")
-        }
-
-        override fun renameStore(storeId: StoreId, newName: String): Boolean {
-            TODO("Not yet implemented")
-        }
-
-        override fun deleteStoreByName(name: String): Boolean {
-            TODO("Not yet implemented")
-        }
-
-        override fun deleteStoreById(storeId: StoreId): Boolean {
-            TODO("Not yet implemented")
-        }
-
-        override fun getAllStores(): List<Store> {
-            TODO("Not yet implemented")
-        }
-
-        override fun put(store: Store, key: Bytes, value: Bytes) {
-            TODO("Not yet implemented")
-        }
-
-        override fun delete(store: Store, key: Bytes) {
-            TODO("Not yet implemented")
-        }
-
-        override fun getLatest(store: Store, key: Bytes): Bytes? {
-            TODO("Not yet implemented")
-        }
-
-        override fun getAtTimestamp(store: Store, key: Bytes, timestamp: Timestamp): Bytes? {
-            TODO("Not yet implemented")
-        }
-
-        override fun openCursorOnLatest(store: Store): Cursor<Bytes, Bytes> {
-            TODO("Not yet implemented")
-        }
-
-        override fun openCursorAtTimestamp(store: Store, timestamp: Timestamp): Cursor<Bytes, Bytes> {
-            TODO("Not yet implemented")
-        }
-
-        override fun commit(metadata: Bytes?): Timestamp {
-            TODO("Not yet implemented")
-        }
-
-        override fun rollback() {
-            TODO("Not yet implemented")
-        }
-
-    }
-
 
 }
