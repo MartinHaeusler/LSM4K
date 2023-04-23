@@ -38,5 +38,6 @@ interface StoreManager {
 
     fun getAllStores(transaction: ChronoStoreTransaction): List<Store>
 
+    fun <T> withStoreReadLock(action: () -> T): T
 
 }

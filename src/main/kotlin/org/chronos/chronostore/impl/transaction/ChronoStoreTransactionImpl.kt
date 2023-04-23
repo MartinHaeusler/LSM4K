@@ -4,12 +4,18 @@ import org.chronos.chronostore.api.ChronoStoreTransaction
 import org.chronos.chronostore.api.Store
 import org.chronos.chronostore.api.StoreManager
 import org.chronos.chronostore.api.TransactionBoundStore
-import org.chronos.chronostore.impl.TimeManager
 import org.chronos.chronostore.impl.TransactionManager
+import org.chronos.chronostore.impl.store.StoreImpl
+import org.chronos.chronostore.model.command.Command
+import org.chronos.chronostore.model.command.KeyAndTimestamp
 import org.chronos.chronostore.util.Bytes
 import org.chronos.chronostore.util.StoreId
 import org.chronos.chronostore.util.Timestamp
 import org.chronos.chronostore.util.TransactionId
+import org.chronos.chronostore.util.cursor.Cursor
+import org.chronos.chronostore.util.cursor.IndexBasedCursor
+import org.chronos.chronostore.util.cursor.OverlayCursor
+import org.chronos.chronostore.util.cursor.VersioningCursor
 import org.chronos.chronostore.wal.WriteAheadLogTransaction
 
 class ChronoStoreTransactionImpl(
@@ -75,6 +81,21 @@ class ChronoStoreTransactionImpl(
         return this.transactionManager.performCommit(this, metadata)
     }
 
+    private fun renameStore(txStore: TransactionBoundStoreImpl, newName: String) {
+        require(this.isOpen){ TX_ALREADY_CLOSED }
+        val oldName = txStore.store.name
+        val renamed = this.storeManager.renameStore(this@ChronoStoreTransactionImpl, txStore.store.id, newName)
+        if (renamed) {
+            this.openStoresByName.remove(oldName)
+            this.openStoresByName[oldName] = txStore
+        }
+    }
+
+    private fun deleteStore(txStore: TransactionBoundStoreImpl) {
+        require(this.isOpen){ TX_ALREADY_CLOSED }
+        this.storeManager.deleteStoreById(this, txStore.store.id)
+    }
+
     fun toWALTransaction(commitTimestamp: Timestamp, metadata: Bytes?): WriteAheadLogTransaction {
         val changes = this.openStoresById.values.associate { txStore ->
             txStore.store.id to txStore.transactionContext.convertToCommands(commitTimestamp)
@@ -88,7 +109,6 @@ class ChronoStoreTransactionImpl(
             return
         }
         this.isOpen = false
-        this.closeHandler(this)
     }
 
     private fun bindStore(store: Store): TransactionBoundStoreImpl {
@@ -105,7 +125,69 @@ class ChronoStoreTransactionImpl(
         override val transaction: ChronoStoreTransaction
             get() = this@ChronoStoreTransactionImpl
 
-        val transactionContext = TransactionBoundStoreContext()
+        override fun put(key: Bytes, value: Bytes) {
+            this.transactionContext.performPut(key, value)
+        }
+
+        override fun delete(key: Bytes) {
+            this.transactionContext.performDelete(key)
+        }
+
+        override fun getLatest(key: Bytes): Bytes? {
+            return if (this.transactionContext.isKeyModified(key)) {
+                this.transactionContext.getLatest(key)
+            } else {
+                val command = (this.store as StoreImpl).tree.get(KeyAndTimestamp(key, this@ChronoStoreTransactionImpl.lastVisibleTimestamp))
+                when (command?.opCode) {
+                    Command.OpCode.DEL, null -> null
+                    Command.OpCode.PUT -> command.value
+                }
+            }
+        }
+
+        override fun getAtTimestamp(key: Bytes, timestamp: Timestamp): Bytes? {
+            val now = this@ChronoStoreTransactionImpl.lastVisibleTimestamp
+            require(timestamp <= now) {
+                "Cannot query key at timestamp ${timestamp}: it is later than the last visible timestamp ($now)!"
+            }
+            val command = (this.store as StoreImpl).tree.get(KeyAndTimestamp(key, now))
+            return when (command?.opCode) {
+                Command.OpCode.DEL, null -> null
+                Command.OpCode.PUT -> command.value
+            }
+        }
+
+        override fun openCursorOnLatest(): Cursor<Bytes, Bytes> {
+            val treeCursor = (this.store as StoreImpl).tree.cursor()
+            val versioningCursor = VersioningCursor(treeCursor, this@ChronoStoreTransactionImpl.lastVisibleTimestamp, false)
+            val bytesToBytesCursor = versioningCursor.mapValue { it.value }
+            val keyList = this.transactionContext.allModifications.entries.asSequence().mapNotNull {
+                val key = it.key
+                val value = it.value
+                    ?: return@mapNotNull null
+                key to value
+            }.toMutableList().sortedBy { it.first }
+            val transientModificationCursor = IndexBasedCursor(0, keyList.lastIndex, { keyList[it] }, { "Transient Modification Cursor" })
+            return OverlayCursor(bytesToBytesCursor, transientModificationCursor)
+        }
+
+        override fun openCursorAtTimestamp(timestamp: Timestamp): Cursor<Bytes, Bytes> {
+            val now = this@ChronoStoreTransactionImpl.lastVisibleTimestamp
+            val treeCursor = (this.store as StoreImpl).tree.cursor()
+            val versioningCursor = VersioningCursor(treeCursor, now, false)
+            return versioningCursor.mapValue { it.value }
+        }
+
+        override fun renameStore(newName: String) {
+            this@ChronoStoreTransactionImpl.renameStore(this, newName)
+        }
+
+        override fun deleteStore() {
+            this@ChronoStoreTransactionImpl.deleteStore(this)
+            this.transactionContext.clearModifications()
+        }
+
+        val transactionContext = TransactionBoundStoreContext(this.store)
 
     }
 

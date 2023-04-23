@@ -519,6 +519,79 @@ interface Cursor<K, V> : AutoCloseable {
         }
     }
 
+    /**
+     * Creates a view on this cursor where the keys are mapped according to the given functions.
+     *
+     * The [map] function must be **bijective** and [mapInverse] must be its inverse.
+     *
+     * As the returned object is a view on this cursor, any movement on this cursor will be reflected
+     * in the view, and vice versa.
+     *
+     * @param map Maps a key to the desired target format.
+     * @param mapInverse Maps a given target format key back to its original format.
+     *
+     * @return A view on this cursor with the given key mapping applied. Position changes on this
+     * cursor will be visible on the view, and vice versa.
+     */
+    fun <MK> mapKey(map: (K) -> MK, mapInverse: (MK) -> (K)): Cursor<MK, V> {
+        return MappingCursor(original = this, mapKey = map, mapKeyInverse = mapInverse, mapValue = { it })
+    }
+
+    /**
+     * Creates a view on this cursor where the values are mapped according to the given function.
+     *
+     * As the returned object is a view on this cursor, any movement on this cursor will be reflected
+     * in the view, and vice versa.
+     *
+     * @param map Maps a value to the desired target format.
+     *
+     * @return A view on this cursor with the given value mapping applied. Position changes on this
+     * cursor will be visible on the view, and vice versa.
+     */
+    fun <MV> mapValue(map: (V) -> MV): Cursor<K, MV> {
+        return MappingCursor(original = this, mapKey = { it }, mapKeyInverse = { it }, mapValue = map)
+    }
+
+    /**
+     * Creates a view on this cursor where the keys are mapped according to the given functions.
+     *
+     * The [mapKey] function must be **bijective** and [mapKeyInverse] must be its inverse.
+     *
+     * As the returned object is a view on this cursor, any movement on this cursor will be reflected
+     * in the view, and vice versa.
+     *
+     * @param mapKey Maps a key to the desired target format.
+     * @param mapKeyInverse Maps a given target format key back to its original format.
+     * @param mapValue Maps a value to the desired target format.
+     *
+     * @return A view on this cursor with the given key-value mapping applied. Position changes on this
+     * cursor will be visible on the view, and vice versa.
+     */
+    fun <MK, MV> mapKeyAndValue(mapKey: (K) -> MK, mapKeyInverse: (MK) -> (K), mapValue: (V) -> MV): Cursor<MK, MV> {
+        return MappingCursor(original = this, mapKey = mapKey, mapKeyInverse = mapKeyInverse, mapValue = mapValue)
+    }
+
+    /**
+     * Creates a new cursor which takes ownership of this cursor and returns only entries which match the given key filter.
+     *
+     * @param isValidKey The filter to apply to the keys.
+     *
+     * @return A view on this cursor with the given filter applied. The returned cursor takes ownership of this cursor.
+     */
+    fun filterKeys(isValidKey: (K) -> Boolean): Cursor<K, V> {
+        return KeyFilteringCursor(this, isValidKey)
+    }
+
+    /**
+     * Creates a new cursor which takes ownership of this cursor and returns only entries which match the given value filter.
+     *
+     * @param isValidValue The filter to apply to the values. Please note that the result of [Cursor.valueOrNull] is passed to the filter, so it may receive `null` as input.
+     *
+     * @return A view on this cursor with the given filter applied. The returned cursor takes ownership of this cursor.
+     */
+    fun filterValues(isValidValue: (V?) -> Boolean): Cursor<K, V> {
+        return ValueFilteringCursor(this, isValidValue)
+    }
 
     /**
      * Wraps this cursor into another one which performs the given action when it is [closed][close].

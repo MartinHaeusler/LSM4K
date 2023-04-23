@@ -59,41 +59,36 @@ class TransactionManager(
     private fun closeTransaction(tx: ChronoStoreTransaction) {
         this.openTransactionsLock.write {
             this.openTransactions.remove(tx.id)
+            tx.close()
         }
     }
 
     fun performCommit(tx: ChronoStoreTransactionImpl, commitMetadata: Bytes?): Timestamp {
         this.commitLock.withLock {
-
-            // TODO: ensure first that all stores are indeed writeable, and LOCK THEM until we're done!
-
             val commitTimestamp = this.timeManager.getUniqueWallClockTimestamp()
             val walTransaction = tx.toWALTransaction(commitTimestamp, commitMetadata)
-            this.writeAheadLog.addCommittedTransaction(walTransaction)
+            this.storeManager.withStoreReadLock {
+                // ensure first that all stores are indeed writeable, otherwise we may
+                // write something into our WAL file which isn't actually "legal".
+                val storeIdToStore = walTransaction.storeIdToCommands.keys.asSequence()
+                    .mapNotNull { storeId -> this.storeManager.getStoreByIdOrNull(tx, storeId) }
+                    .associateBy { it.id }
 
-            for ((storeId, commands) in walTransaction.storeIdToCommands.entries) {
+                this.writeAheadLog.addCommittedTransaction(walTransaction)
 
-                val store = this.storeManager.getStoreByIdOrNull(tx, storeId)?.takeIf { !it.isTerminated }
-                    // this must NEVER happen!
-                    ?: throw IllegalStateException("Cannot commit: store with ID '${storeId}' doesn't exist or is not writeable!")
+                for ((storeId, commands) in walTransaction.storeIdToCommands.entries) {
 
-                if (storeMaxTimestamp > walTransaction.commitTimestamp) {
-                    // we already have these changes in our store.
-                    continue
+                    val store = storeIdToStore[storeId]
+                        ?: continue // these changes cannot be performed and will be ignored.
+
+                    // TODO: offer a setting to fail commits if some of the target stores don't exist.
+
+                    // we're missing the changes from this transaction,
+                    // put them into the store.
+                    (store as StoreImpl).tree.put(commands)
                 }
-
-                // we don't have this change yet, apply it
-                val store = storeIdToStore[entry.key]
-                    ?: continue // the store doesn't exist anymore, skip
-
-                // we're missing the changes from this transaction,
-                // put them into the store.
-                (store as StoreImpl).tree.put(entry.value)
-                changed = true
             }
-
-            // TODO: insert data to store trees!
-
+            this.closeTransaction(tx)
             return commitTimestamp
         }
     }

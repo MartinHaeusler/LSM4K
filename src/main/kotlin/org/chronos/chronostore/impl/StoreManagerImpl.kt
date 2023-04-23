@@ -80,6 +80,10 @@ class StoreManagerImpl(
         }
     }
 
+    override fun <T> withStoreReadLock(action: () -> T): T {
+        return this.lock.read(action)
+    }
+
     override fun getStoreByNameOrNull(transaction: ChronoStoreTransaction, name: String): Store? {
         check(this.isOpen) { DB_ALREADY_CLOSED }
         this.lock.read {

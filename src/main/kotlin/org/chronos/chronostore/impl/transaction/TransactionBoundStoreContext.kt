@@ -26,6 +26,10 @@ class TransactionBoundStoreContext(
         this.modifications[key] = null
     }
 
+    fun clearModifications(){
+        this.modifications.clear()
+    }
+
     fun convertToCommands(commitTimestamp: Timestamp): List<Command> {
         return this.modifications.map { (key, value) ->
             if (value == null) {
@@ -34,6 +38,14 @@ class TransactionBoundStoreContext(
                 Command.put(key, commitTimestamp, value)
             }
         }
+    }
+
+    fun isKeyModified(key: Bytes): Boolean {
+        return this.modifications.containsKey(key)
+    }
+
+    fun getLatest(key: Bytes): Bytes? {
+        return this.modifications[key]
     }
 
 

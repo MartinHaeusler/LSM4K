@@ -65,12 +65,7 @@ interface TransactionBoundStore {
      *
      * - The returned cursor must be [manually closed][Cursor.close].
      *
-     * - The returned cursor **will** contain the (uncommitted) modifications of the current transaction.
-     *
-     * - The position of the returned cursor will be **invalidated** (see [Cursor.isValidPosition]) when
-     *   the current transaction performs any modification on the store. You may continue to use the cursor
-     *   afterward in such a case, but it needs to be repositioned (e.g. via [Cursor.first], [Cursor.last]
-     *   or [Cursor.seekExactlyOrNext]).
+     * - The returned cursor **will** contain the (uncommitted) modifications of the current transaction. Modifications applied after opening the cursor will be ignored.
      *
      * The recommended usage pattern is to use the [use][AutoCloseable.use] method:
      *
