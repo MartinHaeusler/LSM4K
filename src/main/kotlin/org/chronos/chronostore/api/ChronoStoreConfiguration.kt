@@ -3,7 +3,6 @@ package org.chronos.chronostore.api
 import org.chronos.chronostore.io.fileaccess.FileChannelDriver
 import org.chronos.chronostore.io.fileaccess.RandomFileAccessDriverFactory
 import org.chronos.chronostore.io.format.datablock.BlockReadMode
-import org.chronos.chronostore.lsm.MergeStrategy
 
 class ChronoStoreConfiguration {
 
@@ -13,6 +12,6 @@ class ChronoStoreConfiguration {
 
     var randomFileAccessDriverFactory: RandomFileAccessDriverFactory = FileChannelDriver.Factory
 
-    var mergeStrategy: MergeStrategy = TODO("create a default strategy")
+    var mergeStrategy: MergeStrategy = MergeStrategy.DEFAULT
 
 }

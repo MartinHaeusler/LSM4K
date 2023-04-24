@@ -1,6 +1,5 @@
 package org.chronos.chronostore.impl
 
-import mu.KotlinLogging
 import org.chronos.chronostore.api.ChronoStoreTransaction
 import org.chronos.chronostore.api.Store
 import org.chronos.chronostore.api.StoreManager
@@ -10,8 +9,8 @@ import org.chronos.chronostore.io.format.datablock.BlockReadMode
 import org.chronos.chronostore.io.structure.ChronoStoreStructure.STORE_DIR_PREFIX
 import org.chronos.chronostore.io.structure.ChronoStoreStructure.STORE_INFO_FILE_NAME
 import org.chronos.chronostore.io.vfs.VirtualFileSystem
+import org.chronos.chronostore.lsm.merge.strategy.MergeService
 import org.chronos.chronostore.lsm.cache.BlockCacheManager
-import org.chronos.chronostore.lsm.MergeStrategy
 import org.chronos.chronostore.util.IOExtensions.withInputStream
 import org.chronos.chronostore.util.StoreId
 import org.chronos.chronostore.util.Timestamp
@@ -27,7 +26,7 @@ class StoreManagerImpl(
     private val blockCacheManager: BlockCacheManager,
     private val timeManager: TimeManager,
     private val blockReadMode: BlockReadMode,
-    private val mergeStrategy: MergeStrategy,
+    private val mergeService: MergeService,
     private val driverFactory: RandomFileAccessDriverFactory,
 ) : StoreManager, AutoCloseable {
 
@@ -69,7 +68,7 @@ class StoreManagerImpl(
                         createdByTransactionId = storeInfo.createdByTransactionId,
                         directory = vfs.directory(STORE_DIR_PREFIX + storeInfo.storeId),
                         blockReadMode = this.blockReadMode,
-                        mergeStrategy = this.mergeStrategy,
+                        mergeService = this.mergeService,
                         blockCache = this.blockCacheManager.getBlockCache(storeInfo.storeId),
                         driverFactory = this.driverFactory
                     )
@@ -140,7 +139,7 @@ class StoreManagerImpl(
                 createdByTransactionId = transaction.id,
                 directory = directory,
                 blockReadMode = this.blockReadMode,
-                mergeStrategy = this.mergeStrategy,
+                mergeService = this.mergeService,
                 blockCache = this.blockCacheManager.getBlockCache(storeId),
                 driverFactory = this.driverFactory
             )

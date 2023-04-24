@@ -1,17 +1,26 @@
 package org.chronos.chronostore.lsm
 
+import com.google.common.collect.Iterators
+import org.chronos.chronostore.async.taskmonitor.TaskMonitor
+import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.subTask
 import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.model.command.KeyAndTimestamp
 import org.chronos.chronostore.io.fileaccess.RandomFileAccessDriverFactory
+import org.chronos.chronostore.io.format.ChronoStoreFileSettings
+import org.chronos.chronostore.io.format.ChronoStoreFileWriter
 import org.chronos.chronostore.io.format.datablock.BlockReadMode
 import org.chronos.chronostore.io.vfs.VirtualDirectory
+import org.chronos.chronostore.io.vfs.VirtualReadWriteFile.Companion.withOverWriter
 import org.chronos.chronostore.lsm.LSMTreeFile.Companion.FILE_EXTENSION
 import org.chronos.chronostore.lsm.event.InMemoryLsmInsertEvent
 import org.chronos.chronostore.lsm.event.LsmCursorClosedEvent
+import org.chronos.chronostore.lsm.merge.strategy.MergeService
 import org.chronos.chronostore.util.Timestamp
 import org.chronos.chronostore.util.cursor.Cursor
 import org.chronos.chronostore.util.cursor.IndexBasedCursor
 import org.chronos.chronostore.util.cursor.OverlayCursor
+import org.chronos.chronostore.util.iterator.IteratorExtensions.checkOrdered
+import org.chronos.chronostore.util.iterator.IteratorExtensions.orderedDistinct
 import java.io.File
 import java.util.*
 import java.util.concurrent.ConcurrentSkipListMap
@@ -21,10 +30,11 @@ import kotlin.concurrent.write
 
 class LSMTree(
     private val directory: VirtualDirectory,
-    private val mergeStrategy: MergeStrategy,
+    private val mergeService: MergeService,
     private val blockCache: LocalBlockCache,
     private val driverFactory: RandomFileAccessDriverFactory,
     private val blockReadMode: BlockReadMode,
+    private val newFileSettings: ChronoStoreFileSettings,
 ) {
 
     private val inMemoryTree = ConcurrentSkipListMap<KeyAndTimestamp, Command>()
@@ -33,6 +43,10 @@ class LSMTree(
     private val fileList: MutableList<LSMTreeFile>
 
     private val openCursors = Collections.synchronizedSet(mutableSetOf<Cursor<KeyAndTimestamp, Command>>())
+
+    private val activeTaskLock = ReentrantReadWriteLock(true)
+    private val activeTaskCondition = activeTaskLock.writeLock().newCondition()
+    private var activeTaskMonitor: TaskMonitor? = null
 
     init {
         if (!this.directory.exists()) {
@@ -77,6 +91,14 @@ class LSMTree(
             .toIntOrNull()
     }
 
+
+    val inMemorySizeBytes: Long
+        get() = this.inMemoryTree.values.sumOf { it.byteSize.toLong() }
+
+    val path: String
+        get() = this.directory.path
+
+
     fun get(keyAndTimestamp: KeyAndTimestamp): Command? {
         this.lock.read {
             // first, check the in-memory tree
@@ -114,7 +136,7 @@ class LSMTree(
             this.lock.read {
                 this.openCursors.remove(rawCursor)
             }
-            this.mergeStrategy.handleCursorClosedEvent(LsmCursorClosedEvent(this))
+            this.mergeService.handleCursorClosedEvent(LsmCursorClosedEvent(this))
         }
     }
 
@@ -133,7 +155,7 @@ class LSMTree(
             totalSize = this.inMemoryTree.size
         }
         // let the merge strategy know what happened
-        this.mergeStrategy.handleInMemoryInsertEvent(
+        this.mergeService.handleInMemoryInsertEvent(
             InMemoryLsmInsertEvent(
                 this,
                 inserted,
@@ -146,6 +168,131 @@ class LSMTree(
         return fileList.asSequence()
             .mapNotNull { it.header.metaData.maxTimestamp }
             .maxOrNull() ?: -1
+    }
+
+    fun flushInMemoryDataToDisk(minFlushSizeBytes: Long, monitor: TaskMonitor) {
+        this.performAsyncWriteTask(monitor) {
+            monitor.reportStarted("Flushing Data to Disk")
+            if (this.inMemorySizeBytes < minFlushSizeBytes) {
+                // flush not necessary
+                monitor.reportDone()
+                return
+            }
+            val commands = monitor.subTask(0.1, "Collecting Entries to flush") {
+                this.lock.write {
+                    this.inMemoryTree.toMap()
+                }
+            }
+            val newFileIndex = this.fileList.lastOrNull()?.index ?: 0
+            val file = this.directory.file("${newFileIndex}${FILE_EXTENSION}")
+            monitor.subTask(0.8, "Writing File") {
+                file.deleteOverWriterFileIfExists()
+                file.withOverWriter { overWriter ->
+                    ChronoStoreFileWriter(
+                        outputStream = overWriter.outputStream.buffered(),
+                        settings = this.newFileSettings,
+                        metadata = emptyMap()
+                    ).use { writer ->
+                        writer.writeFile(commands.values.iterator())
+                    }
+                    overWriter.commit()
+                }
+            }
+            monitor.subTask(0.1, "Redirecting traffic to file") {
+                this.lock.write {
+                    this.fileList.add(LSMTreeFile(file, newFileIndex, this.driverFactory, this.blockReadMode, this.blockCache))
+                    this.inMemoryTree.keys.removeAll(commands.keys)
+                }
+            }
+            monitor.reportDone()
+        }
+    }
+
+
+    fun mergeFiles(fileIndices: Set<Int>, monitor: TaskMonitor) {
+        this.performAsyncWriteTask(monitor) {
+            monitor.reportStarted("Merging ${fileIndices.size} files")
+            val filesToMerge = mutableListOf<LSMTreeFile>()
+            var previousFile: LSMTreeFile? = null
+            for (file in this.fileList) {
+                if (filesToMerge.isNotEmpty() && previousFile != null && previousFile.index !in fileIndices && file.index in fileIndices) {
+                    // file list has holes
+                    throw IllegalStateException(
+                        "Set of files to merge is not continuous! Wanted to merge: ${
+                            fileIndices.sorted().joinToString()
+                        }, missing intermediate index: ${file.index}. Aborting merge."
+                    )
+                }
+                if (file.index in fileIndices) {
+                    filesToMerge += file
+                }
+                previousFile = file
+            }
+
+            val files = fileIndices.sorted().mapNotNull { index -> this.fileList.firstOrNull { file -> file.index == index } }
+            if (files.size < 2) {
+                monitor.reportDone()
+                return
+            }
+
+            // this only works because the list of files has no "holes" in it (i.e. there is no intermediate file we don't merge)
+            val targetFile = this.directory.file(filesToMerge.minBy { it.index }.virtualFile.name)
+
+            targetFile.deleteOverWriterFileIfExists()
+            targetFile.createOverWriter().use { overWriter ->
+                val cursors = files.map { it.cursor() }
+                try {
+                    val iterators = cursors.mapNotNull {
+                        if (!it.first()) {
+                            it.ascendingValueSequenceFromHere().iterator()
+                        } else {
+                            null
+                        }
+                    }.toList()
+                    val commands = Iterators.mergeSorted(iterators, Comparator.naturalOrder())
+                    // ensure ordering and remove duplicates (which is cheap and lazy for ordered iterators)
+                    val iterator = commands.checkOrdered(strict = false).orderedDistinct()
+                    ChronoStoreFileWriter(
+                        outputStream = overWriter.outputStream.buffered(),
+                        settings = this.newFileSettings,
+                        metadata = emptyMap()
+                    ).use { writer ->
+                        writer.writeFile(iterator)
+                    }
+                } finally {
+                    for (cursor in cursors) {
+                        cursor.close()
+                    }
+                }
+
+                this.lock.write {
+                    overWriter.commit()
+
+                    this.fileList.removeAll(files.filter { it.virtualFile.path != targetFile.path })
+
+                }
+            }
+
+
+
+        }
+    }
+
+    private inline fun <T> performAsyncWriteTask(monitor: TaskMonitor, task: () -> T): T {
+        this.activeTaskLock.write {
+            while (this.activeTaskMonitor != null) {
+                this.activeTaskCondition.awaitUninterruptibly()
+            }
+            this.activeTaskMonitor = monitor
+        }
+        try {
+            return task()
+        } finally {
+            this.activeTaskLock.write {
+                this.activeTaskMonitor = null
+                this.activeTaskCondition.signalAll()
+            }
+        }
     }
 
 }

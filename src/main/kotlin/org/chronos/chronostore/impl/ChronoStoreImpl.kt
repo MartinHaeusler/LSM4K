@@ -29,15 +29,15 @@ class ChronoStoreImpl(
 
     private val timeManager = TimeManager()
     private val blockCacheManager = BlockCacheManagerImpl()
+    private val taskManager = AsyncTaskManagerImpl(Executors.newFixedThreadPool(configuration.maxWriterThreads))
     private val storeManager = StoreManagerImpl(
         vfs = this.vfs,
         blockCacheManager = this.blockCacheManager,
         timeManager = this.timeManager,
         blockReadMode = configuration.blockReadMode,
-        mergeStrategy = configuration.mergeStrategy,
+        mergeService = configuration.mergeStrategy.createMergeService(taskManager),
         driverFactory = configuration.randomFileAccessDriverFactory
     )
-    private val taskManager = AsyncTaskManagerImpl(Executors.newFixedThreadPool(configuration.maxWriterThreads))
     private val writeAheadLog: WriteAheadLog
     private val transactionManager: TransactionManager
 

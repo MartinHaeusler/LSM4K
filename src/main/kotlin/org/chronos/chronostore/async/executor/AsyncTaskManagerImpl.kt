@@ -2,16 +2,22 @@ package org.chronos.chronostore.async.executor
 
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor
 import org.chronos.chronostore.async.tasks.AsyncTask
-import java.util.concurrent.Callable
-import java.util.concurrent.ExecutorService
-import java.util.concurrent.Future
+import java.util.concurrent.*
+import kotlin.time.Duration
 
 class AsyncTaskManagerImpl(
-    private val executorService: ExecutorService,
+    private val executorService: ScheduledExecutorService,
 ) : AsyncTaskManager {
 
-    override fun execute(task: AsyncTask): Future<TaskExecutionResult> {
+    override fun executeAsync(task: AsyncTask): Future<TaskExecutionResult> {
         return this.executorService.submit(createCallableForTask(task))
+    }
+
+    override fun scheduleRecurringWithTimeBetweenExecutions(task: AsyncTask, timeBetweenExecutions: Duration) {
+        val delayMillis = timeBetweenExecutions.inWholeMilliseconds
+        this.executorService.scheduleWithFixedDelay({
+            this.createCallableForTask(task).call()
+        }, delayMillis, delayMillis, TimeUnit.MILLISECONDS)
     }
 
     private fun createCallableForTask(task: AsyncTask): Callable<TaskExecutionResult> {

@@ -2,7 +2,7 @@ package org.chronos.chronostore.io.fileaccess
 
 import org.chronos.chronostore.io.vfs.VirtualFile
 
-interface RandomFileAccessDriverFactory {
+sealed interface RandomFileAccessDriverFactory {
 
     companion object {
 

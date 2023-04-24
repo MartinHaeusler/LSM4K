@@ -6,7 +6,7 @@ import org.chronos.chronostore.io.format.datablock.BlockReadMode
 import org.chronos.chronostore.io.vfs.VirtualDirectory
 import org.chronos.chronostore.lsm.LocalBlockCache
 import org.chronos.chronostore.lsm.LSMTree
-import org.chronos.chronostore.lsm.MergeStrategy
+import org.chronos.chronostore.lsm.merge.strategy.MergeService
 import org.chronos.chronostore.util.StoreId
 import org.chronos.chronostore.util.Timestamp
 import org.chronos.chronostore.util.TransactionId
@@ -20,11 +20,11 @@ class StoreImpl(
     override val createdByTransactionId: TransactionId,
     override val directory: VirtualDirectory,
     blockReadMode: BlockReadMode,
-    mergeStrategy: MergeStrategy,
+    mergeService: MergeService,
     blockCache: LocalBlockCache,
     driverFactory: RandomFileAccessDriverFactory,
 ) : Store {
 
-    val tree = LSMTree(this.directory, mergeStrategy, blockCache, driverFactory, blockReadMode)
+    val tree = LSMTree(this.directory, mergeService, blockCache, driverFactory, blockReadMode)
 
 }
