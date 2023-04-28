@@ -23,6 +23,7 @@ dependencies {
     implementation("org.xerial.snappy:snappy-java:1.1.9.1")
     implementation("org.anarres.lzo:lzo-core:1.0.6")
 
+    implementation("org.pcollections:pcollections:4.0.1")
 
     testImplementation(platform("org.junit:junit-bom:${BuildVersions.jUnit5}"))
     testImplementation("org.junit.jupiter", "junit-jupiter")

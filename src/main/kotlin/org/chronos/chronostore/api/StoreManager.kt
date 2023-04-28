@@ -1,5 +1,6 @@
 package org.chronos.chronostore.api
 
+import org.chronos.chronostore.async.taskmonitor.TaskMonitor
 import org.chronos.chronostore.util.StoreId
 
 interface StoreManager {
@@ -39,5 +40,7 @@ interface StoreManager {
     fun getAllStores(transaction: ChronoStoreTransaction): List<Store>
 
     fun <T> withStoreReadLock(action: () -> T): T
+
+    fun performGarbageCollection(monitor: TaskMonitor)
 
 }

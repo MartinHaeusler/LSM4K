@@ -2,6 +2,7 @@ package org.chronos.chronostore.api
 
 import org.chronos.chronostore.io.fileaccess.FileChannelDriver
 import org.chronos.chronostore.io.fileaccess.RandomFileAccessDriverFactory
+import org.chronos.chronostore.io.format.CompressionAlgorithm
 import org.chronos.chronostore.io.format.datablock.BlockReadMode
 
 class ChronoStoreConfiguration {
@@ -10,8 +11,19 @@ class ChronoStoreConfiguration {
 
     var blockReadMode: BlockReadMode = BlockReadMode.IN_MEMORY_EAGER
 
+    /** When writing new files: the compression algorithm to use. All old files will remain readable if this setting is changed.*/
+    var compressionAlgorithm: CompressionAlgorithm = CompressionAlgorithm.SNAPPY
+
+    /** When writing new files: the maximum (uncompressed) size of a single data block.*/
+    var maxBlockSizeInBytes: Int = 1024 * 1024 * 64
+
+    /** When writing new files: every n-th key will be part of the block-internal index.*/
+    var indexRate: Int = 100
+
     var randomFileAccessDriverFactory: RandomFileAccessDriverFactory = FileChannelDriver.Factory
 
     var mergeStrategy: MergeStrategy = MergeStrategy.DEFAULT
+
+    var maxInMemoryTreeSizeInBytes: Long = 1024 * 1024 * 64
 
 }

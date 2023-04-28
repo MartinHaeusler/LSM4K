@@ -98,7 +98,7 @@ interface TaskMonitor {
             }
         }
 
-        inline fun <T, R> TaskMonitor.forEach(work: Double, name: String, elements: List<T>, action: (TaskMonitor, T) -> R) {
+        inline fun <T, R> TaskMonitor.forEachWithMonitor(work: Double, name: String, elements: List<T>, action: (TaskMonitor, T) -> R) {
             if (elements.isEmpty()) {
                 this.reportProgress(work)
                 return
@@ -139,7 +139,6 @@ interface TaskMonitor {
     fun addListener(taskMonitorListener: TaskMonitorListener)
 
     fun removeListener(taskMonitorListener: TaskMonitorListener)
-
 
     val status: Status
 

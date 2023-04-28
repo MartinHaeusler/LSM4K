@@ -3,8 +3,11 @@ package org.chronos.chronostore.impl
 import org.chronos.chronostore.api.ChronoStoreTransaction
 import org.chronos.chronostore.api.Store
 import org.chronos.chronostore.api.StoreManager
+import org.chronos.chronostore.async.taskmonitor.TaskMonitor
+import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.forEachWithMonitor
 import org.chronos.chronostore.impl.store.StoreImpl
 import org.chronos.chronostore.io.fileaccess.RandomFileAccessDriverFactory
+import org.chronos.chronostore.io.format.ChronoStoreFileSettings
 import org.chronos.chronostore.io.format.datablock.BlockReadMode
 import org.chronos.chronostore.io.structure.ChronoStoreStructure.STORE_DIR_PREFIX
 import org.chronos.chronostore.io.structure.ChronoStoreStructure.STORE_INFO_FILE_NAME
@@ -28,6 +31,7 @@ class StoreManagerImpl(
     private val blockReadMode: BlockReadMode,
     private val mergeService: MergeService,
     private val driverFactory: RandomFileAccessDriverFactory,
+    private val newFileSettings: ChronoStoreFileSettings,
 ) : StoreManager, AutoCloseable {
 
     companion object {
@@ -70,7 +74,8 @@ class StoreManagerImpl(
                         blockReadMode = this.blockReadMode,
                         mergeService = this.mergeService,
                         blockCache = this.blockCacheManager.getBlockCache(storeInfo.storeId),
-                        driverFactory = this.driverFactory
+                        driverFactory = this.driverFactory,
+                        newFileSettings = this.newFileSettings,
                     )
                     this.registerStoreInCaches(store)
                 }
@@ -141,7 +146,8 @@ class StoreManagerImpl(
                 blockReadMode = this.blockReadMode,
                 mergeService = this.mergeService,
                 blockCache = this.blockCacheManager.getBlockCache(storeId),
-                driverFactory = this.driverFactory
+                driverFactory = this.driverFactory,
+                newFileSettings = this.newFileSettings,
             )
 
             this.registerStoreInCaches(store)
@@ -259,6 +265,21 @@ class StoreManagerImpl(
     override fun getAllStores(transaction: ChronoStoreTransaction): List<Store> {
         check(this.isOpen) { DB_ALREADY_CLOSED }
         return this.getAllStoresInternal().filter { it.isVisibleFor(transaction) }
+    }
+
+    override fun performGarbageCollection(monitor: TaskMonitor) {
+        monitor.reportStarted("Performing LSM Garbage Collection")
+        if (!this.isOpen) {
+            monitor.reportDone()
+            return
+        }
+        this.lock.read {
+            monitor.forEachWithMonitor(1.0, "Cleaning up old files", this.storesById.values.toList()) { taskMonitor, store ->
+                store as StoreImpl
+                store.tree.performGarbageCollection(store.name, taskMonitor)
+            }
+        }
+        monitor.reportDone()
     }
 
     override fun close() {

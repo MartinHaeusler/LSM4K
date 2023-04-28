@@ -6,7 +6,7 @@ import org.chronos.chronostore.lsm.LSMTree
 
 class CompactionTask(
     val lsmTree: LSMTree,
-    val fileIndices: List<Int>,
+    val fileIndices: Set<Int>,
 ): AsyncTask {
 
     override val name: String

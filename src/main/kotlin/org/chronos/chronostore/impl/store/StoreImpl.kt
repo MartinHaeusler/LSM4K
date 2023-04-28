@@ -1,7 +1,9 @@
 package org.chronos.chronostore.impl.store
 
 import org.chronos.chronostore.api.Store
+import org.chronos.chronostore.async.taskmonitor.TaskMonitor
 import org.chronos.chronostore.io.fileaccess.RandomFileAccessDriverFactory
+import org.chronos.chronostore.io.format.ChronoStoreFileSettings
 import org.chronos.chronostore.io.format.datablock.BlockReadMode
 import org.chronos.chronostore.io.vfs.VirtualDirectory
 import org.chronos.chronostore.lsm.LocalBlockCache
@@ -23,8 +25,9 @@ class StoreImpl(
     mergeService: MergeService,
     blockCache: LocalBlockCache,
     driverFactory: RandomFileAccessDriverFactory,
+    newFileSettings: ChronoStoreFileSettings,
 ) : Store {
 
-    val tree = LSMTree(this.directory, mergeService, blockCache, driverFactory, blockReadMode)
+    val tree = LSMTree(this.directory, mergeService, blockCache, driverFactory, blockReadMode, newFileSettings)
 
 }

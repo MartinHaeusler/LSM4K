@@ -24,7 +24,6 @@ class DefaultMergeService(
     }
 
     override fun handleCursorClosedEvent(lsmCursorClosedEvent: LsmCursorClosedEvent) {
-
     }
 
 

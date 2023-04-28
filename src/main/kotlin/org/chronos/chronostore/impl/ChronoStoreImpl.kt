@@ -6,7 +6,9 @@ import org.chronos.chronostore.api.ChronoStoreConfiguration
 import org.chronos.chronostore.api.ChronoStoreTransaction
 import org.chronos.chronostore.api.Store
 import org.chronos.chronostore.async.executor.AsyncTaskManagerImpl
+import org.chronos.chronostore.async.taskmonitor.TaskMonitor
 import org.chronos.chronostore.impl.store.StoreImpl
+import org.chronos.chronostore.io.format.ChronoStoreFileSettings
 import org.chronos.chronostore.io.structure.ChronoStoreStructure
 import org.chronos.chronostore.io.vfs.VirtualFileSystem
 import org.chronos.chronostore.lsm.cache.BlockCacheManagerImpl
@@ -29,14 +31,15 @@ class ChronoStoreImpl(
 
     private val timeManager = TimeManager()
     private val blockCacheManager = BlockCacheManagerImpl()
-    private val taskManager = AsyncTaskManagerImpl(Executors.newFixedThreadPool(configuration.maxWriterThreads))
+    private val taskManager = AsyncTaskManagerImpl(Executors.newScheduledThreadPool(configuration.maxWriterThreads))
     private val storeManager = StoreManagerImpl(
         vfs = this.vfs,
         blockCacheManager = this.blockCacheManager,
         timeManager = this.timeManager,
         blockReadMode = configuration.blockReadMode,
-        mergeService = configuration.mergeStrategy.createMergeService(taskManager),
-        driverFactory = configuration.randomFileAccessDriverFactory
+        mergeService = configuration.mergeStrategy.createMergeService(taskManager, configuration),
+        driverFactory = configuration.randomFileAccessDriverFactory,
+        newFileSettings = ChronoStoreFileSettings(configuration.compressionAlgorithm, configuration.maxBlockSizeInBytes, configuration.indexRate)
     )
     private val writeAheadLog: WriteAheadLog
     private val transactionManager: TransactionManager
@@ -120,6 +123,7 @@ class ChronoStoreImpl(
         return this.transactionManager.createNewTransaction()
     }
 
+
     override fun close() {
         if (!isOpen) {
             return
@@ -130,6 +134,10 @@ class ChronoStoreImpl(
         this.taskManager.close()
         this.storeManager.close()
         log.info { "Completed shut-down of ChronoStore at '${this.vfs}'." }
+    }
+
+    fun performGarbageCollection(monitor: TaskMonitor) {
+        this.storeManager.performGarbageCollection(monitor)
     }
 
 }

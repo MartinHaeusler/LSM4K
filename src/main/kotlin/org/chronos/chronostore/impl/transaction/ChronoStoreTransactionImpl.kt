@@ -158,7 +158,7 @@ class ChronoStoreTransactionImpl(
         }
 
         override fun openCursorOnLatest(): Cursor<Bytes, Bytes> {
-            val treeCursor = (this.store as StoreImpl).tree.cursor()
+            val treeCursor = (this.store as StoreImpl).tree.openCursor(this@ChronoStoreTransactionImpl)
             val versioningCursor = VersioningCursor(treeCursor, this@ChronoStoreTransactionImpl.lastVisibleTimestamp, false)
             val bytesToBytesCursor = versioningCursor.mapValue { it.value }
             val keyList = this.transactionContext.allModifications.entries.asSequence().mapNotNull {
@@ -173,7 +173,7 @@ class ChronoStoreTransactionImpl(
 
         override fun openCursorAtTimestamp(timestamp: Timestamp): Cursor<Bytes, Bytes> {
             val now = this@ChronoStoreTransactionImpl.lastVisibleTimestamp
-            val treeCursor = (this.store as StoreImpl).tree.cursor()
+            val treeCursor = (this.store as StoreImpl).tree.openCursor(this@ChronoStoreTransactionImpl)
             val versioningCursor = VersioningCursor(treeCursor, now, false)
             return versioningCursor.mapValue { it.value }
         }

@@ -1,7 +1,11 @@
 package org.chronos.chronostore.lsm
 
+import com.google.common.collect.ImmutableMap
+import com.google.common.collect.ImmutableSortedMap
 import com.google.common.collect.Iterators
+import org.chronos.chronostore.api.ChronoStoreTransaction
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor
+import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.forEach
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.subTask
 import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.model.command.KeyAndTimestamp
@@ -21,9 +25,11 @@ import org.chronos.chronostore.util.cursor.IndexBasedCursor
 import org.chronos.chronostore.util.cursor.OverlayCursor
 import org.chronos.chronostore.util.iterator.IteratorExtensions.checkOrdered
 import org.chronos.chronostore.util.iterator.IteratorExtensions.orderedDistinct
+import org.pcollections.TreePMap
 import java.io.File
 import java.util.*
 import java.util.concurrent.ConcurrentSkipListMap
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.concurrent.read
 import kotlin.concurrent.write
@@ -37,22 +43,28 @@ class LSMTree(
     private val newFileSettings: ChronoStoreFileSettings,
 ) {
 
-    private val inMemoryTree = ConcurrentSkipListMap<KeyAndTimestamp, Command>()
+    @Volatile
+    private var inMemoryTree = TreePMap.empty<KeyAndTimestamp, Command>()
     private val lock = ReentrantReadWriteLock(true)
 
     private val fileList: MutableList<LSMTreeFile>
+    private val nextFreeFileIndex = AtomicInteger(0)
 
-    private val openCursors = Collections.synchronizedSet(mutableSetOf<Cursor<KeyAndTimestamp, Command>>())
+    private val cursorManager = CursorManager()
 
     private val activeTaskLock = ReentrantReadWriteLock(true)
     private val activeTaskCondition = activeTaskLock.writeLock().newCondition()
     private var activeTaskMonitor: TaskMonitor? = null
 
+    private var garbageFileManager: GarbageFileManager
+
     init {
         if (!this.directory.exists()) {
             this.directory.mkdirs()
         }
+        this.garbageFileManager = GarbageFileManager(this.directory.file(GarbageFileManager.FILE_NAME))
         this.fileList = loadFileList()
+        this.nextFreeFileIndex.set(this.fileList.maxOfOrNull { it.index } ?: 0)
     }
 
     private fun loadFileList(): MutableList<LSMTreeFile> {
@@ -117,8 +129,9 @@ class LSMTree(
         }
     }
 
-    fun cursor(): Cursor<KeyAndTimestamp, Command> {
+    fun openCursor(transaction: ChronoStoreTransaction): Cursor<KeyAndTimestamp, Command> {
         val rawCursor = this.lock.read {
+            // TODO the "toList()" copy here is inefficient. Maybe we can have a cursor directly on the navigablemap itself?
             val inMemoryDataList = this.inMemoryTree.toList()
             val inMemoryCursor = IndexBasedCursor(
                 minIndex = 0,
@@ -126,16 +139,12 @@ class LSMTree(
                 getEntryAtIndex = inMemoryDataList::get,
                 getCursorName = { "In-Memory Cursor" }
             )
-            val cursors = this.fileList.asReversed().map { it.cursor() }.toMutableList()
+            val cursors = this.fileList.asReversed().map { this.cursorManager.openCursorOn(transaction, it) }.toMutableList()
             cursors.add(inMemoryCursor)
             val cursor = cursors.reduce { l, r -> OverlayCursor(l, r) }
-            this.openCursors.add(cursor)
             cursor
         }
         return rawCursor.onClose {
-            this.lock.read {
-                this.openCursors.remove(rawCursor)
-            }
             this.mergeService.handleCursorClosedEvent(LsmCursorClosedEvent(this))
         }
     }
@@ -201,46 +210,52 @@ class LSMTree(
             monitor.subTask(0.1, "Redirecting traffic to file") {
                 this.lock.write {
                     this.fileList.add(LSMTreeFile(file, newFileIndex, this.driverFactory, this.blockReadMode, this.blockCache))
-                    this.inMemoryTree.keys.removeAll(commands.keys)
+                    this.inMemoryTree = this.inMemoryTree.minusAll(commands.keys)
                 }
             }
             monitor.reportDone()
         }
     }
 
+    fun performGarbageCollection(storeName: String, taskMonitor: TaskMonitor) {
+        taskMonitor.reportStarted("Collecting Garbage in '${storeName}'")
+        val deleted = mutableListOf<String>()
+        taskMonitor.forEach(1.0, "Deleting old files", this.garbageFileManager.garbageFiles){ fileName ->
+            if (this.cursorManager.hasOpenCursorOnFile(fileName)) {
+                // we must not delete any files we're currently iterating over.
+                return@forEach
+            }
+            // nobody is using the file anymore, delete it.
+            val file = this.directory.file(fileName)
+            if(file.exists()){
+                file.deleteOverWriterFileIfExists()
+                file.delete()
+            }
+            deleted += file.name
+        }
+        // remember that we deleted these files and don't need to try that again.
+        this.garbageFileManager.removeAll(deleted)
+        taskMonitor.reportDone()
+    }
 
     fun mergeFiles(fileIndices: Set<Int>, monitor: TaskMonitor) {
         this.performAsyncWriteTask(monitor) {
             monitor.reportStarted("Merging ${fileIndices.size} files")
-            val filesToMerge = mutableListOf<LSMTreeFile>()
-            var previousFile: LSMTreeFile? = null
-            for (file in this.fileList) {
-                if (filesToMerge.isNotEmpty() && previousFile != null && previousFile.index !in fileIndices && file.index in fileIndices) {
-                    // file list has holes
-                    throw IllegalStateException(
-                        "Set of files to merge is not continuous! Wanted to merge: ${
-                            fileIndices.sorted().joinToString()
-                        }, missing intermediate index: ${file.index}. Aborting merge."
-                    )
-                }
-                if (file.index in fileIndices) {
-                    filesToMerge += file
-                }
-                previousFile = file
-            }
+            val filesToMerge = this.getFilesToMerge(fileIndices)
 
-            val files = fileIndices.sorted().mapNotNull { index -> this.fileList.firstOrNull { file -> file.index == index } }
-            if (files.size < 2) {
+            if (filesToMerge.size < 2) {
                 monitor.reportDone()
                 return
             }
+            // get the file index we're going to use (nobody else will get the same index, because of the AtomicInteger used here)
+            val targetFileIndex = this.nextFreeFileIndex.getAndIncrement()
 
-            // this only works because the list of files has no "holes" in it (i.e. there is no intermediate file we don't merge)
-            val targetFile = this.directory.file(filesToMerge.minBy { it.index }.virtualFile.name)
+            // this is the file we're going to write to
+            val targetFile = this.directory.file(this.createFileNameForIndex(targetFileIndex))
 
             targetFile.deleteOverWriterFileIfExists()
             targetFile.createOverWriter().use { overWriter ->
-                val cursors = files.map { it.cursor() }
+                val cursors = filesToMerge.map { it.cursor() }
                 try {
                     val iterators = cursors.mapNotNull {
                         if (!it.first()) {
@@ -267,15 +282,32 @@ class LSMTree(
 
                 this.lock.write {
                     overWriter.commit()
-
-                    this.fileList.removeAll(files.filter { it.virtualFile.path != targetFile.path })
-
+                    this.garbageFileManager.addAll(filesToMerge.map { it.virtualFile.name })
+                    this.fileList.removeAll(filesToMerge)
                 }
             }
-
-
-
         }
+    }
+
+    private fun getFilesToMerge(fileIndices: Set<Int>): MutableList<LSMTreeFile> {
+        val filesToMerge = mutableListOf<LSMTreeFile>()
+        var previousFile: LSMTreeFile? = null
+        for (file in this.fileList) {
+            if (filesToMerge.isNotEmpty() && previousFile != null && previousFile.index !in fileIndices && file.index in fileIndices) {
+                // files are not adjacent to each other (in terms of stored versions). That's bad, we must prevent this,
+                // otherwise we cannot establish a chronological ordering for our files anymore.
+                throw IllegalStateException(
+                    "Set of files to merge is not continuous! Wanted to merge: ${
+                        fileIndices.sorted().joinToString()
+                    }, missing intermediate index: ${file.index}. Aborting merge."
+                )
+            }
+            if (file.index in fileIndices) {
+                filesToMerge += file
+            }
+            previousFile = file
+        }
+        return filesToMerge
     }
 
     private inline fun <T> performAsyncWriteTask(monitor: TaskMonitor, task: () -> T): T {
@@ -295,4 +327,14 @@ class LSMTree(
         }
     }
 
+    private fun createFileNameForIndex(fileIndex: Int): String {
+        require(fileIndex >= 0) { "Argument 'fileIndex' (${fileIndex}) must not be negative!" }
+        // The maximum file index has 10 digits, so we left-pad with zeroes.
+        // This is a small overhead which effectively shouldn't matter, but
+        // we gain the somewhat useful property that the lexicographic sort
+        // of the files is equivalent to the ascending numeric index sort.
+        // In other words: you can sort the files in the file explorer and
+        // will get the proper order.
+        return fileIndex.toString().padStart(10, '0') + FILE_EXTENSION
+    }
 }
