@@ -34,6 +34,8 @@ class FileMetaData(
     val totalEntries: Long,
     /** The total number of data blocks in this file. May be zero if the file is empty. */
     val numberOfBlocks: Int,
+    /** How often a merge operation has been applied to produce this file (on merge, computed via `1 + max(numberOfMerges)`). Starts at 0.*/
+    val numberOfMerges: Long,
     /** The wall-clock-timestamp this file was written at (begin of write). */
     val createdAt: Timestamp,
     /** A map of additional, arbitrary key-value pairs. */
@@ -57,6 +59,7 @@ class FileMetaData(
             val headEntries = inputStream.readLittleEndianLong()
             val totalEntries = inputStream.readLittleEndianLong()
             val numberOfBlocks = inputStream.readLittleEndianInt()
+            val numberOfMerges = inputStream.readLittleEndianLong()
             val createdAt = inputStream.readLittleEndianLong()
             val infoMapSize = inputStream.readLittleEndianInt()
             val mapInput = ByteArrayInputStream(inputStream.readNBytes(infoMapSize))
@@ -77,6 +80,7 @@ class FileMetaData(
                 headEntries = headEntries,
                 totalEntries = totalEntries,
                 numberOfBlocks = numberOfBlocks,
+                numberOfMerges = numberOfMerges,
                 createdAt = createdAt,
                 infoMap = infoMap,
             )
@@ -96,6 +100,7 @@ class FileMetaData(
         outputStream.writeLittleEndianLong(this.headEntries)
         outputStream.writeLittleEndianLong(this.totalEntries)
         outputStream.writeLittleEndianInt(this.numberOfBlocks)
+        outputStream.writeLittleEndianLong(this.numberOfMerges)
         outputStream.writeLittleEndianLong(this.createdAt)
         val infoMapSize = this.infoMap.entries.sumOf { it.key.size + Int.SIZE_BYTES + it.value.size + Int.SIZE_BYTES }
         outputStream.writeLittleEndianInt(infoMapSize)

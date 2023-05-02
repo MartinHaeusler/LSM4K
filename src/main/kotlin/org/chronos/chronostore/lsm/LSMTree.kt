@@ -106,6 +106,8 @@ class LSMTree(
     val path: String
         get() = this.directory.path
 
+    val allFiles: List<LSMTreeFile>
+        get() = this.lock.read { this.fileList.toList() }
 
     fun get(keyAndTimestamp: KeyAndTimestamp): Command? {
         this.lock.read {

@@ -4,6 +4,7 @@ import org.chronos.chronostore.io.fileaccess.FileChannelDriver
 import org.chronos.chronostore.io.fileaccess.RandomFileAccessDriverFactory
 import org.chronos.chronostore.io.format.CompressionAlgorithm
 import org.chronos.chronostore.io.format.datablock.BlockReadMode
+import java.util.concurrent.TimeUnit
 
 class ChronoStoreConfiguration {
 
@@ -23,6 +24,8 @@ class ChronoStoreConfiguration {
     var randomFileAccessDriverFactory: RandomFileAccessDriverFactory = FileChannelDriver.Factory
 
     var mergeStrategy: MergeStrategy = MergeStrategy.DEFAULT
+
+    var mergeIntervalMillis: Long = TimeUnit.MINUTES.toMillis(10)
 
     var maxInMemoryTreeSizeInBytes: Long = 1024 * 1024 * 64
 

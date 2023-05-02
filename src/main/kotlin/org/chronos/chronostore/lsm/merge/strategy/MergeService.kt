@@ -7,6 +7,8 @@ interface MergeService {
 
     fun initialize()
 
+    fun mergeNow()
+
     fun handleInMemoryInsertEvent(event: InMemoryLsmInsertEvent)
 
     fun handleCursorClosedEvent(lsmCursorClosedEvent: LsmCursorClosedEvent)

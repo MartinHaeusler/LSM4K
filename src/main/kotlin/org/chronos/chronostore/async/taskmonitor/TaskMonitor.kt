@@ -21,7 +21,7 @@ interface TaskMonitor {
             }
         }
 
-        inline fun <T> TaskMonitor.subTask(work: Double, action: (TaskMonitor) -> T): T {
+        inline fun <T> TaskMonitor.subTaskWithMonitor(work: Double, action: (TaskMonitor) -> T): T {
             val subMonitor = this.subMonitor(work)
             try {
                 return action(subMonitor)
@@ -85,7 +85,7 @@ interface TaskMonitor {
             try {
                 val results = mutableListOf<R>()
                 for (element in elements) {
-                    subMonitor.subTask(workPerItem) { itemMonitor ->
+                    subMonitor.subTaskWithMonitor(workPerItem) { itemMonitor ->
                         results += action(itemMonitor, element)
                     }
                     subMonitor.reportProgress(workPerItem)
@@ -108,7 +108,7 @@ interface TaskMonitor {
             val workPerItem = 1.0 / elements.size
             try {
                 for (element in elements) {
-                    subMonitor.subTask(workPerItem) { itemMonitor ->
+                    subMonitor.subTaskWithMonitor(workPerItem) { itemMonitor ->
                         action(itemMonitor, element)
                     }
                     subMonitor.reportProgress(workPerItem)
