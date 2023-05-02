@@ -32,12 +32,13 @@ class ChronoStoreImpl(
     private val timeManager = TimeManager()
     private val blockCacheManager = BlockCacheManagerImpl()
     private val taskManager = AsyncTaskManagerImpl(Executors.newScheduledThreadPool(configuration.maxWriterThreads))
+    private val mergeService = configuration.mergeStrategy.createMergeService(taskManager, configuration)
     private val storeManager = StoreManagerImpl(
         vfs = this.vfs,
         blockCacheManager = this.blockCacheManager,
         timeManager = this.timeManager,
         blockReadMode = configuration.blockReadMode,
-        mergeService = configuration.mergeStrategy.createMergeService(taskManager, configuration),
+        mergeService = mergeService,
         driverFactory = configuration.randomFileAccessDriverFactory,
         newFileSettings = ChronoStoreFileSettings(configuration.compressionAlgorithm, configuration.maxBlockSizeInBytes, configuration.indexRate)
     )
@@ -60,6 +61,7 @@ class ChronoStoreImpl(
             timeManager = this.timeManager,
             writeAheadLog = this.writeAheadLog
         )
+        this.mergeService.initialize()
     }
 
     private fun createNewEmptyDatabase() {

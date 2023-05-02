@@ -1,14 +1,10 @@
 package org.chronos.chronostore.lsm
 
-import com.google.common.collect.ImmutableMap
-import com.google.common.collect.ImmutableSortedMap
 import com.google.common.collect.Iterators
 import org.chronos.chronostore.api.ChronoStoreTransaction
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.forEach
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.subTask
-import org.chronos.chronostore.model.command.Command
-import org.chronos.chronostore.model.command.KeyAndTimestamp
 import org.chronos.chronostore.io.fileaccess.RandomFileAccessDriverFactory
 import org.chronos.chronostore.io.format.ChronoStoreFileSettings
 import org.chronos.chronostore.io.format.ChronoStoreFileWriter
@@ -19,6 +15,8 @@ import org.chronos.chronostore.lsm.LSMTreeFile.Companion.FILE_EXTENSION
 import org.chronos.chronostore.lsm.event.InMemoryLsmInsertEvent
 import org.chronos.chronostore.lsm.event.LsmCursorClosedEvent
 import org.chronos.chronostore.lsm.merge.strategy.MergeService
+import org.chronos.chronostore.model.command.Command
+import org.chronos.chronostore.model.command.KeyAndTimestamp
 import org.chronos.chronostore.util.Timestamp
 import org.chronos.chronostore.util.cursor.Cursor
 import org.chronos.chronostore.util.cursor.IndexBasedCursor
@@ -27,8 +25,6 @@ import org.chronos.chronostore.util.iterator.IteratorExtensions.checkOrdered
 import org.chronos.chronostore.util.iterator.IteratorExtensions.orderedDistinct
 import org.pcollections.TreePMap
 import java.io.File
-import java.util.*
-import java.util.concurrent.ConcurrentSkipListMap
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.concurrent.read

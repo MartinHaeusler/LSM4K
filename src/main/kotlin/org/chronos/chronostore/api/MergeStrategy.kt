@@ -9,7 +9,7 @@ enum class MergeStrategy {
     DEFAULT {
 
         override fun createMergeService(taskManager: AsyncTaskManager, config: ChronoStoreConfiguration): MergeService {
-            return DefaultMergeService(taskManager, config.maxInMemoryTreeSizeInBytes)
+            return DefaultMergeService(taskManager, config)
         }
 
     },

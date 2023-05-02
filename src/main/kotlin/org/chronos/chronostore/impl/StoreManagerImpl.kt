@@ -12,8 +12,8 @@ import org.chronos.chronostore.io.format.datablock.BlockReadMode
 import org.chronos.chronostore.io.structure.ChronoStoreStructure.STORE_DIR_PREFIX
 import org.chronos.chronostore.io.structure.ChronoStoreStructure.STORE_INFO_FILE_NAME
 import org.chronos.chronostore.io.vfs.VirtualFileSystem
-import org.chronos.chronostore.lsm.merge.strategy.MergeService
 import org.chronos.chronostore.lsm.cache.BlockCacheManager
+import org.chronos.chronostore.lsm.merge.strategy.MergeService
 import org.chronos.chronostore.util.IOExtensions.withInputStream
 import org.chronos.chronostore.util.StoreId
 import org.chronos.chronostore.util.Timestamp
