@@ -87,7 +87,7 @@ class WriteAheadLog(
      *                                    (in this case, the transaction will be removed from the WAL), or `false` if some of the changes
      *                                    are only held in-memory (in this case, the transaction will remain in the WAL).
      */
-    fun shortenWal(isTransactionFullyPersisted: (WriteAheadLogTransaction) -> Boolean) {
+    fun compactWal(isTransactionFullyPersisted: (WriteAheadLogTransaction) -> Boolean) {
         this.lock.write {
             this.file.deleteOverWriterFileIfExists()
             this.file.createOverWriter().use { overWriter ->

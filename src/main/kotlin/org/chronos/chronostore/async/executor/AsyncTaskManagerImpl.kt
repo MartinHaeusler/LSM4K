@@ -20,6 +20,15 @@ class AsyncTaskManagerImpl(
         }, delayMillis, delayMillis, TimeUnit.MILLISECONDS)
     }
 
+    override fun scheduleRecurringWithFixedRate(task: AsyncTask, initialDelay: Duration, delayBetweenExecutions: Duration) {
+        this.executorService.scheduleAtFixedRate(
+            /* command = */ { this.createCallableForTask(task).call() },
+            /* initialDelay = */ initialDelay.inWholeMilliseconds,
+            /* period = */ delayBetweenExecutions.inWholeMilliseconds,
+            /* unit = */ TimeUnit.MILLISECONDS
+        )
+    }
+
     private fun createCallableForTask(task: AsyncTask): Callable<TaskExecutionResult> {
         return Callable {
             val startTime = System.currentTimeMillis()

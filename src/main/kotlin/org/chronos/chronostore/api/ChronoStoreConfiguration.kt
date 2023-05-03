@@ -29,4 +29,15 @@ class ChronoStoreConfiguration {
 
     var maxInMemoryTreeSizeInBytes: Long = 1024 * 1024 * 64
 
+    /**
+     * The time of day at which the Write-Ahead-Log file should be compacted.
+     *
+     * WAL compaction happens once per day, at the specified time-of-day.
+     *
+     * Use `null` to disable WAL compaction. **WARNING:** disabling WAL compaction
+     * can lead to very large WAL files, slow database restart/recovery and increased
+     * disk footprint!
+     */
+    var writeAheadLogCompactionTimeOfDay: TimeOfDay? = TimeOfDay.parse("00:00")
+
 }

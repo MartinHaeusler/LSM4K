@@ -11,5 +11,6 @@ interface AsyncTaskManager : AutoCloseable {
 
     fun scheduleRecurringWithTimeBetweenExecutions(task: AsyncTask, timeBetweenExecutions: Duration)
 
+    fun scheduleRecurringWithFixedRate(task: AsyncTask, initialDelay: Duration, delayBetweenExecutions: Duration)
 
 }
