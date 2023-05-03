@@ -54,9 +54,10 @@ class ChronoStoreFileWriter : AutoCloseable {
     /**
      * Writes the given [orderedCommands] (as well as any required additional information) to the [outputStream].
      *
+     * @param numberOfMerges The number of merges to record in the file metadata.
      * @param orderedCommands The sequence of commands to write. **MUST** be ordered!
      */
-    fun writeFile(orderedCommands: Iterator<Command>) {
+    fun writeFile(numberOfMerges: Long, orderedCommands: Iterator<Command>) {
         // grab the system clock time (will be written into the file later on)
         val wallClockTime = System.currentTimeMillis()
 
@@ -87,6 +88,7 @@ class ChronoStoreFileWriter : AutoCloseable {
             minKey = blockWriteResult.minKey,
             maxKey = blockWriteResult.maxKey,
             headEntries = blockWriteResult.headEntries,
+            numberOfMerges = numberOfMerges,
             totalEntries = blockWriteResult.totalEntries,
             numberOfBlocks = blockWriteResult.numberOfBlocks,
             createdAt = wallClockTime,

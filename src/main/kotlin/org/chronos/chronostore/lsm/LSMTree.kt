@@ -200,7 +200,12 @@ class LSMTree(
                         settings = this.newFileSettings,
                         metadata = emptyMap()
                     ).use { writer ->
-                        writer.writeFile(commands.values.iterator())
+                        writer.writeFile(
+                            // we're flushing this file from in-memory,
+                            // so the resulting file has never been merged.
+                            numberOfMerges = 0,
+                            orderedCommands = commands.values.iterator()
+                        )
                     }
                     overWriter.commit()
                 }
@@ -218,14 +223,14 @@ class LSMTree(
     fun performGarbageCollection(storeName: String, taskMonitor: TaskMonitor) {
         taskMonitor.reportStarted("Collecting Garbage in '${storeName}'")
         val deleted = mutableListOf<String>()
-        taskMonitor.forEach(1.0, "Deleting old files", this.garbageFileManager.garbageFiles){ fileName ->
+        taskMonitor.forEach(1.0, "Deleting old files", this.garbageFileManager.garbageFiles) { fileName ->
             if (this.cursorManager.hasOpenCursorOnFile(fileName)) {
                 // we must not delete any files we're currently iterating over.
                 return@forEach
             }
             // nobody is using the file anymore, delete it.
             val file = this.directory.file(fileName)
-            if(file.exists()){
+            if (file.exists()) {
                 file.deleteOverWriterFileIfExists()
                 file.delete()
             }
@@ -250,6 +255,8 @@ class LSMTree(
 
             // this is the file we're going to write to
             val targetFile = this.directory.file(this.createFileNameForIndex(targetFileIndex))
+            val maxMerge = filesToMerge.maxOfOrNull { it.header.metaData.numberOfMerges } ?: 0
+
 
             targetFile.deleteOverWriterFileIfExists()
             targetFile.createOverWriter().use { overWriter ->
@@ -270,7 +277,7 @@ class LSMTree(
                         settings = this.newFileSettings,
                         metadata = emptyMap()
                     ).use { writer ->
-                        writer.writeFile(iterator)
+                        writer.writeFile(numberOfMerges = maxMerge + 1, orderedCommands = iterator)
                     }
                 } finally {
                     for (cursor in cursors) {

@@ -10,12 +10,10 @@ import org.chronos.chronostore.lsm.event.LsmCursorClosedEvent
 import org.chronos.chronostore.lsm.merge.tasks.CompactionTask
 import org.chronos.chronostore.lsm.merge.tasks.FlushInMemoryTreeToDiskTask
 import kotlin.time.Duration.Companion.milliseconds
-import kotlin.time.Duration.Companion.minutes
 
 class MergeServiceImpl(
     private val taskManager: AsyncTaskManager,
     private val storeConfig: ChronoStoreConfiguration,
-    private val storeManager: StoreManager,
 ) : MergeService {
 
     companion object {
@@ -24,9 +22,11 @@ class MergeServiceImpl(
 
     }
 
-    private val compactionTask = CompactionTask(this.storeManager, this.storeConfig.mergeStrategy)
+    private var initialized: Boolean = false
+    private lateinit var compactionTask: CompactionTask
 
-    override fun initialize() {
+    override fun initialize(storeManager: StoreManager,) {
+        this.compactionTask = CompactionTask(storeManager, this.storeConfig.mergeStrategy)
         val timeBetweenExecutionsInMillis = this.storeConfig.mergeIntervalMillis
         if (timeBetweenExecutionsInMillis > 0) {
             this.taskManager.scheduleRecurringWithTimeBetweenExecutions(compactionTask, timeBetweenExecutionsInMillis.milliseconds)
@@ -35,11 +35,17 @@ class MergeServiceImpl(
         }
     }
 
-    override fun mergeNow() {
-        this.compactionTask.run(TaskMonitor.create())
+    override fun mergeNow(major: Boolean) {
+        check(this.initialized){ "MergeService has not yet been initialized!" }
+        if(major){
+            this.compactionTask.runMajor(TaskMonitor.create())
+        }else{
+            this.compactionTask.run(TaskMonitor.create())
+        }
     }
 
     override fun handleInMemoryInsertEvent(event: InMemoryLsmInsertEvent) {
+        check(this.initialized){ "MergeService has not yet been initialized!" }
         if (event.lsmTree.inMemorySizeBytes < this.storeConfig.maxInMemoryTreeSizeInBytes) {
             return
         }
@@ -48,6 +54,7 @@ class MergeServiceImpl(
     }
 
     override fun handleCursorClosedEvent(lsmCursorClosedEvent: LsmCursorClosedEvent) {
+        check(this.initialized){ "MergeService has not yet been initialized!" }
     }
 
 

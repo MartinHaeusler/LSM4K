@@ -4,7 +4,6 @@ import mu.KotlinLogging
 import org.chronos.chronostore.io.vfs.VirtualReadWriteFile
 import org.chronos.chronostore.util.IOExtensions.withInputStream
 import org.chronos.chronostore.util.StreamExtensions.hasNext
-import org.chronos.chronostore.util.TransactionId
 import java.io.PushbackInputStream
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.concurrent.read
@@ -30,6 +29,14 @@ class WriteAheadLog(
         }
     }
 
+    /**
+     * Adds a commit to the Write Ahead Log file.
+     *
+     * This operation requires the write lock on the WAL file; it may be blocked until
+     * concurrent reads or writes have been completed.
+     *
+     * @param walTransaction The transaction to add to the file.
+     */
     fun addCommittedTransaction(walTransaction: WriteAheadLogTransaction) {
         this.lock.write {
             this.file.append { out ->
@@ -38,6 +45,15 @@ class WriteAheadLog(
         }
     }
 
+    /**
+     * Sequentially reads the Write Ahead Log file, permitting a given [consumer] to read the contained transactions one after another.
+     *
+     * If the file contains invalid entries (e.g. incomplete transactions due to a system shutdown during WAL writes), these
+     * entries will **not** be reported to the [consumer]. The consumer will receive the transactions in ascending timestamp order.
+     *
+     * @param consumer The consumer function which will receive the transactions in the write-ahead log for further processing.
+     *                 The transactions will be provided to the consumer in a lazy fashion, in ascending timestamp order.
+     */
     fun readWal(consumer: (WriteAheadLogTransaction) -> Unit) {
         this.lock.read {
             this.file.withInputStream { input ->
@@ -54,6 +70,46 @@ class WriteAheadLog(
         }
     }
 
+    /**
+     * Attempts to reduce the size of the write-ahead-log file by discarding fully persisted transactions.
+     *
+     * By "fully persisted transactions" we mean transactions for which no parts reside
+     * in the in-memory segments of any involved LSM trees. In other words, a transaction
+     * is "fully persisted" if all modifications have been written into persistent chronostore
+     * files.
+     *
+     * This method requires the write lock on the Write-Ahead-Log and may require a substantial amount of time
+     * to complete; it should be used with care and only during periods of low database utilization, because
+     * no commits will be permitted until this method has been completed.
+     *
+     * @param isTransactionFullyPersisted A function which can determine if all elements of the given transaction have been fully persisted.
+     *                                    Receives the transaction as argument and returns `true` if all changes have been fully persisted
+     *                                    (in this case, the transaction will be removed from the WAL), or `false` if some of the changes
+     *                                    are only held in-memory (in this case, the transaction will remain in the WAL).
+     */
+    fun shortenWal(isTransactionFullyPersisted: (WriteAheadLogTransaction) -> Boolean) {
+        this.lock.write {
+            this.file.deleteOverWriterFileIfExists()
+            this.file.createOverWriter().use { overWriter ->
+                overWriter.outputStream.buffered().use { outputStream ->
+                    this.readWal { transaction ->
+                        if (!isTransactionFullyPersisted(transaction)) {
+                            // this transaction has not yet been fully persisted outside
+                            // the WAL file, so we have to keep the WAL record.
+                            WriteAheadLogEntry.writeTransaction(outputStream, transaction)
+                        }
+                    }
+                }
+                overWriter.commit()
+            }
+        }
+    }
+
+    /**
+     * Performs the startup recovery on the Write Ahead Log file.
+     *
+     * In particular, this method will remove any invalid or incomplete transactions from the WAL.
+     */
     fun performStartupRecoveryCleanup() {
         this.lock.write {
             this.file.deleteOverWriterFileIfExists()

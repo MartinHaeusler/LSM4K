@@ -9,6 +9,7 @@ import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.subTaskWi
 import org.chronos.chronostore.async.tasks.AsyncTask
 import org.chronos.chronostore.impl.StoreManagerImpl
 import org.chronos.chronostore.impl.store.StoreImpl
+import org.chronos.chronostore.lsm.LSMTreeFile
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 
@@ -22,21 +23,35 @@ class CompactionTask(
     override val name: String
         get() = "Compaction"
 
+
     override fun run(monitor: TaskMonitor) {
+        this.runInternal(monitor, major = false)
+    }
+
+    fun runMajor(monitor: TaskMonitor) {
+        this.runInternal(monitor, major = true)
+    }
+
+    private fun runInternal(monitor: TaskMonitor, major: Boolean) {
         this.lock.withLock {
             monitor.reportStarted("Compacting ChronoStore")
             val allStores = (this.storeManager as StoreManagerImpl).getAllStoresInternal()
             monitor.forEachWithMonitor(1.0, "Compacting Store", allStores) { taskMonitor, store ->
-                mergeFilesIn(store, taskMonitor)
+                mergeFilesIn(store, major, taskMonitor)
             }
         }
     }
 
-    private fun mergeFilesIn(store: Store, monitor: TaskMonitor) {
-        monitor.reportStarted("Compacting Store '${store.name}'")
+    private fun mergeFilesIn(store: Store, major: Boolean, monitor: TaskMonitor) {
+        val compactionNote = if (major) {
+            "(Major Compaction)"
+        } else {
+            "(Minor Compaction)"
+        }
+        monitor.reportStarted("Compacting Store '${store.name}' ${compactionNote}")
         val lsmTree = (store as StoreImpl).tree
         val files = lsmTree.allFiles
-        val filesToMerge = this.mergeStrategy.selectFilesToMerge(files).takeIf { it.size > 1 }
+        val filesToMerge = selectFiles(major, files).takeIf { it.size > 1 }
             ?: return // no files need merging in this store
 
         monitor.reportProgress(0.2)
@@ -45,4 +60,13 @@ class CompactionTask(
             lsmTree.mergeFiles(fileIndices, mergeMonitor)
         }
     }
+
+    private fun selectFiles(major: Boolean, files: List<LSMTreeFile>): List<LSMTreeFile> {
+        return if (major) {
+            files
+        } else {
+            this.mergeStrategy.selectFilesToMerge(files)
+        }
+    }
+
 }

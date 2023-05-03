@@ -12,6 +12,7 @@ import org.chronos.chronostore.io.format.ChronoStoreFileSettings
 import org.chronos.chronostore.io.structure.ChronoStoreStructure
 import org.chronos.chronostore.io.vfs.VirtualFileSystem
 import org.chronos.chronostore.lsm.cache.BlockCacheManagerImpl
+import org.chronos.chronostore.lsm.merge.strategy.MergeServiceImpl
 import org.chronos.chronostore.wal.WriteAheadLog
 import java.util.concurrent.Executors
 
@@ -32,7 +33,7 @@ class ChronoStoreImpl(
     private val timeManager = TimeManager()
     private val blockCacheManager = BlockCacheManagerImpl()
     private val taskManager = AsyncTaskManagerImpl(Executors.newScheduledThreadPool(configuration.maxWriterThreads))
-    private val mergeService = configuration.mergeStrategy.createMergeService(taskManager, configuration)
+    private val mergeService = MergeServiceImpl(this.taskManager, this.configuration)
     private val storeManager = StoreManagerImpl(
         vfs = this.vfs,
         blockCacheManager = this.blockCacheManager,
@@ -61,7 +62,7 @@ class ChronoStoreImpl(
             timeManager = this.timeManager,
             writeAheadLog = this.writeAheadLog
         )
-        this.mergeService.initialize()
+        this.mergeService.initialize(this.storeManager)
     }
 
     private fun createNewEmptyDatabase() {

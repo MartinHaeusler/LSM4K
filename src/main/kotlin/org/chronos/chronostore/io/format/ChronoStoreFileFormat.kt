@@ -91,7 +91,7 @@ object ChronoStoreFileFormat {
             fun fromString(string: String): Version {
                 val trim = string.trim()
                 for (literal in values()) {
-                    if (literal.versionString.equals(string, ignoreCase = true)) {
+                    if (literal.versionString.equals(trim, ignoreCase = true)) {
                         return literal
                     }
                 }

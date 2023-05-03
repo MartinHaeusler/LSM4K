@@ -43,7 +43,7 @@ object TaxonomyDataBenchmark {
                 settings = ChronoStoreFileSettings(CompressionAlgorithm.LZO_1X, 1024 * 1024 * 16, 100),
                 metadata = emptyMap()
             )
-            writer.writeFile(orderedCommands.iterator())
+            writer.writeFile(0, orderedCommands.iterator())
             overWriter.commit()
         }
         val timeAfter = System.currentTimeMillis()
