@@ -40,4 +40,11 @@ class ChronoStoreConfiguration {
      */
     var writeAheadLogCompactionTimeOfDay: TimeOfDay? = TimeOfDay.parse("00:00")
 
+    /**
+     * The maximum size of the block cache to use, in bytes.
+     *
+     * By default, 50% of the JVM heap space is used.
+     */
+    var blockCacheSizeInBytes: Long = Runtime.getRuntime().maxMemory() / 2
+
 }

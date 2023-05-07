@@ -31,7 +31,7 @@ class ChronoStoreImpl(
     private var isOpen = true
 
     private val timeManager = TimeManager()
-    private val blockCacheManager = BlockCacheManagerImpl()
+    private val blockCacheManager = BlockCacheManagerImpl(configuration)
     private val taskManager = AsyncTaskManagerImpl(Executors.newScheduledThreadPool(configuration.maxWriterThreads))
     private val mergeService = MergeServiceImpl(this.taskManager, this.configuration)
     private val storeManager = StoreManagerImpl(
