@@ -17,7 +17,6 @@ import kotlin.time.Duration.Companion.milliseconds
 
 class MergeServiceImpl(
     private val taskManager: AsyncTaskManager,
-    private val writeAheadLog: WriteAheadLog,
     private val storeConfig: ChronoStoreConfiguration,
 ) : MergeService {
 
@@ -29,9 +28,11 @@ class MergeServiceImpl(
 
     private var initialized: Boolean = false
     private lateinit var compactionTask: CompactionTask
+    private lateinit var writeAheadLog: WriteAheadLog
     private lateinit var walCompactionTask: WALCompactionTask
 
-    override fun initialize(storeManager: StoreManager) {
+    override fun initialize(storeManager: StoreManager, writeAheadLog: WriteAheadLog) {
+        this.writeAheadLog = writeAheadLog
         this.compactionTask = CompactionTask(storeManager, this.storeConfig.mergeStrategy)
         val timeBetweenExecutionsInMillis = this.storeConfig.mergeIntervalMillis
         if (timeBetweenExecutionsInMillis > 0) {

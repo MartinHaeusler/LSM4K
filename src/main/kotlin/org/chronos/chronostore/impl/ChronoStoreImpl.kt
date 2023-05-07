@@ -62,7 +62,7 @@ class ChronoStoreImpl(
             timeManager = this.timeManager,
             writeAheadLog = this.writeAheadLog
         )
-        this.mergeService.initialize(this.storeManager)
+        this.mergeService.initialize(this.storeManager, writeAheadLog)
     }
 
     private fun createNewEmptyDatabase() {

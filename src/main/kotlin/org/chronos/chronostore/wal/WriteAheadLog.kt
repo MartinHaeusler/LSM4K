@@ -91,7 +91,9 @@ class WriteAheadLog(
         this.lock.write {
             this.file.deleteOverWriterFileIfExists()
             this.file.createOverWriter().use { overWriter ->
-                overWriter.outputStream.buffered().use { outputStream ->
+                // do NOT close the outputStream obtained by the overWriter!
+                // It will be flushed and f-synced when the overWriter is committed.
+                overWriter.outputStream.buffered().also { outputStream ->
                     this.readWal { transaction ->
                         if (!isTransactionFullyPersisted(transaction)) {
                             // this transaction has not yet been fully persisted outside
@@ -99,6 +101,9 @@ class WriteAheadLog(
                             WriteAheadLogEntry.writeTransaction(outputStream, transaction)
                         }
                     }
+                    // flush the buffer of the output stream, but don't close it, because
+                    // this will fail the fsync in the overWriter.
+                    outputStream.flush()
                 }
                 overWriter.commit()
             }
@@ -122,11 +127,11 @@ class WriteAheadLog(
                     val currentTransactionActions = mutableListOf<WriteAheadLogEntry.ModifyingTransactionEntry>()
 
                     while (pushbackInput.hasNext()) {
-                        when (val entry = WriteAheadLogEntry.readSingleEntryFrom(input)) {
+                        when (val entry = WriteAheadLogEntry.readSingleEntryFrom(pushbackInput)) {
                             is WriteAheadLogEntry.BeginTransactionEntry -> {
                                 if (currentTransactionStart != null) {
                                     log.warn {
-                                        "Detected incomplete transaction in WAL (Transaction ID '${entry.transactionId}')." +
+                                        "Detected incomplete transaction in WAL (Transaction ID '${currentTransactionStart!!.transactionId}')." +
                                             " Ignoring this transaction."
                                     }
                                 }
