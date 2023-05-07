@@ -1,26 +1,15 @@
 package org.chronos.chronostore.test.cases.api
 
-import org.chronos.chronostore.api.ChronoStore
-import org.chronos.chronostore.api.ChronoStoreConfiguration
-import org.junit.jupiter.api.Test
-import java.nio.file.Files
+import org.chronos.chronostore.test.util.ChronoStoreMode
+import org.chronos.chronostore.test.util.ChronoStoreTest
 
 class ChronoStoreStartStopTest {
 
-    @Test
-    fun canOpenAndCloseChronoStoreInstanceInMemory() {
-        val store = ChronoStore.openInMemory(ChronoStoreConfiguration())
-        store.close()
-    }
-
-    @Test
-    fun canOpenAndCloseChronoStoreInstanceOnDisk() {
-        val file = Files.createTempDirectory("chronostoreTest").toFile()
-        try{
-            val store = ChronoStore.openOnDirectory(file, ChronoStoreConfiguration())
-            store.close()
-        }finally {
-            file.deleteRecursively()
+    @ChronoStoreTest
+    fun canOpenAndCloseChronoStore(mode: ChronoStoreMode) {
+        mode.withChronoStore {
+            // nothing to do here, we just want to make
+            // sure that the store opened and closed correctly
         }
     }
 
