@@ -33,4 +33,8 @@ interface ChronoStore : AutoCloseable {
 
     fun beginTransaction(): ChronoStoreTransaction
 
+    fun <T> transaction(action: (ChronoStoreTransaction) -> T): T {
+        return this.beginTransaction().use(action)
+    }
+
 }

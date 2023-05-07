@@ -53,6 +53,9 @@ class MergeServiceImpl(
             val startDelay = startTimestamp - System.currentTimeMillis()
             this.taskManager.scheduleRecurringWithFixedRate(this.walCompactionTask, startDelay.milliseconds, 24.hours)
         }
+
+        this.initialized = true
+        // TODO: add cleanup task which calls LSMTree.performGarbageCollection
     }
 
     override fun mergeNow(major: Boolean) {

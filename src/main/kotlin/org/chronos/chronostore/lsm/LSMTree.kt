@@ -151,14 +151,15 @@ class LSMTree(
         var inserted = 0
         val totalSize: Int
         this.lock.write {
-            for (command in commands) {
-                val keyAndTimestamp = command.keyAndTimestamp
-                require(!this.inMemoryTree.containsKey(keyAndTimestamp)) {
-                    "The key-and-timestamp ${keyAndTimestamp} is already contained in in-memory LSM tree!"
-                }
-                this.inMemoryTree[command.keyAndTimestamp] = command
-                inserted += 1
+            val containedEntry = commands.asSequence().map { it.keyAndTimestamp }.firstOrNull(this.inMemoryTree::containsKey)
+            require(containedEntry == null) {
+                "The key-and-timestamp ${containedEntry} is already contained in in-memory LSM tree!"
             }
+
+            val keyAndTimestampToCommand = commands.associateBy { it.keyAndTimestamp }
+            this.inMemoryTree = this.inMemoryTree.plusAll(keyAndTimestampToCommand)
+            inserted += keyAndTimestampToCommand.size
+
             totalSize = this.inMemoryTree.size
         }
         // let the merge strategy know what happened
