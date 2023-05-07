@@ -12,10 +12,7 @@ import org.chronos.chronostore.util.Bytes
 import org.chronos.chronostore.util.StoreId
 import org.chronos.chronostore.util.Timestamp
 import org.chronos.chronostore.util.TransactionId
-import org.chronos.chronostore.util.cursor.Cursor
-import org.chronos.chronostore.util.cursor.IndexBasedCursor
-import org.chronos.chronostore.util.cursor.OverlayCursor
-import org.chronos.chronostore.util.cursor.VersioningCursor
+import org.chronos.chronostore.util.cursor.*
 import org.chronos.chronostore.wal.WriteAheadLogTransaction
 
 class ChronoStoreTransactionImpl(
@@ -82,7 +79,7 @@ class ChronoStoreTransactionImpl(
     }
 
     private fun renameStore(txStore: TransactionBoundStoreImpl, newName: String) {
-        require(this.isOpen){ TX_ALREADY_CLOSED }
+        require(this.isOpen) { TX_ALREADY_CLOSED }
         val oldName = txStore.store.name
         val renamed = this.storeManager.renameStore(this@ChronoStoreTransactionImpl, txStore.store.id, newName)
         if (renamed) {
@@ -92,7 +89,7 @@ class ChronoStoreTransactionImpl(
     }
 
     private fun deleteStore(txStore: TransactionBoundStoreImpl) {
-        require(this.isOpen){ TX_ALREADY_CLOSED }
+        require(this.isOpen) { TX_ALREADY_CLOSED }
         this.storeManager.deleteStoreById(this, txStore.store.id)
     }
 
@@ -167,7 +164,11 @@ class ChronoStoreTransactionImpl(
                     ?: return@mapNotNull null
                 key to value
             }.toMutableList().sortedBy { it.first }
-            val transientModificationCursor = IndexBasedCursor(0, keyList.lastIndex, { keyList[it] }, { "Transient Modification Cursor" })
+            val transientModificationCursor = if (keyList.isNotEmpty()) {
+                IndexBasedCursor(0, keyList.lastIndex, { keyList[it] }, { "Transient Modification Cursor" })
+            } else {
+                EmptyCursor { "Transient Modification Cursor" }
+            }
             return OverlayCursor(bytesToBytesCursor, transientModificationCursor)
         }
 

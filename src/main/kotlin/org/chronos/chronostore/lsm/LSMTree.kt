@@ -19,6 +19,7 @@ import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.model.command.KeyAndTimestamp
 import org.chronos.chronostore.util.Timestamp
 import org.chronos.chronostore.util.cursor.Cursor
+import org.chronos.chronostore.util.cursor.EmptyCursor
 import org.chronos.chronostore.util.cursor.IndexBasedCursor
 import org.chronos.chronostore.util.cursor.OverlayCursor
 import org.chronos.chronostore.util.iterator.IteratorExtensions.checkOrdered
@@ -131,6 +132,9 @@ class LSMTree(
         val rawCursor = this.lock.read {
             // TODO the "toList()" copy here is inefficient. Maybe we can have a cursor directly on the navigablemap itself?
             val inMemoryDataList = this.inMemoryTree.toList()
+            if (inMemoryDataList.isEmpty()) {
+                return EmptyCursor { "In-Memory Cursor" }
+            }
             val inMemoryCursor = IndexBasedCursor(
                 minIndex = 0,
                 maxIndex = inMemoryDataList.lastIndex,

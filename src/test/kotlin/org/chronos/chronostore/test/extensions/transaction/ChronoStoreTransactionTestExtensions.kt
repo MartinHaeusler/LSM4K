@@ -14,4 +14,15 @@ object ChronoStoreTransactionTestExtensions {
         return this.getLatest(Bytes(key))
     }
 
+    val TransactionBoundStore.allEntriesOnLatest: List<Pair<Bytes, Bytes>>
+        get() {
+            this.openCursorOnLatest().use { cursor ->
+                if(!cursor.first()){
+                    return emptyList()
+                }
+                return cursor.ascendingEntrySequenceFromHere().toList()
+            }
+        }
+
+
 }

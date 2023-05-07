@@ -2,6 +2,7 @@ package org.chronos.chronostore.test.cases.api
 
 import org.chronos.chronostore.api.ChronoStoreTransaction
 import org.chronos.chronostore.api.TransactionBoundStore
+import org.chronos.chronostore.test.extensions.transaction.ChronoStoreTransactionTestExtensions.allEntriesOnLatest
 import org.chronos.chronostore.test.extensions.transaction.ChronoStoreTransactionTestExtensions.getLatest
 import org.chronos.chronostore.test.extensions.transaction.ChronoStoreTransactionTestExtensions.put
 import org.chronos.chronostore.test.util.ChronoStoreMode
@@ -89,8 +90,42 @@ class StoreManagementTest {
     }
 
     @ChronoStoreTest
-    fun canCreateStoreAndIterateWithCursor() {
-        TODO("implement this test!")
+    fun canCreateStoreAndIterateWithCursor(mode: ChronoStoreMode) {
+
+        fun performAssertions(tx: ChronoStoreTransaction) {
+            expectThat(tx) {
+                get { allStores }.hasSize(2).and {
+                    any {
+                        get { this.store.name }.isEqualTo("test")
+                        get { this.allEntriesOnLatest }.containsExactly(Bytes("foo") to Bytes("bar"))
+                    }
+                    any {
+                        get { this.store.name }.isEqualTo("math")
+                        get { this.allEntriesOnLatest }.containsExactly(
+                            Bytes("e") to Bytes("2.718"),
+                            Bytes("pi") to Bytes("3.1415")
+                        )
+                    }
+                }
+            }
+        }
+
+        mode.withChronoStore { chronoStore ->
+            chronoStore.transaction { tx ->
+                val test = tx.createNewStore("test", versioned = true)
+                test.put("foo", "bar")
+                val math = tx.createNewStore("math", versioned = false)
+                math.put("pi", "3.1415")
+                math.put("e", "2.718")
+
+                performAssertions(tx)
+
+                tx.commit()
+            }
+            chronoStore.transaction { tx ->
+                performAssertions(tx)
+            }
+        }
     }
 
 }
