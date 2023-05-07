@@ -6,6 +6,7 @@ import org.chronos.chronostore.api.ChronoStoreConfiguration
 import org.chronos.chronostore.io.format.datablock.DataBlock
 import org.chronos.chronostore.lsm.LocalBlockCache
 import org.chronos.chronostore.util.StoreId
+import java.util.UUID
 
 class BlockCacheManagerImpl(
     config: ChronoStoreConfiguration
@@ -25,10 +26,12 @@ class BlockCacheManagerImpl(
     }
 
     private inner class LocalBlockCacheImpl(val storeId: StoreId) : LocalBlockCache {
-        override fun getBlock(fileIndex: Int, blockOffset: Long, loader: (Long) -> DataBlock?): DataBlock? {
-            val cacheKey = CacheKey(storeId, fileIndex, blockOffset)
+
+
+        override fun getBlock(fileId: UUID, blockIndex: Int, loader: (Int) -> DataBlock?): DataBlock? {
+            val cacheKey = CacheKey(storeId, fileId, blockIndex)
             return this@BlockCacheManagerImpl.cache.get(cacheKey) {
-                loader(blockOffset)
+                loader(blockIndex)
             }
         }
 
@@ -36,8 +39,8 @@ class BlockCacheManagerImpl(
 
     private data class CacheKey(
         val storeId: StoreId,
-        val fileIndex: Int,
-        val blockOffset: Long
+        val fileId: UUID,
+        val blockIndex: Int
     )
 
 }

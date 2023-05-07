@@ -89,7 +89,7 @@ class ChronoStoreFileReader : AutoCloseable {
     }
 
     private fun getBlockForIndex(blockIndex: Int): DataBlock? {
-        return this.blockCache.getBlock(blockIndex, ::getBlockForIndexUncached)
+        return this.blockCache.getBlock(this.fileHeader.metaData.fileUUID, blockIndex, ::getBlockForIndexUncached)
     }
 
     private fun getBlockForIndexUncached(blockIndex: Int): DataBlock? {

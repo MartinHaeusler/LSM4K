@@ -19,6 +19,7 @@ import org.chronos.chronostore.util.StoreId
 import org.chronos.chronostore.util.Timestamp
 import org.chronos.chronostore.util.TransactionId
 import org.chronos.chronostore.util.json.JsonUtil
+import org.chronos.chronostore.util.stream.UnclosableOutputStream.Companion.unclosable
 import java.util.*
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.concurrent.read
@@ -292,7 +293,12 @@ class StoreManagerImpl(
     private fun overwriteStoreInfoJson(storeInfos: List<StoreInfo>) {
         this.lock.write {
             this.storeInfoFile.createOverWriter().use { overWriter ->
-                JsonUtil.writeJson(storeInfos, overWriter.outputStream)
+                // we have to protect our output stream from being closed here,
+                // because Jackson will close it. If that happens, the overWriter
+                // is no longer able to call fsync on the stream. To prevent that
+                // from happening, we pass a wrapper output stream to jackson which
+                // does NOT forward the "close()" call to our output stream.
+                JsonUtil.writeJson(storeInfos, overWriter.outputStream.unclosable())
                 overWriter.commit()
             }
         }

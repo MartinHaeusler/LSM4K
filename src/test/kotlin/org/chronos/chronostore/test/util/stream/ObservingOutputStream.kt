@@ -19,4 +19,9 @@ class ObservingOutputStream(
         this.out.write(b)
     }
 
+    override fun close() {
+        super.close()
+        this.out.close()
+    }
+
 }

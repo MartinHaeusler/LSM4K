@@ -1,10 +1,11 @@
 package org.chronos.chronostore.lsm
 
 import org.chronos.chronostore.io.format.datablock.DataBlock
+import java.util.UUID
 
 interface LocalBlockCache {
 
-    fun getBlock(fileIndex: Int, blockOffset: Long, loader: (Long) -> DataBlock?): DataBlock?
+    fun getBlock(fileId: UUID, blockIndex: Int, loader: (Int) -> DataBlock?): DataBlock?
 
     companion object {
 
