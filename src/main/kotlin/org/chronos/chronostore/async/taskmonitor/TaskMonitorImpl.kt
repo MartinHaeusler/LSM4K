@@ -34,7 +34,7 @@ class TaskMonitorImpl : TaskMonitor {
     }
 
     override fun reportStarted(taskName: String) {
-        check(this.state == State.INITIAL) { "Method is only allowed in INITIAL state." }
+        check(this.state == State.INITIAL) { "Method is only allowed in INITIAL state. Monitor is in state ${this.state} with task name '${this.taskName}'." }
         this.taskName = taskName
         this.state = State.IN_PROGRESS
         this.fireStartedEvent(taskName)

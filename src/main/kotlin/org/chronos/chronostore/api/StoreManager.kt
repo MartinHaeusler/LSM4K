@@ -1,6 +1,7 @@
 package org.chronos.chronostore.api
 
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor
+import org.chronos.chronostore.lsm.LSMTree
 import org.chronos.chronostore.util.StoreId
 
 interface StoreManager {
@@ -38,6 +39,8 @@ interface StoreManager {
     fun deleteStoreById(transaction: ChronoStoreTransaction, storeId: StoreId): Boolean
 
     fun getAllStores(transaction: ChronoStoreTransaction): List<Store>
+
+    fun getAllLsmTrees(): List<LSMTree>
 
     fun <T> withStoreReadLock(action: () -> T): T
 

@@ -1,5 +1,6 @@
 package org.chronos.chronostore.impl
 
+import com.google.common.annotations.VisibleForTesting
 import mu.KotlinLogging
 import org.chronos.chronostore.api.ChronoStore
 import org.chronos.chronostore.api.ChronoStoreConfiguration
@@ -12,6 +13,7 @@ import org.chronos.chronostore.io.format.ChronoStoreFileSettings
 import org.chronos.chronostore.io.structure.ChronoStoreStructure
 import org.chronos.chronostore.io.vfs.VirtualFileSystem
 import org.chronos.chronostore.lsm.cache.BlockCacheManagerImpl
+import org.chronos.chronostore.lsm.merge.strategy.MergeService
 import org.chronos.chronostore.lsm.merge.strategy.MergeServiceImpl
 import org.chronos.chronostore.wal.WriteAheadLog
 import java.util.concurrent.Executors
@@ -33,7 +35,10 @@ class ChronoStoreImpl(
     private val timeManager = TimeManager()
     private val blockCacheManager = BlockCacheManagerImpl(configuration)
     private val taskManager = AsyncTaskManagerImpl(Executors.newScheduledThreadPool(configuration.maxWriterThreads))
-    private val mergeService = MergeServiceImpl(this.taskManager, this.configuration)
+
+    @VisibleForTesting
+    val mergeService: MergeService = MergeServiceImpl(this.taskManager, this.configuration)
+
     private val storeManager = StoreManagerImpl(
         vfs = this.vfs,
         blockCacheManager = this.blockCacheManager,
@@ -43,6 +48,7 @@ class ChronoStoreImpl(
         driverFactory = configuration.randomFileAccessDriverFactory,
         newFileSettings = ChronoStoreFileSettings(configuration.compressionAlgorithm, configuration.maxBlockSizeInBytes, configuration.indexRate)
     )
+
     private val writeAheadLog: WriteAheadLog
     private val transactionManager: TransactionManager
 
@@ -139,7 +145,7 @@ class ChronoStoreImpl(
         log.info { "Completed shut-down of ChronoStore at '${this.vfs}'." }
     }
 
-    fun performGarbageCollection(monitor: TaskMonitor) {
+    fun performGarbageCollection(monitor: TaskMonitor = TaskMonitor.create()) {
         this.storeManager.performGarbageCollection(monitor)
     }
 

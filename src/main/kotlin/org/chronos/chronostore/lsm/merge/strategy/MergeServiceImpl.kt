@@ -5,6 +5,7 @@ import org.chronos.chronostore.api.ChronoStoreConfiguration
 import org.chronos.chronostore.api.StoreManager
 import org.chronos.chronostore.async.executor.AsyncTaskManager
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor
+import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.forEachWithMonitor
 import org.chronos.chronostore.lsm.event.InMemoryLsmInsertEvent
 import org.chronos.chronostore.lsm.event.LsmCursorClosedEvent
 import org.chronos.chronostore.lsm.merge.tasks.CompactionTask
@@ -30,6 +31,7 @@ class MergeServiceImpl(
     private lateinit var compactionTask: CompactionTask
     private lateinit var writeAheadLog: WriteAheadLog
     private lateinit var walCompactionTask: WALCompactionTask
+    private lateinit var storeManager: StoreManager
 
     override fun initialize(storeManager: StoreManager, writeAheadLog: WriteAheadLog) {
         this.writeAheadLog = writeAheadLog
@@ -54,16 +56,18 @@ class MergeServiceImpl(
             this.taskManager.scheduleRecurringWithFixedRate(this.walCompactionTask, startDelay.milliseconds, 24.hours)
         }
 
+        this.storeManager = storeManager
+
         this.initialized = true
         // TODO: add cleanup task which calls LSMTree.performGarbageCollection
     }
 
-    override fun mergeNow(major: Boolean) {
+    override fun mergeNow(major: Boolean, taskMonitor: TaskMonitor) {
         check(this.initialized) { "MergeService has not yet been initialized!" }
         if (major) {
-            this.compactionTask.runMajor(TaskMonitor.create())
+            this.compactionTask.runMajor(taskMonitor)
         } else {
-            this.compactionTask.run(TaskMonitor.create())
+            this.compactionTask.run(taskMonitor)
         }
     }
 
@@ -74,6 +78,14 @@ class MergeServiceImpl(
         }
         // schedule a flush
         this.taskManager.executeAsync(FlushInMemoryTreeToDiskTask(event.lsmTree, this.storeConfig.maxInMemoryTreeSizeInBytes))
+    }
+
+    override fun flushAllInMemoryStoresToDisk(taskMonitor: TaskMonitor) {
+        taskMonitor.forEachWithMonitor(1.0, "Flushing In-Memory segments of LSM Trees", this.storeManager.getAllLsmTrees()) { subTaskMonitor, lsmTree ->
+            val task = FlushInMemoryTreeToDiskTask(lsmTree, maxInMemoryTreeSizeInBytes = 0L)
+            task.run(subTaskMonitor)
+        }
+        taskMonitor.reportDone()
     }
 
     override fun handleCursorClosedEvent(lsmCursorClosedEvent: LsmCursorClosedEvent) {

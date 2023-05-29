@@ -285,6 +285,10 @@ class ChronoStoreFileReader : AutoCloseable {
 
         override fun seekExactlyOrNext(key: KeyAndTimestamp): Boolean {
             check(this.isOpen, this::getAlreadyClosedMessage)
+            if(key == this.keyOrNull){
+                // we're already there
+                return true
+            }
             this.invalidatePosition()
             val blockIndex = fileHeader.indexOfBlocks.getBlockIndexForKeyAndTimestampAscending(key)
                 ?: return false
@@ -298,11 +302,16 @@ class ChronoStoreFileReader : AutoCloseable {
             }
             this.currentBlock = block
             this.currentCursor = cursor
+            this.isValidPosition = true
             return true
         }
 
         override fun seekExactlyOrPrevious(key: KeyAndTimestamp): Boolean {
             check(this.isOpen, this::getAlreadyClosedMessage)
+            if(key == this.keyOrNull){
+                // we're already there
+                return true
+            }
             this.invalidatePosition()
             val blockIndex = fileHeader.indexOfBlocks.getBlockIndexForKeyAndTimestampDescending(key)
                 ?: return false
@@ -315,11 +324,16 @@ class ChronoStoreFileReader : AutoCloseable {
             }
             this.currentBlock = block
             this.currentCursor = cursor
+            this.isValidPosition = true
             return true
         }
 
         private fun getAlreadyClosedMessage(): String {
             return "This cursor on ${this.driver.filePath} has already been closed!"
+        }
+
+        override fun toString(): String {
+            return "ChronoStoreFileCursor[${this@ChronoStoreFileReader.driver.filePath}]"
         }
     }
 }

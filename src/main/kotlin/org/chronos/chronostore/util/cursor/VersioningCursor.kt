@@ -170,11 +170,14 @@ class VersioningCursor(
     }
 
     private fun peekNextKey(): KeyAndTimestamp? {
-        val currentKey = this.getTemporalKeyOrNull()
-            ?: return null // cursor state is invalid
+        if(this.getTemporalKeyOrNull() == null){
+            // cursor state is invalid
+            return null
+        }
         if (!this.innerCursor.next()) {
-            // no next entry, reset to original location
-            this.innerCursor.seekExactlyOrNext(currentKey)
+            // no next entry, so the inner cursor remained
+            // in its original position (if next() returns false,
+            // then the cursor keeps its position)
             return null
         }
         val nextKey = this.getTemporalKeyOrNull()
@@ -187,5 +190,9 @@ class VersioningCursor(
         val currentValue = this.innerCursor.valueOrNull
             ?: return false
         return currentValue.opCode == Command.OpCode.DEL
+    }
+
+    override fun toString(): String {
+        return "VersioningCursor[${this.timestamp} in ${this.innerCursor}]"
     }
 }

@@ -59,6 +59,10 @@ abstract class AbstractCursor<K, V> : Cursor<K, V> {
 
     final override fun seekExactlyOrNext(key: K): Boolean {
         this.checkInvariants()
+        if(key == this.keyOrNull){
+            // we're already there
+            return true
+        }
         this.isValidPosition = this.seekExactlyOrNextInternal(key)
         this.modCount++
         return this.isValidPosition
@@ -66,6 +70,10 @@ abstract class AbstractCursor<K, V> : Cursor<K, V> {
 
     final override fun seekExactlyOrPrevious(key: K): Boolean {
         this.checkInvariants()
+        if(key == this.keyOrNull){
+            // we're already there
+            return true
+        }
         this.isValidPosition = this.seekExactlyOrPreviousInternal(key)
         this.modCount++
         return this.isValidPosition

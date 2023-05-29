@@ -1,5 +1,11 @@
 package org.chronos.chronostore.async.taskmonitor
 
+import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.forEach
+import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.forEachWithMonitor
+import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.mainTask
+import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.subTaskWithMonitor
+import java.lang.Exception
+
 interface TaskMonitor {
 
     companion object {
@@ -8,23 +14,31 @@ interface TaskMonitor {
             return TaskMonitorImpl()
         }
 
-
-        inline fun <T> TaskMonitor.subTask(work: Double, name: String, action: () -> T): T {
-            val subMonitor = this.subMonitor(work)
-            subMonitor.reportStarted(name)
+        inline fun <T> TaskMonitor.mainTask(name: String, action: () -> T): T {
+            this.reportStarted(name)
             try {
                 return action()
+            } catch (e: Exception) {
+                this.reportFailed("Failed to execute task '${name}'! Cause: ${e}", e)
+                throw e
             } finally {
-                if (!subMonitor.status.state.isTerminal) {
-                    subMonitor.reportDone()
+                if (!this.status.state.isTerminal) {
+                    this.reportDone()
                 }
             }
+        }
+
+        inline fun <T> TaskMonitor.subTask(work: Double, name: String, action: () -> T): T {
+            return subMonitor(work).mainTask(name, action)
         }
 
         inline fun <T> TaskMonitor.subTaskWithMonitor(work: Double, action: (TaskMonitor) -> T): T {
             val subMonitor = this.subMonitor(work)
             try {
                 return action(subMonitor)
+            } catch (e: Exception) {
+                this.reportFailed(e)
+                throw e
             } finally {
                 if (!subMonitor.status.state.isTerminal) {
                     subMonitor.reportDone()
@@ -33,6 +47,9 @@ interface TaskMonitor {
         }
 
         inline fun <T, R> TaskMonitor.map(work: Double, name: String, elements: List<T>, action: (T) -> R): List<R> {
+            if(this.status.state == State.INITIAL){
+                this.reportStarted(name)
+            }
             if (elements.isEmpty()) {
                 this.reportProgress(work)
                 return emptyList()
@@ -47,6 +64,9 @@ interface TaskMonitor {
                     subMonitor.reportProgress(workPerItem)
                 }
                 return results
+            } catch (e: Exception) {
+                this.reportFailed(e)
+                throw e
             } finally {
                 if (!subMonitor.status.state.isTerminal) {
                     subMonitor.reportDone()
@@ -55,6 +75,9 @@ interface TaskMonitor {
         }
 
         inline fun <T, R> TaskMonitor.forEach(work: Double, name: String, elements: List<T>, action: (T) -> R) {
+            if(this.status.state == State.INITIAL){
+                this.reportStarted(name)
+            }
             if (elements.isEmpty()) {
                 this.reportProgress(work)
                 return
@@ -67,6 +90,9 @@ interface TaskMonitor {
                     action(element)
                     subMonitor.reportProgress(workPerItem)
                 }
+            } catch (e: Exception) {
+                this.reportFailed(e)
+                throw e
             } finally {
                 if (!subMonitor.status.state.isTerminal) {
                     subMonitor.reportDone()
@@ -75,6 +101,9 @@ interface TaskMonitor {
         }
 
         inline fun <T, R> TaskMonitor.map(work: Double, name: String, elements: List<T>, action: (TaskMonitor, T) -> R): List<R> {
+            if(this.status.state == State.INITIAL){
+                this.reportStarted(name)
+            }
             if (elements.isEmpty()) {
                 this.reportProgress(work)
                 return emptyList()
@@ -91,6 +120,9 @@ interface TaskMonitor {
                     subMonitor.reportProgress(workPerItem)
                 }
                 return results
+            } catch (e: Exception) {
+                this.reportFailed(e)
+                throw e
             } finally {
                 if (!subMonitor.status.state.isTerminal) {
                     subMonitor.reportDone()
@@ -99,6 +131,9 @@ interface TaskMonitor {
         }
 
         inline fun <T, R> TaskMonitor.forEachWithMonitor(work: Double, name: String, elements: List<T>, action: (TaskMonitor, T) -> R) {
+            if(this.status.state == State.INITIAL){
+                this.reportStarted(name)
+            }
             if (elements.isEmpty()) {
                 this.reportProgress(work)
                 return
@@ -113,6 +148,9 @@ interface TaskMonitor {
                     }
                     subMonitor.reportProgress(workPerItem)
                 }
+            } catch (e: Exception) {
+                this.reportFailed(e)
+                throw e
             } finally {
                 if (!subMonitor.status.state.isTerminal) {
                     subMonitor.reportDone()

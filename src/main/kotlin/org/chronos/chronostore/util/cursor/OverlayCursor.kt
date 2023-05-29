@@ -179,4 +179,8 @@ open class OverlayCursor<C1 : Cursor<K, V>, C2 : Cursor<K, V>, K : Comparable<*>
         return this.keyOrNull
     }
 
+    override fun toString(): String {
+        return "OverlayCursor[Base: ${this.cursorA}, Overlay: ${this.cursorB}]"
+    }
+
 }

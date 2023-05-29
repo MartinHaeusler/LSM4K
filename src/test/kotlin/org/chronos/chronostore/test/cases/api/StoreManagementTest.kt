@@ -1,15 +1,20 @@
 package org.chronos.chronostore.test.cases.api
 
+import org.chronos.chronostore.api.ChronoStoreConfiguration
 import org.chronos.chronostore.api.ChronoStoreTransaction
-import org.chronos.chronostore.api.TransactionBoundStore
 import org.chronos.chronostore.test.extensions.transaction.ChronoStoreTransactionTestExtensions.allEntriesOnLatest
 import org.chronos.chronostore.test.extensions.transaction.ChronoStoreTransactionTestExtensions.getLatest
 import org.chronos.chronostore.test.extensions.transaction.ChronoStoreTransactionTestExtensions.put
 import org.chronos.chronostore.test.util.ChronoStoreMode
 import org.chronos.chronostore.test.util.ChronoStoreTest
 import org.chronos.chronostore.util.Bytes
+import org.junit.jupiter.api.Assertions
+import org.junit.jupiter.api.fail
+import org.slf4j.Logger
+import org.slf4j.LoggerFactory
 import strikt.api.expectThat
 import strikt.assertions.*
+import kotlin.math.min
 
 class StoreManagementTest {
 
@@ -125,6 +130,68 @@ class StoreManagementTest {
             chronoStore.transaction { tx ->
                 performAssertions(tx)
             }
+        }
+    }
+
+    @ChronoStoreTest
+    fun canCompactWhileIterationIsOngoing(mode: ChronoStoreMode) {
+        val numberOfEntries = 10_000
+
+        fun assertListEntries(list: List<Pair<Bytes, Bytes>>) {
+            for (index in 0 until min(list.size, numberOfEntries)) {
+                val entry = list[index]
+                Assertions.assertEquals("key#${index.toString().padStart(6, '0')}", entry.first.asString())
+                Assertions.assertEquals("value#${index}", entry.second.asString())
+            }
+            if(list.size != numberOfEntries){
+                fail("Expected result list to have size ${numberOfEntries}, but found ${list.size}! The existing entries have the expected structure and ordering. The last key is: ${list.lastOrNull()?.first?.asString() ?: "<null>"}")
+            }
+        }
+
+        val config = ChronoStoreConfiguration()
+        // disable flushing and merging, we will do it manually in this test
+        config.maxInMemoryTreeSizeInBytes = Long.MAX_VALUE
+        config.mergeIntervalMillis = Long.MAX_VALUE
+        mode.withChronoStore(config) { chronoStore ->
+            chronoStore.transaction { tx ->
+                val data = tx.createNewStore("data", versioned = true)
+                repeat(numberOfEntries) { i ->
+                    data.put("key#${i.toString().padStart(6, '0')}", "value#${i}")
+                }
+                tx.commit()
+            }
+
+            // start iterating in a new transaction
+            val tx1 = chronoStore.beginTransaction()
+            val c1 = tx1.store("data").openCursorOnLatest()
+            c1.firstOrThrow()
+            val c1Sequence1 = c1.ascendingEntrySequenceFromHere()
+
+            // flush the in-memory stores to the VFS
+            chronoStore.mergeService.flushAllInMemoryStoresToDisk()
+
+            val c1Result = c1Sequence1.toList()
+            assertListEntries(c1Result)
+
+            c1.firstOrThrow()
+
+            val tx2 = chronoStore.beginTransaction()
+            val c2 = tx2.store("data").openCursorOnLatest()
+
+            c2.firstOrThrow()
+            val c2Sequence1 = c2.ascendingEntrySequenceFromHere()
+            val c1Sequence2 = c1.ascendingEntrySequenceFromHere()
+
+            chronoStore.mergeService.mergeNow(major = true)
+
+            assertListEntries(c1Sequence2.toList())
+
+            assertListEntries(c2Sequence1.toList())
+
+            c1.close()
+            tx1.close()
+            c2.close()
+            tx2.close()
         }
     }
 

@@ -2,24 +2,27 @@ package org.chronos.chronostore.test.util
 
 import org.chronos.chronostore.api.ChronoStore
 import org.chronos.chronostore.api.ChronoStoreConfiguration
+import org.chronos.chronostore.impl.ChronoStoreImpl
 import java.nio.file.Files
 
 enum class ChronoStoreMode {
 
     INMEMORY {
 
-        override fun <T> withChronoStore(config: ChronoStoreConfiguration, action: (ChronoStore) -> T): T {
-            return ChronoStore.openInMemory(config).use(action)
+        override fun <T> withChronoStore(config: ChronoStoreConfiguration, action: (ChronoStoreImpl) -> T): T {
+            val chronoStore = ChronoStore.openInMemory(config) as ChronoStoreImpl
+            return chronoStore.use(action)
         }
 
     },
 
     ONDISK {
 
-        override fun <T> withChronoStore(config: ChronoStoreConfiguration, action: (ChronoStore) -> T): T {
+        override fun <T> withChronoStore(config: ChronoStoreConfiguration, action: (ChronoStoreImpl) -> T): T {
             val testDir = Files.createTempDirectory("chronostoreTest").toFile()
             try {
-                return ChronoStore.openOnDirectory(testDir, config).use(action)
+                val chronoStore = ChronoStore.openOnDirectory(testDir, config) as ChronoStoreImpl
+                return chronoStore.use(action)
             } finally {
                 testDir.deleteRecursively()
             }
@@ -28,9 +31,9 @@ enum class ChronoStoreMode {
     },
     ;
 
-    abstract fun <T> withChronoStore(config: ChronoStoreConfiguration, action: (ChronoStore) -> T): T
+    abstract fun <T> withChronoStore(config: ChronoStoreConfiguration, action: (ChronoStoreImpl) -> T): T
 
-    fun <T> withChronoStore(action: (ChronoStore) -> T): T {
+    fun <T> withChronoStore(action: (ChronoStoreImpl) -> T): T {
         return this.withChronoStore(ChronoStoreConfiguration(), action)
     }
 

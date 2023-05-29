@@ -12,6 +12,7 @@ import org.chronos.chronostore.io.format.datablock.BlockReadMode
 import org.chronos.chronostore.io.structure.ChronoStoreStructure.STORE_DIR_PREFIX
 import org.chronos.chronostore.io.structure.ChronoStoreStructure.STORE_INFO_FILE_NAME
 import org.chronos.chronostore.io.vfs.VirtualFileSystem
+import org.chronos.chronostore.lsm.LSMTree
 import org.chronos.chronostore.lsm.cache.BlockCacheManager
 import org.chronos.chronostore.lsm.merge.strategy.MergeService
 import org.chronos.chronostore.util.IOExtensions.withInputStream
@@ -261,6 +262,10 @@ class StoreManagerImpl(
             this.assertInitialized()
             return this.storesById.values.toList()
         }
+    }
+
+    override fun getAllLsmTrees(): List<LSMTree> {
+        return this.getAllStoresInternal().map { (it as StoreImpl).tree }
     }
 
     override fun getAllStores(transaction: ChronoStoreTransaction): List<Store> {

@@ -72,4 +72,8 @@ class EmptyCursor<K, V>(
         return "This cursor on ${this.getCursorName()} has already been closed!"
     }
 
+    override fun toString(): String {
+        return "EmptyCursor[${this.getCursorName()}]"
+    }
+
 }

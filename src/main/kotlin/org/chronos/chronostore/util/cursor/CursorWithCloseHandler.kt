@@ -37,4 +37,9 @@ open class CursorWithCloseHandler<C : Cursor<K, V>, K, V>(
         super.closeInternal()
         this.onClose()
     }
+
+    override fun toString(): String {
+        return "CursorWithCloseHandler[${this.innerCursor}]"
+    }
+
 }

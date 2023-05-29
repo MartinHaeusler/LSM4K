@@ -156,18 +156,27 @@ class ChronoStoreTransactionImpl(
 
         override fun openCursorOnLatest(): Cursor<Bytes, Bytes> {
             val treeCursor = (this.store as StoreImpl).tree.openCursor(this@ChronoStoreTransactionImpl)
-            val versioningCursor = VersioningCursor(treeCursor, this@ChronoStoreTransactionImpl.lastVisibleTimestamp, false)
+            val versioningCursor = VersioningCursor(
+                treeCursor = treeCursor,
+                timestamp = this@ChronoStoreTransactionImpl.lastVisibleTimestamp,
+                includeDeletions = false
+            )
             val bytesToBytesCursor = versioningCursor.mapValue { it.value }
-            val keyList = this.transactionContext.allModifications.entries.asSequence().mapNotNull {
+            val transientModifications = this.transactionContext.allModifications.entries.asSequence().mapNotNull {
                 val key = it.key
                 val value = it.value
                     ?: return@mapNotNull null
                 key to value
             }.toMutableList().sortedBy { it.first }
-            val transientModificationCursor = if (keyList.isNotEmpty()) {
-                IndexBasedCursor(0, keyList.lastIndex, { keyList[it] }, { "Transient Modification Cursor" })
+            val transientModificationCursor = if (transientModifications.isNotEmpty()) {
+                IndexBasedCursor(
+                    minIndex = 0,
+                    maxIndex = transientModifications.lastIndex,
+                    getEntryAtIndex = { transientModifications[it] },
+                    getCursorName = { "Transient Modification Cursor" }
+                )
             } else {
-                EmptyCursor { "Transient Modification Cursor" }
+                return bytesToBytesCursor
             }
             return OverlayCursor(bytesToBytesCursor, transientModificationCursor)
         }

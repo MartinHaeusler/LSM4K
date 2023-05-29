@@ -104,6 +104,10 @@ class IndexBasedCursor<K : Comparable<K>, V>(
 
     override fun seekExactlyOrNext(key: K): Boolean {
         check(this.isOpen, ::createAlreadyClosedMessage)
+        if(key == this.keyOrNull){
+            // we're already there
+            return true
+        }
         if (!this.first()) {
             return false
         }
@@ -118,6 +122,10 @@ class IndexBasedCursor<K : Comparable<K>, V>(
 
     override fun seekExactlyOrPrevious(key: K): Boolean {
         check(this.isOpen, ::createAlreadyClosedMessage)
+        if(key == this.keyOrNull){
+            // we're already there
+            return true
+        }
         if (!this.last()) {
             return false
         }
@@ -134,4 +142,7 @@ class IndexBasedCursor<K : Comparable<K>, V>(
         return "This cursor on ${this.getCursorName()} has already been closed!"
     }
 
+    override fun toString(): String {
+        return "IndexBasedCursor[${this.getCursorName}]"
+    }
 }

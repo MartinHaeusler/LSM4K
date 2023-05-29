@@ -48,7 +48,7 @@ class DiskBasedVirtualReadWriteFile(
             return result
         } finally {
             outputStream.flush()
-            outputStream.sync()
+            outputStream.sync(file)
             outputStream.close()
         }
     }
@@ -89,7 +89,7 @@ class DiskBasedVirtualReadWriteFile(
             try {
                 this.stream.flush()
                 this.fileOutputStream.flush()
-                this.fileOutputStream.sync()
+                this.fileOutputStream.sync(this.tempFile)
                 this.stream.close()
                 this.fileOutputStream.close()
                 Files.move(tempFile.toPath(), file.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)

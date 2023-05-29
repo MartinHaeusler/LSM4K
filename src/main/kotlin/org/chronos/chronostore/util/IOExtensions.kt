@@ -1,8 +1,7 @@
 package org.chronos.chronostore.util
 
 import org.chronos.chronostore.io.vfs.InputSource
-import java.io.FileOutputStream
-import java.io.InputStream
+import java.io.*
 
 object IOExtensions {
 
@@ -10,8 +9,15 @@ object IOExtensions {
         return this.createInputStream().use(action)
     }
 
-    fun FileOutputStream.sync() {
-        return this.fd.sync()
+    fun FileOutputStream.sync(file: File) {
+        try {
+            if(!this.channel.isOpen){
+                throw IOException("Cannot call sync() on '${file.path}': The FileOutputStream has already been closed!")
+            }
+            return this.fd.sync()
+        } catch (e: SyncFailedException) {
+            throw IOException("Could not call sync() on '${file.path}'!", e)
+        }
     }
 
     @JvmStatic
@@ -19,7 +25,7 @@ object IOExtensions {
         val readValue = this.read()
         return if (readValue >= 0) {
             readValue.toByte()
-        }else{
+        } else {
             null
         }
     }

@@ -1,6 +1,7 @@
 package org.chronos.chronostore.lsm
 
 import com.google.common.collect.Iterators
+import mu.KotlinLogging
 import org.chronos.chronostore.api.ChronoStoreTransaction
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.forEach
@@ -24,6 +25,7 @@ import org.chronos.chronostore.util.cursor.IndexBasedCursor
 import org.chronos.chronostore.util.cursor.OverlayCursor
 import org.chronos.chronostore.util.iterator.IteratorExtensions.checkOrdered
 import org.chronos.chronostore.util.iterator.IteratorExtensions.orderedDistinct
+import org.chronos.chronostore.util.stream.UnclosableOutputStream.Companion.unclosable
 import org.pcollections.TreePMap
 import java.io.File
 import java.util.concurrent.atomic.AtomicInteger
@@ -39,6 +41,12 @@ class LSMTree(
     private val blockReadMode: BlockReadMode,
     private val newFileSettings: ChronoStoreFileSettings,
 ) {
+
+    companion object {
+
+        private val log = KotlinLogging.logger {}
+
+    }
 
     @Volatile
     private var inMemoryTree = TreePMap.empty<KeyAndTimestamp, Command>()
@@ -132,18 +140,24 @@ class LSMTree(
         val rawCursor = this.lock.read {
             // TODO the "toList()" copy here is inefficient. Maybe we can have a cursor directly on the navigablemap itself?
             val inMemoryDataList = this.inMemoryTree.toList()
-            if (inMemoryDataList.isEmpty()) {
-                return EmptyCursor { "In-Memory Cursor" }
+            val inMemoryCursor = if (inMemoryDataList.isEmpty()) {
+                EmptyCursor { "In-Memory Cursor" }
+            } else {
+                IndexBasedCursor(
+                    minIndex = 0,
+                    maxIndex = inMemoryDataList.lastIndex,
+                    getEntryAtIndex = inMemoryDataList::get,
+                    getCursorName = { "In-Memory Cursor" }
+                )
             }
-            val inMemoryCursor = IndexBasedCursor(
-                minIndex = 0,
-                maxIndex = inMemoryDataList.lastIndex,
-                getEntryAtIndex = inMemoryDataList::get,
-                getCursorName = { "In-Memory Cursor" }
-            )
-            val cursors = this.fileList.asReversed().map { this.cursorManager.openCursorOn(transaction, it) }.toMutableList()
-            cursors.add(inMemoryCursor)
-            val cursor = cursors.reduce { l, r -> OverlayCursor(l, r) }
+            val fileCursors = this.fileList.asReversed().map { this.cursorManager.openCursorOn(transaction, it) }.toMutableList()
+            if(fileCursors.isEmpty()){
+                return inMemoryCursor
+            }
+            if(inMemoryCursor !is EmptyCursor){
+                fileCursors.add(inMemoryCursor)
+            }
+            val cursor = fileCursors.reduce { l, r -> OverlayCursor(l, r) }
             cursor
         }
         return rawCursor.onClose {
@@ -201,10 +215,11 @@ class LSMTree(
                 file.deleteOverWriterFileIfExists()
                 file.withOverWriter { overWriter ->
                     ChronoStoreFileWriter(
-                        outputStream = overWriter.outputStream.buffered(),
+                        outputStream = overWriter.outputStream.unclosable().buffered(),
                         settings = this.newFileSettings,
                         metadata = emptyMap()
                     ).use { writer ->
+                        log.debug { "Flushing ${commands.size} commands from in-memory segment into '${file.path}'." }
                         writer.writeFile(
                             // we're flushing this file from in-memory,
                             // so the resulting file has never been merged.
@@ -278,7 +293,7 @@ class LSMTree(
                     // ensure ordering and remove duplicates (which is cheap and lazy for ordered iterators)
                     val iterator = commands.checkOrdered(strict = false).orderedDistinct()
                     ChronoStoreFileWriter(
-                        outputStream = overWriter.outputStream.buffered(),
+                        outputStream = overWriter.outputStream.unclosable().buffered(),
                         settings = this.newFileSettings,
                         metadata = emptyMap()
                     ).use { writer ->
