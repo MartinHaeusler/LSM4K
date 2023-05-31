@@ -79,6 +79,78 @@ interface TransactionBoundStore {
      */
     fun openCursorOnLatest(): Cursor<Bytes, Bytes>
 
+    fun getKeysOnLatestAscending(): List<Bytes> {
+        this.openCursorOnLatest().use { cursor ->
+            return cursor.listAllKeysAscending()
+        }
+    }
+
+    fun getKeysOnLatestDescending(): List<Bytes> {
+        this.openCursorOnLatest().use { cursor ->
+            return cursor.listAllKeysDescending()
+        }
+    }
+
+    fun getValuesOnLatestAscending(): List<Bytes> {
+        this.openCursorOnLatest().use { cursor ->
+            return cursor.listAllValuesAscending()
+        }
+    }
+
+    fun getValuesOnLatestDescending(): List<Bytes> {
+        this.openCursorOnLatest().use { cursor ->
+            return cursor.listAllValuesDescending()
+        }
+    }
+
+    fun getEntriesOnLatestAscending(): List<Pair<Bytes, Bytes>> {
+        this.openCursorOnLatest().use { cursor ->
+            return cursor.listAllEntriesAscending()
+        }
+    }
+
+    fun getEntriesOnLatestDescending(): List<Pair<Bytes, Bytes>> {
+        this.openCursorOnLatest().use { cursor ->
+            return cursor.listAllEntriesDescending()
+        }
+    }
+
+    fun getKeysAtTimestampAscending(timestamp: Timestamp): List<Bytes> {
+        this.openCursorAtTimestamp(timestamp).use { cursor ->
+            return cursor.listAllKeysAscending()
+        }
+    }
+
+    fun getKeysAtTimestampDescending(timestamp: Timestamp): List<Bytes> {
+        this.openCursorAtTimestamp(timestamp).use { cursor ->
+            return cursor.listAllKeysDescending()
+        }
+    }
+
+    fun getValuesAtTimestampAscending(timestamp: Timestamp): List<Bytes> {
+        this.openCursorAtTimestamp(timestamp).use { cursor ->
+            return cursor.listAllValuesAscending()
+        }
+    }
+
+    fun getValuesAtTimestampDescending(timestamp: Timestamp): List<Bytes> {
+        this.openCursorAtTimestamp(timestamp).use { cursor ->
+            return cursor.listAllValuesDescending()
+        }
+    }
+
+    fun getEntriesAtTimestampAscending(timestamp: Timestamp): List<Pair<Bytes, Bytes>> {
+        this.openCursorAtTimestamp(timestamp).use { cursor ->
+            return cursor.listAllEntriesAscending()
+        }
+    }
+
+    fun getEntriesAtTimestampDescending(timestamp: Timestamp): List<Pair<Bytes, Bytes>> {
+        this.openCursorAtTimestamp(timestamp).use { cursor ->
+            return cursor.listAllEntriesDescending()
+        }
+    }
+
     /**
      * Opens a new [Cursor] on the [store], reading the data at the given [timestamp].
      *

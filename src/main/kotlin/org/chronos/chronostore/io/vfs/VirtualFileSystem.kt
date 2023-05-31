@@ -8,4 +8,6 @@ interface VirtualFileSystem {
 
     fun file(name: String): VirtualReadWriteFile
 
+    fun listRootLevelElements(): List<VirtualFileSystemElement>
+
 }

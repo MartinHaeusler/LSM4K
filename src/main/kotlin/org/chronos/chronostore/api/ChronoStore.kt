@@ -16,16 +16,17 @@ interface ChronoStore : AutoCloseable {
                 "Argument 'directory' either doesn't exist or is not a directory: ${directory.absolutePath}"
             }
             val vfs = DiskBasedVirtualFileSystem(directory)
-            return open(vfs, configuration)
+            return openOnVirtualFileSystem(vfs, configuration)
         }
 
         @JvmStatic
         fun openInMemory(configuration: ChronoStoreConfiguration): ChronoStore {
             val vfs = InMemoryVirtualFileSystem()
-            return open(vfs, configuration)
+            return openOnVirtualFileSystem(vfs, configuration)
         }
 
-        private fun open(vfs: VirtualFileSystem, configuration: ChronoStoreConfiguration): ChronoStore {
+        @JvmStatic
+        fun openOnVirtualFileSystem(vfs: VirtualFileSystem, configuration: ChronoStoreConfiguration): ChronoStore {
             return ChronoStoreImpl(vfs, configuration)
         }
 

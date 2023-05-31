@@ -2,6 +2,9 @@ package org.chronos.chronostore.test.cases.api
 
 import org.chronos.chronostore.api.ChronoStoreConfiguration
 import org.chronos.chronostore.api.ChronoStoreTransaction
+import org.chronos.chronostore.io.structure.ChronoStoreStructure
+import org.chronos.chronostore.io.vfs.VirtualDirectory
+import org.chronos.chronostore.lsm.LSMTreeFile
 import org.chronos.chronostore.test.extensions.transaction.ChronoStoreTransactionTestExtensions.allEntriesOnLatest
 import org.chronos.chronostore.test.extensions.transaction.ChronoStoreTransactionTestExtensions.delete
 import org.chronos.chronostore.test.extensions.transaction.ChronoStoreTransactionTestExtensions.getLatest
@@ -142,7 +145,7 @@ class StoreManagementTest {
                 Assertions.assertEquals(createKey(index), entry.first.asString())
                 Assertions.assertEquals("value#${index}", entry.second.asString())
             }
-            if(list.size != numberOfEntries){
+            if (list.size != numberOfEntries) {
                 fail("Expected result list to have size ${numberOfEntries}, but found ${list.size}! The existing entries have the expected structure and ordering. The last key is: ${list.lastOrNull()?.first?.asString() ?: "<null>"}")
             }
         }
@@ -195,24 +198,50 @@ class StoreManagementTest {
     }
 
     @ChronoStoreTest
-    fun canIterateOverAllVersionsWithMultipleFiles(mode: ChronoStoreMode){
+    fun canIterateOverAllVersionsWithMultipleFiles(mode: ChronoStoreMode) {
         val config = ChronoStoreConfiguration()
         // disable flushing and merging, we will do it manually in this test
         config.maxInMemoryTreeSizeInBytes = Long.MAX_VALUE
         config.mergeIntervalMillis = Long.MAX_VALUE
 
-        val numberOfEntries = 1000
-        mode.withChronoStore(config) { chronoStore ->
-            chronoStore.transaction { tx ->
+        val numberOfEntries = 20
+        mode.withChronoStore(config) { chronoStore, vfs ->
+            //
+            // We're creating the following situation:
+            //
+            // | KEY  | Commit 1 | Commit 2 | Commit 3 | Commit 4 |
+            // |------|----------|----------|----------|----------|
+            // | 0    | a        | b        | -        | c        |
+            // | 1    | a        | a        | a        | a        |
+            // | 2    | a        | a        | a        | a        |
+            // | 3    | a        | b        | b        | b        |
+            // | 4    | a        | a        | a        | a        |
+            // | 5    | a        | a        | -        | -        |
+            // | 6    | a        | b        | b        | b        |
+            // | 7    | a        | a        | a        | c        |
+            // | 8    | a        | a        | a        | a        |
+            // | 9    | a        | b        | b        | b        |
+            // | 10   | a        | a        | -        | -        |
+            // | 11   | a        | a        | a        | a        |
+            // | 12   | a        | b        | b        | b        |
+            // | 13   | a        | a        | a        | a        |
+            // | 14   | a        | a        | a        | c        |
+            // | 15   | a        | b        | -        | -        |
+            // | 16   | a        | a        | a        | a        |
+            // | 17   | a        | a        | a        | a        |
+            // | 18   | a        | b        | b        | b        |
+            // | 19   | a        | a        | a        | a        |
+            //
+            val commitTimestamp1 = chronoStore.transaction { tx ->
                 val data = tx.createNewStore("data", versioned = true)
                 repeat(numberOfEntries) { i ->
                     data.put(createKey(i), "a")
                 }
                 tx.commit()
             }
-            chronoStore.transaction { tx ->
+            val commitTimestamp2 = chronoStore.transaction { tx ->
                 val data = tx.store("data")
-                for(i in (0 until numberOfEntries step 3)) {
+                for (i in (0 until numberOfEntries step 3)) {
                     data.put(createKey(i), "b")
                 }
                 tx.commit()
@@ -221,9 +250,9 @@ class StoreManagementTest {
             // flush the in-memory stores to the VFS
             chronoStore.mergeService.flushAllInMemoryStoresToDisk()
 
-            chronoStore.transaction { tx ->
+            val commitTimestamp3 = chronoStore.transaction { tx ->
                 val data = tx.store("data")
-                for(i in (0 until numberOfEntries step 5)) {
+                for (i in (0 until numberOfEntries step 5)) {
                     data.delete(createKey(i))
                 }
                 tx.commit()
@@ -232,23 +261,211 @@ class StoreManagementTest {
             // flush the in-memory stores to the VFS
             chronoStore.mergeService.flushAllInMemoryStoresToDisk()
 
-            chronoStore.transaction { tx ->
+            val commitTimestamp4 = chronoStore.transaction { tx ->
                 val data = tx.store("data")
-                for(i in (0 until numberOfEntries step 7)) {
+                for (i in (0 until numberOfEntries step 7)) {
                     data.put(createKey(i), "c")
                 }
                 tx.commit()
             }
 
+            val rootLevelElements = vfs.listRootLevelElements()
+            val storeDir = rootLevelElements.asSequence()
+                .filterIsInstance<VirtualDirectory>()
+                .filter { it.name.startsWith(ChronoStoreStructure.STORE_DIR_PREFIX) }
+                .singleOrNull()
+
+            // since we've performed two flushes, we should have two files in the VFS.
+            expectThat(storeDir)
+                .isNotNull()
+                .get { this.list() }
+                .filter { it.endsWith(LSMTreeFile.FILE_EXTENSION) }
+                .hasSize(2)
+
+            // iterate over the data.
+            chronoStore.transaction { tx ->
+                tx.store("data").openCursorOnLatest().use { cursor ->
+                    cursor.firstOrThrow()
+                    val entries = cursor.ascendingEntrySequenceFromHere().toList()
+                    expectThat(entries).map { it.first.asString() to it.second.asString() }.containsExactly(
+                        createKey(0) to "c",
+                        createKey(1) to "a",
+                        createKey(2) to "a",
+                        createKey(3) to "b",
+                        createKey(4) to "a",
+                        createKey(6) to "b",
+                        createKey(7) to "c",
+                        createKey(8) to "a",
+                        createKey(9) to "b",
+                        createKey(11) to "a",
+                        createKey(12) to "b",
+                        createKey(13) to "a",
+                        createKey(14) to "c",
+                        createKey(16) to "a",
+                        createKey(17) to "a",
+                        createKey(18) to "b",
+                        createKey(19) to "a",
+                    )
+                }
+
+                tx.store("data").openCursorAtTimestamp(0).use { cursor ->
+                    expectThat(cursor.first()).isFalse() // should be empty at timestamp 0
+                }
+
+                tx.store("data").openCursorAtTimestamp(commitTimestamp1 - 1).use { cursor ->
+                    expectThat(cursor.first()).isFalse() // should be empty prior to first insertion
+                }
+
+                tx.store("data").openCursorAtTimestamp(commitTimestamp1).use { cursor ->
+                    cursor.firstOrThrow()
+                    val entries = cursor.ascendingEntrySequenceFromHere().toList()
+                    expectThat(entries).map { it.first.asString() to it.second.asString() }.containsExactly(
+                        createKey(0) to "a",
+                        createKey(1) to "a",
+                        createKey(2) to "a",
+                        createKey(3) to "a",
+                        createKey(4) to "a",
+                        createKey(5) to "a",
+                        createKey(6) to "a",
+                        createKey(7) to "a",
+                        createKey(8) to "a",
+                        createKey(9) to "a",
+                        createKey(10) to "a",
+                        createKey(11) to "a",
+                        createKey(12) to "a",
+                        createKey(13) to "a",
+                        createKey(14) to "a",
+                        createKey(15) to "a",
+                        createKey(16) to "a",
+                        createKey(17) to "a",
+                        createKey(18) to "a",
+                        createKey(19) to "a",
+                    )
+                }
+
+                tx.store("data").openCursorAtTimestamp(commitTimestamp2).use { cursor ->
+                    cursor.firstOrThrow()
+                    val entries = cursor.ascendingEntrySequenceFromHere().toList()
+                    expectThat(entries).map { it.first.asString() to it.second.asString() }.containsExactly(
+                        createKey(0) to "b",
+                        createKey(1) to "a",
+                        createKey(2) to "a",
+                        createKey(3) to "b",
+                        createKey(4) to "a",
+                        createKey(5) to "a",
+                        createKey(6) to "b",
+                        createKey(7) to "a",
+                        createKey(8) to "a",
+                        createKey(9) to "b",
+                        createKey(10) to "a",
+                        createKey(11) to "a",
+                        createKey(12) to "b",
+                        createKey(13) to "a",
+                        createKey(14) to "a",
+                        createKey(15) to "b",
+                        createKey(16) to "a",
+                        createKey(17) to "a",
+                        createKey(18) to "b",
+                        createKey(19) to "a",
+                    )
+                }
+
+                tx.store("data").openCursorAtTimestamp(commitTimestamp3).use { cursor ->
+                    cursor.firstOrThrow()
+                    val entries = cursor.ascendingEntrySequenceFromHere().toList()
+                    expectThat(entries).map { it.first.asString() to it.second.asString() }.containsExactly(
+                        createKey(1) to "a",
+                        createKey(2) to "a",
+                        createKey(3) to "b",
+                        createKey(4) to "a",
+                        createKey(6) to "b",
+                        createKey(7) to "a",
+                        createKey(8) to "a",
+                        createKey(9) to "b",
+                        createKey(11) to "a",
+                        createKey(12) to "b",
+                        createKey(13) to "a",
+                        createKey(14) to "a",
+                        createKey(16) to "a",
+                        createKey(17) to "a",
+                        createKey(18) to "b",
+                        createKey(19) to "a",
+                    )
+                }
+
+                tx.store("data").openCursorAtTimestamp(commitTimestamp4).use { cursor ->
+                    cursor.firstOrThrow()
+                    val entries = cursor.ascendingEntrySequenceFromHere().toList()
+                    expectThat(entries).map { it.first.asString() to it.second.asString() }.containsExactly(
+                        createKey(0) to "c",
+                        createKey(1) to "a",
+                        createKey(2) to "a",
+                        createKey(3) to "b",
+                        createKey(4) to "a",
+                        createKey(6) to "b",
+                        createKey(7) to "c",
+                        createKey(8) to "a",
+                        createKey(9) to "b",
+                        createKey(11) to "a",
+                        createKey(12) to "b",
+                        createKey(13) to "a",
+                        createKey(14) to "c",
+                        createKey(16) to "a",
+                        createKey(17) to "a",
+                        createKey(18) to "b",
+                        createKey(19) to "a",
+                    )
+                }
+            }
         }
     }
 
     @ChronoStoreTest
-    fun canIsolateTransactionsFromOneAnother(mode: ChronoStoreMode){
+    fun canIsolateTransactionsFromOneAnother(mode: ChronoStoreMode) {
+        mode.withChronoStore { chronoStore ->
+            chronoStore.transaction { tx ->
+                val data = tx.createNewStore("data", versioned = true)
+                data.put("hello", "world")
+                data.put("john", "doe")
+                val math = tx.createNewStore("math", versioned = false)
+                math.put("pi", "3.1415")
+                math.put("e", "2.7182")
+                tx.commit()
+            }
 
+            chronoStore.transaction { tx1 ->
+                chronoStore.transaction { tx2 ->
+
+                    tx1.store("data").put("foo", "bar")
+                    tx1.store("data").delete("john")
+                    tx1.store("math").put("zero", "0")
+                    tx1.store("math").delete("pi")
+
+                    tx1.commit()
+
+                    // tx2 should not see the changes performed by tx1
+                    expectThat(tx2) {
+                        get { this.store("data").getEntriesOnLatestAscending().asStrings() }.containsExactly(
+                            "hello" to "world",
+                            "john" to "doe"
+                        )
+
+                        get { this.store("math").getEntriesOnLatestAscending().asStrings() }.containsExactly(
+                            "e" to "2.7182",
+                            "pi" to "3.14145"
+                        )
+                    }
+                }
+            }
+
+        }
     }
 
     private fun createKey(key: Int): String {
         return "key#${key.toString().padStart(6, '0')}"
+    }
+
+    private fun List<Pair<Bytes, Bytes>>.asStrings(): List<Pair<String, String>> {
+        return this.map { it.first.asString() to it.second.asString() }
     }
 }

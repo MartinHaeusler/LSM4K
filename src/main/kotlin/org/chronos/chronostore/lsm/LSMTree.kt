@@ -151,10 +151,10 @@ class LSMTree(
                 )
             }
             val fileCursors = this.fileList.asReversed().map { this.cursorManager.openCursorOn(transaction, it) }.toMutableList()
-            if(fileCursors.isEmpty()){
+            if (fileCursors.isEmpty()) {
                 return inMemoryCursor
             }
-            if(inMemoryCursor !is EmptyCursor){
+            if (inMemoryCursor !is EmptyCursor) {
                 fileCursors.add(inMemoryCursor)
             }
             val cursor = fileCursors.reduce { l, r -> OverlayCursor(l, r) }
@@ -209,7 +209,12 @@ class LSMTree(
                     this.inMemoryTree.toMap()
                 }
             }
-            val newFileIndex = this.fileList.lastOrNull()?.index ?: 0
+            val lastFileIndex = this.fileList.lastOrNull()?.index
+            val newFileIndex = if (lastFileIndex == null) {
+                0
+            } else {
+                lastFileIndex + 1
+            }
             val file = this.directory.file("${newFileIndex}${FILE_EXTENSION}")
             monitor.subTask(0.8, "Writing File") {
                 file.deleteOverWriterFileIfExists()

@@ -520,6 +520,126 @@ interface Cursor<K, V> : AutoCloseable {
     }
 
     /**
+     * Creates a list of all keys in this cursor, in ascending order.
+     *
+     * The cursor will be automatically positioned at the beginning
+     * of the store, and a full iteration will be performed. Please
+     * note that the cursor will be positioned at the last entry of
+     * the store after this operation concludes. If the store was
+     * empty, the cursor position will be invalid instead.
+     *
+     * @return The full list of keys in this cursor, in ascending order.
+     */
+    fun listAllKeysAscending(): List<K> {
+        if (!this.first()) {
+            this.invalidatePosition()
+            return emptyList()
+        }
+        val sequence = this.ascendingKeySequenceFromHere(includeCurrent = true)
+        return sequence.toList()
+    }
+
+    /**
+     * Creates a list of all keys in this cursor, in descending order.
+     *
+     * The cursor will be automatically positioned at the end
+     * of the store, and a full backwards iteration will be performed. Please
+     * note that the cursor will be positioned at the first entry of
+     * the store after this operation concludes. If the store was
+     * empty, the cursor position will be invalid instead.
+     *
+     * @return The full list of keys in this cursor, in descending order.
+     */
+    fun listAllKeysDescending(): List<K> {
+        if(!this.last()){
+            this.invalidatePosition()
+            return emptyList()
+        }
+        val sequence = this.descendingKeySequenceFromHere(includeCurrent = true)
+        return sequence.toList()
+    }
+
+    /**
+     * Creates a list of all values in this cursor, in ascending key order.
+     *
+     * The cursor will be automatically positioned at the beginning
+     * of the store, and a full iteration will be performed. Please
+     * note that the cursor will be positioned at the last entry of
+     * the store after this operation concludes. If the store was
+     * empty, the cursor position will be invalid instead.
+     *
+     * @return The full list of values in this cursor, in ascending key order.
+     */
+    fun listAllValuesAscending(): List<V> {
+        if (!this.first()) {
+            this.invalidatePosition()
+            return emptyList()
+        }
+        val sequence = this.ascendingValueSequenceFromHere(includeCurrent = true)
+        return sequence.toList()
+    }
+
+    /**
+     * Creates a list of all values in this cursor, in descending key order.
+     *
+     * The cursor will be automatically positioned at the end
+     * of the store, and a full backwards iteration will be performed. Please
+     * note that the cursor will be positioned at the first entry of
+     * the store after this operation concludes. If the store was
+     * empty, the cursor position will be invalid instead.
+     *
+     * @return The full list of values in this cursor, in descending key order.
+     */
+    fun listAllValuesDescending(): List<V> {
+        if(!this.last()){
+            this.invalidatePosition()
+            return emptyList()
+        }
+        val sequence = this.descendingValueSequenceFromHere(includeCurrent = true)
+        return sequence.toList()
+    }
+
+    /**
+     * Creates a list of all entries in this cursor, in ascending key order.
+     *
+     * The cursor will be automatically positioned at the beginning
+     * of the store, and a full iteration will be performed. Please
+     * note that the cursor will be positioned at the last entry of
+     * the store after this operation concludes. If the store was
+     * empty, the cursor position will be invalid instead.
+     *
+     * @return The full list of entries in this cursor, in ascending key order.
+     */
+    fun listAllEntriesAscending(): List<Pair<K, V>> {
+        if (!this.first()) {
+            this.invalidatePosition()
+            return emptyList()
+        }
+        val sequence = this.ascendingEntrySequenceFromHere(includeCurrent = true)
+        return sequence.toList()
+    }
+
+    /**
+     * Creates a list of all entries in this cursor, in descending key order.
+     *
+     * The cursor will be automatically positioned at the end
+     * of the store, and a full backwards iteration will be performed. Please
+     * note that the cursor will be positioned at the first entry of
+     * the store after this operation concludes. If the store was
+     * empty, the cursor position will be invalid instead.
+     *
+     * @return The full list of entries in this cursor, in descending key order.
+     */
+    fun listAllEntriesDescending(): List<Pair<K, V>> {
+        if(!this.last()){
+            this.invalidatePosition()
+            return emptyList()
+        }
+        val sequence = this.descendingEntrySequenceFromHere(includeCurrent = true)
+        return sequence.toList()
+    }
+
+    /**
      * Creates a view on this cursor where the keys are mapped according to the given functions.
      *
      * The [map] function must be **bijective** and [mapInverse] must be its inverse.

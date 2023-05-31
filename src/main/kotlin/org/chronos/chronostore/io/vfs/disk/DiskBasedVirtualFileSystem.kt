@@ -2,6 +2,7 @@ package org.chronos.chronostore.io.vfs.disk
 
 import org.chronos.chronostore.io.vfs.VirtualDirectory
 import org.chronos.chronostore.io.vfs.VirtualFileSystem
+import org.chronos.chronostore.io.vfs.VirtualFileSystemElement
 import org.chronos.chronostore.io.vfs.VirtualReadWriteFile
 import java.io.File
 
@@ -16,6 +17,17 @@ class DiskBasedVirtualFileSystem(
 
     override val rootPath: String
         get() = this.rootDir.canonicalPath
+
+    override fun listRootLevelElements(): List<VirtualFileSystemElement> {
+        val files = this.rootDir.listFiles() ?: emptyArray()
+        return files.map {
+            if (it.isFile) {
+                DiskBasedVirtualReadWriteFile(parent = null, it)
+            } else {
+                DiskBasedVirtualDirectory(parent = null, it)
+            }
+        }
+    }
 
     override fun directory(name: String): VirtualDirectory {
         return DiskBasedVirtualDirectory(parent = null, File(this.rootDir, name))

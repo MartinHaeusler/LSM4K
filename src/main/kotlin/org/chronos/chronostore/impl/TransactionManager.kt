@@ -88,6 +88,7 @@ class TransactionManager(
                     (store as StoreImpl).tree.put(commands)
                 }
             }
+            println("Performed commit of transaction. Transaction timestamp: ${tx.lastVisibleTimestamp}, commit timestamp: ${commitTimestamp}.")
             this.closeTransaction(tx)
             return commitTimestamp
         }

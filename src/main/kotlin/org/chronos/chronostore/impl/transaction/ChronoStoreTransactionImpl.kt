@@ -34,6 +34,10 @@ class ChronoStoreTransactionImpl(
     @Transient
     override var isOpen: Boolean = true
 
+    init {
+        println("Started transaction at timestamp ${lastVisibleTimestamp}.")
+    }
+
     override fun storeOrNull(name: String): TransactionBoundStore? {
         check(this.isOpen) { TX_ALREADY_CLOSED }
         val cachedStore = this.openStoresByName[name]
@@ -155,6 +159,7 @@ class ChronoStoreTransactionImpl(
         }
 
         override fun openCursorOnLatest(): Cursor<Bytes, Bytes> {
+            println("Opening versioning cursor on store '${this.store.name}' at LATEST timestamp '${this@ChronoStoreTransactionImpl.lastVisibleTimestamp}'.")
             val treeCursor = (this.store as StoreImpl).tree.openCursor(this@ChronoStoreTransactionImpl)
             val versioningCursor = VersioningCursor(
                 treeCursor = treeCursor,
@@ -183,8 +188,13 @@ class ChronoStoreTransactionImpl(
 
         override fun openCursorAtTimestamp(timestamp: Timestamp): Cursor<Bytes, Bytes> {
             val now = this@ChronoStoreTransactionImpl.lastVisibleTimestamp
+            require(timestamp in (0..now)) {
+                "The given timestamp (${timestamp}) is out of range. Expected a positive" +
+                    " number less than or equal to the transaction timestamp (${now})!"
+            }
+            // transient modifications are ignored on historical queries.
             val treeCursor = (this.store as StoreImpl).tree.openCursor(this@ChronoStoreTransactionImpl)
-            val versioningCursor = VersioningCursor(treeCursor, now, false)
+            val versioningCursor = VersioningCursor(treeCursor, timestamp, false)
             return versioningCursor.mapValue { it.value }
         }
 

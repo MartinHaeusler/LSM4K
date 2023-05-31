@@ -2,6 +2,7 @@ package org.chronos.chronostore.io.vfs.inmemory
 
 import org.chronos.chronostore.io.vfs.VirtualDirectory
 import org.chronos.chronostore.io.vfs.VirtualFileSystem
+import org.chronos.chronostore.io.vfs.VirtualFileSystemElement
 import org.chronos.chronostore.io.vfs.VirtualReadWriteFile
 import org.chronos.chronostore.util.Bytes
 import org.chronos.chronostore.util.Bytes.Companion.write
@@ -21,7 +22,7 @@ class InMemoryVirtualFileSystem : VirtualFileSystem {
     }
 
     /** Map from PATH to children FILENAMEs */
-    private val fileTree: MutableMap<String?, MutableSet<String>> = mutableMapOf()
+    private val fileTree: MutableMap<String, MutableSet<String>> = mutableMapOf()
 
     /** Map from PATH to file content */
     private val fileContents: MutableMap<String, Bytes> = mutableMapOf()
@@ -59,6 +60,17 @@ class InMemoryVirtualFileSystem : VirtualFileSystem {
             parentDir = InMemoryVirtualDirectory(parentDir, pathElements[index])
         }
         return InMemoryVirtualReadWriteFile(parentDir, this, pathElements.last())
+    }
+
+    override fun listRootLevelElements(): List<VirtualFileSystemElement> {
+        val rootFiles = (this.fileTree[PATH_PREFIX] ?: emptySet()).map { this.file(it) }
+        val rootDirs = this.fileTree.keys.asSequence()
+            .filter { it != PATH_PREFIX }
+            .map { it.removePrefix(PATH_PREFIX) }
+            .filter { !it.contains(File.separator) }
+            .map { this.directory(it) }
+            .toList()
+        return rootFiles + rootDirs
     }
 
     fun getFileLength(path: String): Long {
