@@ -14,6 +14,9 @@ class DiskBasedVirtualFileSystem(
         require(this.rootDir.isDirectory) { "Argument 'rootDir' refers to an element which is not a directory: ${rootDir.absolutePath}" }
     }
 
+    override val rootPath: String
+        get() = this.rootDir.canonicalPath
+
     override fun directory(name: String): VirtualDirectory {
         return DiskBasedVirtualDirectory(parent = null, File(this.rootDir, name))
     }

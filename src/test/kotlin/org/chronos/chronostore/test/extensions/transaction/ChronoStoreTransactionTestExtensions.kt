@@ -10,6 +10,10 @@ object ChronoStoreTransactionTestExtensions {
         this.put(Bytes(key), Bytes(value))
     }
 
+    fun TransactionBoundStore.delete(key: String) {
+        this.delete(Bytes(key))
+    }
+
     fun TransactionBoundStore.getLatest(key: String): Bytes? {
         return this.getLatest(Bytes(key))
     }

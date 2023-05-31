@@ -37,4 +37,6 @@ interface ChronoStore : AutoCloseable {
         return this.beginTransaction().use(action)
     }
 
+    val rootPath: String
+
 }

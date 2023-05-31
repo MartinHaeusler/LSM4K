@@ -292,6 +292,9 @@ class LSMTree(
                     val commands = Iterators.mergeSorted(iterators, Comparator.naturalOrder())
                     // ensure ordering and remove duplicates (which is cheap and lazy for ordered iterators)
                     val iterator = commands.checkOrdered(strict = false).orderedDistinct()
+
+                    // TODO: for non-versioned trees, drop old versions of the keys during the merge (PeekingIterator helps here).
+
                     ChronoStoreFileWriter(
                         outputStream = overWriter.outputStream.unclosable().buffered(),
                         settings = this.newFileSettings,

@@ -132,6 +132,8 @@ class ChronoStoreImpl(
         return this.transactionManager.createNewTransaction()
     }
 
+    override val rootPath: String
+        get() = this.vfs.rootPath
 
     override fun close() {
         if (!isOpen) {

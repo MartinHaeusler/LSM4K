@@ -3,6 +3,7 @@ package org.chronos.chronostore.test.cases.api
 import org.chronos.chronostore.api.ChronoStoreConfiguration
 import org.chronos.chronostore.api.ChronoStoreTransaction
 import org.chronos.chronostore.test.extensions.transaction.ChronoStoreTransactionTestExtensions.allEntriesOnLatest
+import org.chronos.chronostore.test.extensions.transaction.ChronoStoreTransactionTestExtensions.delete
 import org.chronos.chronostore.test.extensions.transaction.ChronoStoreTransactionTestExtensions.getLatest
 import org.chronos.chronostore.test.extensions.transaction.ChronoStoreTransactionTestExtensions.put
 import org.chronos.chronostore.test.util.ChronoStoreMode
@@ -10,8 +11,6 @@ import org.chronos.chronostore.test.util.ChronoStoreTest
 import org.chronos.chronostore.util.Bytes
 import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.fail
-import org.slf4j.Logger
-import org.slf4j.LoggerFactory
 import strikt.api.expectThat
 import strikt.assertions.*
 import kotlin.math.min
@@ -140,7 +139,7 @@ class StoreManagementTest {
         fun assertListEntries(list: List<Pair<Bytes, Bytes>>) {
             for (index in 0 until min(list.size, numberOfEntries)) {
                 val entry = list[index]
-                Assertions.assertEquals("key#${index.toString().padStart(6, '0')}", entry.first.asString())
+                Assertions.assertEquals(createKey(index), entry.first.asString())
                 Assertions.assertEquals("value#${index}", entry.second.asString())
             }
             if(list.size != numberOfEntries){
@@ -156,7 +155,7 @@ class StoreManagementTest {
             chronoStore.transaction { tx ->
                 val data = tx.createNewStore("data", versioned = true)
                 repeat(numberOfEntries) { i ->
-                    data.put("key#${i.toString().padStart(6, '0')}", "value#${i}")
+                    data.put(createKey(i), "value#${i}")
                 }
                 tx.commit()
             }
@@ -195,4 +194,61 @@ class StoreManagementTest {
         }
     }
 
+    @ChronoStoreTest
+    fun canIterateOverAllVersionsWithMultipleFiles(mode: ChronoStoreMode){
+        val config = ChronoStoreConfiguration()
+        // disable flushing and merging, we will do it manually in this test
+        config.maxInMemoryTreeSizeInBytes = Long.MAX_VALUE
+        config.mergeIntervalMillis = Long.MAX_VALUE
+
+        val numberOfEntries = 1000
+        mode.withChronoStore(config) { chronoStore ->
+            chronoStore.transaction { tx ->
+                val data = tx.createNewStore("data", versioned = true)
+                repeat(numberOfEntries) { i ->
+                    data.put(createKey(i), "a")
+                }
+                tx.commit()
+            }
+            chronoStore.transaction { tx ->
+                val data = tx.store("data")
+                for(i in (0 until numberOfEntries step 3)) {
+                    data.put(createKey(i), "b")
+                }
+                tx.commit()
+            }
+
+            // flush the in-memory stores to the VFS
+            chronoStore.mergeService.flushAllInMemoryStoresToDisk()
+
+            chronoStore.transaction { tx ->
+                val data = tx.store("data")
+                for(i in (0 until numberOfEntries step 5)) {
+                    data.delete(createKey(i))
+                }
+                tx.commit()
+            }
+
+            // flush the in-memory stores to the VFS
+            chronoStore.mergeService.flushAllInMemoryStoresToDisk()
+
+            chronoStore.transaction { tx ->
+                val data = tx.store("data")
+                for(i in (0 until numberOfEntries step 7)) {
+                    data.put(createKey(i), "c")
+                }
+                tx.commit()
+            }
+
+        }
+    }
+
+    @ChronoStoreTest
+    fun canIsolateTransactionsFromOneAnother(mode: ChronoStoreMode){
+
+    }
+
+    private fun createKey(key: Int): String {
+        return "key#${key.toString().padStart(6, '0')}"
+    }
 }

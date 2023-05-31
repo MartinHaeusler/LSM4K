@@ -1,7 +1,6 @@
 package org.chronos.chronostore.io.vfs.inmemory
 
 import org.chronos.chronostore.io.vfs.VirtualDirectory
-import org.chronos.chronostore.io.vfs.VirtualFile
 import org.chronos.chronostore.io.vfs.VirtualFileSystem
 import org.chronos.chronostore.io.vfs.VirtualReadWriteFile
 import org.chronos.chronostore.util.Bytes
@@ -29,9 +28,11 @@ class InMemoryVirtualFileSystem : VirtualFileSystem {
 
     private val fileSystemLock = ReentrantLock(true)
 
+    override val rootPath: String
+        get() = PATH_PREFIX
 
-    override fun directory(path: String): VirtualDirectory {
-        val pathElements = path.split(File.separator)
+    override fun directory(name: String): VirtualDirectory {
+        val pathElements = name.split(File.separator)
 
         val rootDir = InMemoryVirtualDirectory(this, pathElements.first())
         if (pathElements.size == 1) {
@@ -45,8 +46,8 @@ class InMemoryVirtualFileSystem : VirtualFileSystem {
         return parentDir
     }
 
-    override fun file(path: String): VirtualReadWriteFile {
-        val pathElements = path.split(File.separator)
+    override fun file(name: String): VirtualReadWriteFile {
+        val pathElements = name.split(File.separator)
 
         val rootDir = InMemoryVirtualDirectory(this, pathElements.first())
         if (pathElements.size == 1) {
