@@ -4,11 +4,18 @@ import org.chronos.chronostore.util.Timestamp
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 
-class TimeManager {
+class TimeManager(
+    startTimestamp: Timestamp
+) {
 
     private var lastReturnedTimestamp = -1L
 
     private val lock = ReentrantLock(true)
+
+    init {
+        require(startTimestamp >= 0) { "Argument 'startTimestamp' (${startTimestamp}) must not be negative!" }
+        this.lastReturnedTimestamp = startTimestamp
+    }
 
     /**
      * Gets a wall-clock timestamp which is unique (i.e. each timestamp is only returned once by this function).
@@ -28,6 +35,10 @@ class TimeManager {
             lastReturnedTimestamp = time
             return time
         }
+    }
+
+    fun getNow(): Timestamp {
+        return this.lastReturnedTimestamp
     }
 
 }

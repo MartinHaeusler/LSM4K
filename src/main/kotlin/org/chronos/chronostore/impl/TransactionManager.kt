@@ -1,5 +1,6 @@
 package org.chronos.chronostore.impl
 
+import mu.KotlinLogging
 import org.chronos.chronostore.api.ChronoStoreTransaction
 import org.chronos.chronostore.api.StoreManager
 import org.chronos.chronostore.impl.store.StoreImpl
@@ -24,6 +25,8 @@ class TransactionManager(
 
         private const val DB_ALREADY_CLOSED = "This Database has already been closed."
 
+        private val log = KotlinLogging.logger {}
+
     }
 
     private val openTransactionsLock = ReentrantReadWriteLock(true)
@@ -39,7 +42,7 @@ class TransactionManager(
         this.openTransactionsLock.write {
             val newTx = ChronoStoreTransactionImpl(
                 id = TransactionId.randomUUID(),
-                lastVisibleTimestamp = System.currentTimeMillis(),
+                lastVisibleTimestamp = this.timeManager.getNow(),
                 storeManager = this.storeManager,
                 transactionManager = this,
             )
@@ -88,7 +91,7 @@ class TransactionManager(
                     (store as StoreImpl).tree.put(commands)
                 }
             }
-            println("Performed commit of transaction. Transaction timestamp: ${tx.lastVisibleTimestamp}, commit timestamp: ${commitTimestamp}.")
+            log.debug { "Performed commit of transaction ${tx.id}. Transaction timestamp: ${tx.lastVisibleTimestamp}, commit timestamp: ${commitTimestamp}." }
             this.closeTransaction(tx)
             return commitTimestamp
         }

@@ -208,7 +208,6 @@ class LsmTree private constructor(
 
     override fun put(key: Bytes, value: Bytes) {
         check(this.isUsable)
-        println("PUT::Key=${key}, Value=${value}")
         val writesBlocked = this.lock.write {
             val pendingWrites = checkNotNull(this.pendingWrites) {
                 "This LSM-Tree is already closed."

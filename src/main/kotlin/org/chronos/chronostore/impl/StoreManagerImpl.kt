@@ -29,7 +29,6 @@ import kotlin.concurrent.write
 class StoreManagerImpl(
     private val vfs: VirtualFileSystem,
     private val blockCacheManager: BlockCacheManager,
-    private val timeManager: TimeManager,
     private val blockReadMode: BlockReadMode,
     private val mergeService: MergeService,
     private val driverFactory: RandomFileAccessDriverFactory,
@@ -51,9 +50,9 @@ class StoreManagerImpl(
     private val storesByName = mutableMapOf<String, Store>()
     private val lock = ReentrantReadWriteLock(true)
 
-
     fun initialize(isEmptyDatabase: Boolean) {
         this.lock.write {
+            check(!this.initialized) { "This StoreManager has already been initialized!" }
             if (isEmptyDatabase) {
                 check(!this.storeInfoFile.exists()) {
                     "An empty database is being created, but the store info file exists: ${storeInfoFile.path}"
@@ -106,8 +105,10 @@ class StoreManagerImpl(
         }
     }
 
-    override fun createNewStore(transaction: ChronoStoreTransaction, name: String, versioned: Boolean): Store {
+    override fun createNewStore(transaction: ChronoStoreTransaction, name: String, versioned: Boolean, validFrom: Timestamp): Store {
         check(this.isOpen) { DB_ALREADY_CLOSED }
+        check(transaction.isOpen) { "Argument 'transaction' must refer to an open transaction, but the given transaction has already been closed!" }
+        require(validFrom >= transaction.lastVisibleTimestamp) { "Argument 'validFrom' (${validFrom}) must not be smaller than the transaction timestamp (${transaction.lastVisibleTimestamp})!" }
         this.lock.write {
             assertInitialized()
             if (this.storesByName.containsKey(name)) {
@@ -126,7 +127,7 @@ class StoreManagerImpl(
                 storeId = storeId,
                 storeName = name,
                 retainOldVersions = versioned,
-                validFrom = this.timeManager.getUniqueWallClockTimestamp(),
+                validFrom = validFrom,
                 validTo = null,
                 createdByTransactionId = transaction.id
             )

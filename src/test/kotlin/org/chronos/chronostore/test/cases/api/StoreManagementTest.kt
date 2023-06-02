@@ -452,7 +452,7 @@ class StoreManagementTest {
 
                         get { this.store("math").getEntriesOnLatestAscending().asStrings() }.containsExactly(
                             "e" to "2.7182",
-                            "pi" to "3.14145"
+                            "pi" to "3.1415"
                         )
                     }
                 }

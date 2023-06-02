@@ -3,6 +3,7 @@ package org.chronos.chronostore.api
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor
 import org.chronos.chronostore.lsm.LSMTree
 import org.chronos.chronostore.util.StoreId
+import org.chronos.chronostore.util.Timestamp
 
 interface StoreManager {
 
@@ -28,7 +29,7 @@ interface StoreManager {
         return this.getStoreByIdOrNull(transaction, storeId) != null
     }
 
-    fun createNewStore(transaction: ChronoStoreTransaction, name: String, versioned: Boolean): Store
+    fun createNewStore(transaction: ChronoStoreTransaction, name: String, versioned: Boolean, validFrom: Timestamp): Store
 
     fun renameStore(transaction: ChronoStoreTransaction, oldName: String, newName: String): Boolean
 

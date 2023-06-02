@@ -1,5 +1,6 @@
 package org.chronos.chronostore.impl.transaction
 
+import mu.KotlinLogging
 import org.chronos.chronostore.api.ChronoStoreTransaction
 import org.chronos.chronostore.api.Store
 import org.chronos.chronostore.api.StoreManager
@@ -26,6 +27,8 @@ class ChronoStoreTransactionImpl(
 
         private const val TX_ALREADY_CLOSED = "The transaction has already been closed."
 
+        private val log = KotlinLogging.logger {}
+
     }
 
     private val openStoresByName = mutableMapOf<String, TransactionBoundStoreImpl>()
@@ -35,7 +38,7 @@ class ChronoStoreTransactionImpl(
     override var isOpen: Boolean = true
 
     init {
-        println("Started transaction at timestamp ${lastVisibleTimestamp}.")
+        log.debug { "Started transaction ${this.id} at timestamp ${lastVisibleTimestamp}." }
     }
 
     override fun storeOrNull(name: String): TransactionBoundStore? {
@@ -64,7 +67,7 @@ class ChronoStoreTransactionImpl(
 
     override fun createNewStore(name: String, versioned: Boolean): TransactionBoundStore {
         check(this.isOpen) { TX_ALREADY_CLOSED }
-        val newStore = this.storeManager.createNewStore(this, name, versioned)
+        val newStore = this.storeManager.createNewStore(this, name, versioned, this.transactionManager.timeManager.getUniqueWallClockTimestamp())
         return this.bindStore(newStore)
     }
 
@@ -110,6 +113,7 @@ class ChronoStoreTransactionImpl(
             return
         }
         this.isOpen = false
+        log.debug { "Rolled back transaction ${this.id}." }
     }
 
     private fun bindStore(store: Store): TransactionBoundStoreImpl {
@@ -159,7 +163,6 @@ class ChronoStoreTransactionImpl(
         }
 
         override fun openCursorOnLatest(): Cursor<Bytes, Bytes> {
-            println("Opening versioning cursor on store '${this.store.name}' at LATEST timestamp '${this@ChronoStoreTransactionImpl.lastVisibleTimestamp}'.")
             val treeCursor = (this.store as StoreImpl).tree.openCursor(this@ChronoStoreTransactionImpl)
             val versioningCursor = VersioningCursor(
                 treeCursor = treeCursor,
