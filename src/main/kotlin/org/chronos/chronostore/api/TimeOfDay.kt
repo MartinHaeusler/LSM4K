@@ -154,4 +154,15 @@ class TimeOfDay private constructor(
                 this.millisecond
         }
 
+    val nextOccurrence: Long
+        get() {
+            val timestampToday = timestampToday
+            val startTimestamp = if (timestampToday < System.currentTimeMillis()) {
+                timestampToday + TimeUnit.HOURS.toMillis(24)
+            } else {
+                timestampToday
+            }
+            return startTimestamp - System.currentTimeMillis()
+        }
+
 }

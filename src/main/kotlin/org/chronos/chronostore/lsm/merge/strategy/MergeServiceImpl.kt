@@ -8,11 +8,11 @@ import org.chronos.chronostore.async.taskmonitor.TaskMonitor
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.forEachWithMonitor
 import org.chronos.chronostore.lsm.event.InMemoryLsmInsertEvent
 import org.chronos.chronostore.lsm.event.LsmCursorClosedEvent
+import org.chronos.chronostore.lsm.garbagecollector.tasks.GarbageCollectorTask
 import org.chronos.chronostore.lsm.merge.tasks.CompactionTask
 import org.chronos.chronostore.lsm.merge.tasks.FlushInMemoryTreeToDiskTask
 import org.chronos.chronostore.lsm.merge.tasks.WALCompactionTask
 import org.chronos.chronostore.wal.WriteAheadLog
-import java.util.concurrent.TimeUnit
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -31,6 +31,7 @@ class MergeServiceImpl(
     private lateinit var compactionTask: CompactionTask
     private lateinit var writeAheadLog: WriteAheadLog
     private lateinit var walCompactionTask: WALCompactionTask
+    private lateinit var garbageCollectorTask: GarbageCollectorTask
     private lateinit var storeManager: StoreManager
 
     override fun initialize(storeManager: StoreManager, writeAheadLog: WriteAheadLog) {
@@ -42,24 +43,24 @@ class MergeServiceImpl(
         } else {
             log.warn { "Compaction is disabled, because the merge interval is <= 0!" }
         }
-        this.walCompactionTask = WALCompactionTask(this.writeAheadLog, storeManager)
 
+        this.walCompactionTask = WALCompactionTask(this.writeAheadLog, storeManager)
         val walCompactionTimeOfDay = this.storeConfig.writeAheadLogCompactionTimeOfDay
         if (walCompactionTimeOfDay != null) {
-            val timestampToday = walCompactionTimeOfDay.timestampToday
-            val startTimestamp = if (timestampToday < System.currentTimeMillis()) {
-                timestampToday + TimeUnit.HOURS.toMillis(24)
-            } else {
-                timestampToday
-            }
-            val startDelay = startTimestamp - System.currentTimeMillis()
+            val startDelay = walCompactionTimeOfDay.nextOccurrence
+            this.taskManager.scheduleRecurringWithFixedRate(this.walCompactionTask, startDelay.milliseconds, 24.hours)
+        }
+
+        this.garbageCollectorTask = GarbageCollectorTask(this.storeManager)
+        val garbageCollectionTimeOfDay = this.storeConfig.garbageCollectionTimeOfDay
+        if(garbageCollectionTimeOfDay != null){
+            val startDelay = garbageCollectionTimeOfDay.nextOccurrence
             this.taskManager.scheduleRecurringWithFixedRate(this.walCompactionTask, startDelay.milliseconds, 24.hours)
         }
 
         this.storeManager = storeManager
 
         this.initialized = true
-        // TODO: add cleanup task which calls LSMTree.performGarbageCollection
     }
 
     override fun mergeNow(major: Boolean, taskMonitor: TaskMonitor) {

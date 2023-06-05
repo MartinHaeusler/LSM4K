@@ -38,7 +38,20 @@ class ChronoStoreConfiguration {
      * can lead to very large WAL files, slow database restart/recovery and increased
      * disk footprint!
      */
+    // TODO[Feature]: use cron expression instead
     var writeAheadLogCompactionTimeOfDay: TimeOfDay? = TimeOfDay.parse("00:00")
+
+    /**
+     * The time of day at which old store files should be garbage collected.
+     *
+     * This only affects on-disk files and has no impact on in-memory data structures or caches.
+     * This process happens once per day, at the specified time-of-day.
+     *
+     * Use `null` to disable garbage collection. **WARNING:** disabling garbage compaction
+     * can lead to a lot of unused files and increased disk footprint!
+     */
+    // TODO[Feature]: use cron expression instead
+    var garbageCollectionTimeOfDay: TimeOfDay? = TimeOfDay.parse("00:00")
 
     /**
      * The maximum size of the block cache to use, in bytes.

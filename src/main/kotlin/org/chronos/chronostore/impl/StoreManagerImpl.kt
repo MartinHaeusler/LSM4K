@@ -3,6 +3,7 @@ package org.chronos.chronostore.impl
 import org.chronos.chronostore.api.ChronoStoreTransaction
 import org.chronos.chronostore.api.Store
 import org.chronos.chronostore.api.StoreManager
+import org.chronos.chronostore.api.SystemStore
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.forEachWithMonitor
 import org.chronos.chronostore.impl.store.StoreImpl
@@ -81,6 +82,11 @@ class StoreManagerImpl(
                     this.registerStoreInCaches(store)
                 }
             }
+            // ensure that the system stores exist
+            for (systemStore in SystemStore.values()) {
+                this.ensureSystemStoreExists(systemStore)
+            }
+
             this.initialized = true
         }
     }
@@ -111,50 +117,89 @@ class StoreManagerImpl(
         require(validFrom >= transaction.lastVisibleTimestamp) { "Argument 'validFrom' (${validFrom}) must not be smaller than the transaction timestamp (${transaction.lastVisibleTimestamp})!" }
         this.lock.write {
             assertInitialized()
-            if (this.storesByName.containsKey(name)) {
-                throw IllegalArgumentException("There already exists a store with name '${name}'!")
-            }
+            require(!name.startsWith(SystemStore.NAME_PREFIX)) { "Store names must not start with '${SystemStore.NAME_PREFIX}' (reserved for internal purposes)!" }
+            require(!this.storesByName.containsKey(name)) { "There already exists a store with name '${name}'!" }
             val storeId = UUID.randomUUID()
-            // do a small probing by creating the directory, but don't do anything with it just yet.
-            // We still have to update the storeInfo.json first before going ahead. Creating the
-            // directory first helps us sort out file system issues (invalid names, path too long, folder permission issues, etc.)
-            val directory = vfs.directory(STORE_DIR_PREFIX + storeId)
-            directory.mkdirs()
+            val transactionId = transaction.id
+            return createAndRegisterStoreInternal(storeId, name, versioned, validFrom, transactionId)
+        }
+    }
 
-            val storeInfoList = mutableListOf<StoreInfo>()
-            this.storesById.values.asSequence().map { it.storeInfo }.toCollection(storeInfoList)
-            val newStoreInfo = StoreInfo(
-                storeId = storeId,
-                storeName = name,
-                retainOldVersions = versioned,
-                validFrom = validFrom,
-                validTo = null,
-                createdByTransactionId = transaction.id
+    private fun createAndRegisterStoreInternal(
+        storeId: UUID,
+        name: String,
+        versioned: Boolean,
+        validFrom: Timestamp,
+        transactionId: TransactionId
+    ): StoreImpl {
+        // do a small probing by creating the directory, but don't do anything with it just yet.
+        // We still have to update the storeInfo.json first before going ahead. Creating the
+        // directory first helps us sort out file system issues (invalid names, path too long, folder permission issues, etc.)
+        val directory = vfs.directory(STORE_DIR_PREFIX + storeId)
+        directory.mkdirs()
+
+        val storeInfoList = mutableListOf<StoreInfo>()
+        this.storesById.values.asSequence().map { it.storeInfo }.toCollection(storeInfoList)
+        val newStoreInfo = StoreInfo(
+            storeId = storeId,
+            storeName = name,
+            retainOldVersions = versioned,
+            validFrom = validFrom,
+            validTo = null,
+            createdByTransactionId = transactionId
+        )
+        storeInfoList.add(newStoreInfo)
+
+        // first, write the store info into our JSON file. This will ensure that
+        // the store still exists upon the next database restart.
+        this.overwriteStoreInfoJson(storeInfoList)
+
+        // then, create the store itself
+        val store = StoreImpl(
+            id = newStoreInfo.storeId,
+            name = newStoreInfo.storeName,
+            retainOldVersions = newStoreInfo.retainOldVersions,
+            validFrom = newStoreInfo.validFrom,
+            validTo = newStoreInfo.validTo,
+            createdByTransactionId = transactionId,
+            directory = directory,
+            blockReadMode = this.blockReadMode,
+            mergeService = this.mergeService,
+            blockCache = this.blockCacheManager.getBlockCache(storeId),
+            driverFactory = this.driverFactory,
+            newFileSettings = this.newFileSettings,
+        )
+
+        this.registerStoreInCaches(store)
+        return store
+    }
+
+    override fun getSystemStore(systemStore: SystemStore): Store {
+        check(this.isOpen) { DB_ALREADY_CLOSED }
+        this.lock.read {
+            assertInitialized()
+
+            return this.storesById[systemStore.id]
+                ?: throw IllegalStateException("System Store '${systemStore}' was not initialized!")
+        }
+    }
+
+    private fun ensureSystemStoreExists(systemStore: SystemStore): Store {
+        check(this.isOpen) { DB_ALREADY_CLOSED }
+        this.lock.write {
+            assertInitialized()
+
+            val existingStore = this.storesById[systemStore.id]
+            if (existingStore != null) {
+                return existingStore
+            }
+            return this.createAndRegisterStoreInternal(
+                storeId = systemStore.id,
+                name = systemStore.storeName,
+                versioned = systemStore.isVersioned,
+                validFrom = 0L,
+                transactionId = TransactionId.fromString("11111111-1111-1111-2222-000000000001")
             )
-            storeInfoList.add(newStoreInfo)
-
-            // first, write the store info into our JSON file. This will ensure that
-            // the store still exists upon the next database restart.
-            this.overwriteStoreInfoJson(storeInfoList)
-
-            // then, create the store itself
-            val store = StoreImpl(
-                id = newStoreInfo.storeId,
-                name = newStoreInfo.storeName,
-                retainOldVersions = newStoreInfo.retainOldVersions,
-                validFrom = newStoreInfo.validFrom,
-                validTo = newStoreInfo.validTo,
-                createdByTransactionId = transaction.id,
-                directory = directory,
-                blockReadMode = this.blockReadMode,
-                mergeService = this.mergeService,
-                blockCache = this.blockCacheManager.getBlockCache(storeId),
-                driverFactory = this.driverFactory,
-                newFileSettings = this.newFileSettings,
-            )
-
-            this.registerStoreInCaches(store)
-            return store
         }
     }
 

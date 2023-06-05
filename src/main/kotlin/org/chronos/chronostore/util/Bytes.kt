@@ -21,6 +21,10 @@ class Bytes(
 
         val EMPTY: Bytes = Bytes(ByteArray(0))
 
+        val TRUE: Bytes = Bytes(byteArrayOf(1))
+
+        val FALSE: Bytes = Bytes(byteArrayOf(0))
+
         fun formatSize(size: Long): String {
             var scaled = size.toDouble()
             val iter = SIZE_SUFFIXES.iterator()
@@ -67,6 +71,11 @@ class Bytes(
             }
             return Bytes(algorithm.decompress(this.array))
         }
+
+        fun OutputStream.writeBytes(bytes: Bytes) {
+            this.write(bytes.array)
+        }
+
     }
 
     constructor(string: String) : this(string.toByteArray())

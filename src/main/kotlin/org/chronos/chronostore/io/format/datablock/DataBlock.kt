@@ -141,7 +141,7 @@ interface DataBlock {
             blockStartOffset: Long,
         ): DataBlock {
             require(compressionAlgorithm == CompressionAlgorithm.NONE) {
-                // TODO: check HBase implementation about details how to read partially from a compressed byte array
+                // TODO[Performance]: check HBase implementation about details how to read partially from a compressed byte array
                 "Disk-based data blocks do not support compression at the moment."
             }
             val magicBytes = Bytes(inputStream.readNBytes(ChronoStoreFileFormat.BLOCK_MAGIC_BYTES.size))

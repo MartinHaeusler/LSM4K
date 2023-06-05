@@ -47,4 +47,6 @@ interface StoreManager {
 
     fun performGarbageCollection(monitor: TaskMonitor)
 
+    fun getSystemStore(systemStore: SystemStore): Store
+
 }

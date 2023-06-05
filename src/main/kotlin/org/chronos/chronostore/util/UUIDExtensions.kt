@@ -7,10 +7,14 @@ import java.util.*
 object UUIDExtensions {
 
     fun UUID.toBytes(): Bytes {
+        return Bytes(this.toByteArray())
+    }
+
+    fun UUID.toByteArray(): ByteArray {
         val bb: ByteBuffer = ByteBuffer.wrap(ByteArray(16))
         bb.putLong(mostSignificantBits)
         bb.putLong(leastSignificantBits)
-        return Bytes(bb.array())
+        return bb.array()
     }
 
     fun readUUIDFrom(bytes: ByteArray): UUID {

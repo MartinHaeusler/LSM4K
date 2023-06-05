@@ -3,9 +3,13 @@ package org.chronos.chronostore.impl
 import mu.KotlinLogging
 import org.chronos.chronostore.api.ChronoStoreTransaction
 import org.chronos.chronostore.api.StoreManager
+import org.chronos.chronostore.api.SystemStore
+import org.chronos.chronostore.util.InverseQualifiedTemporalKey
 import org.chronos.chronostore.impl.store.StoreImpl
 import org.chronos.chronostore.impl.transaction.ChronoStoreTransactionImpl
+import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.util.Bytes
+import org.chronos.chronostore.util.StoreId
 import org.chronos.chronostore.util.Timestamp
 import org.chronos.chronostore.util.TransactionId
 import org.chronos.chronostore.wal.WriteAheadLog
@@ -67,6 +71,7 @@ class TransactionManager(
     }
 
     fun performCommit(tx: ChronoStoreTransactionImpl, commitMetadata: Bytes?): Timestamp {
+        check(this.isOpen) { DB_ALREADY_CLOSED }
         this.commitLock.withLock {
             val commitTimestamp = this.timeManager.getUniqueWallClockTimestamp()
             val walTransaction = tx.toWALTransaction(commitTimestamp, commitMetadata)
@@ -79,22 +84,40 @@ class TransactionManager(
 
                 this.writeAheadLog.addCommittedTransaction(walTransaction)
 
+                val commitLogStore = this.storeManager.getSystemStore(SystemStore.COMMIT_LOG)
+
                 for ((storeId, commands) in walTransaction.storeIdToCommands.entries) {
 
                     val store = storeIdToStore[storeId]
                         ?: continue // these changes cannot be performed and will be ignored.
 
-                    // TODO: offer a setting to fail commits if some of the target stores don't exist.
+                    // TODO[Feature]: offer a setting to fail commits if some of the target stores don't exist.
 
                     // we're missing the changes from this transaction,
                     // put them into the store.
                     (store as StoreImpl).tree.put(commands)
+
+                    val commitLogCommands = commands.map { createCommitLogEntry(commitTimestamp, storeId, it) }
+                    (commitLogStore as StoreImpl).tree.put(commitLogCommands)
                 }
             }
             log.debug { "Performed commit of transaction ${tx.id}. Transaction timestamp: ${tx.lastVisibleTimestamp}, commit timestamp: ${commitTimestamp}." }
             this.closeTransaction(tx)
             return commitTimestamp
         }
+    }
+
+    private fun createCommitLogEntry(
+        commitTimestamp: Timestamp,
+        storeId: StoreId,
+        it: Command
+    ): Command {
+        val value = when (it.opCode) {
+            Command.OpCode.PUT -> Bytes.TRUE
+            Command.OpCode.DEL -> Bytes.FALSE
+        }
+        val inverseQualifiedTemporalKey = InverseQualifiedTemporalKey(commitTimestamp, storeId, it.key)
+        return Command.put(inverseQualifiedTemporalKey.toBytes(), commitTimestamp, value)
     }
 
     override fun close() {
@@ -108,5 +131,6 @@ class TransactionManager(
             }
         }
     }
+
 
 }

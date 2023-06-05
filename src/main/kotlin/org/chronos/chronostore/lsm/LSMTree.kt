@@ -138,7 +138,7 @@ class LSMTree(
 
     fun openCursor(transaction: ChronoStoreTransaction): Cursor<KeyAndTimestamp, Command> {
         val rawCursor = this.lock.read {
-            // TODO the "toList()" copy here is inefficient. Maybe we can have a cursor directly on the navigablemap itself?
+            // TODO[Performance]: the "toList()" copy here is inefficient. Maybe we can have a cursor directly on the navigablemap itself?
             val inMemoryDataList = this.inMemoryTree.toList()
             val inMemoryCursor = if (inMemoryDataList.isEmpty()) {
                 EmptyCursor { "In-Memory Cursor" }
@@ -298,7 +298,7 @@ class LSMTree(
                     // ensure ordering and remove duplicates (which is cheap and lazy for ordered iterators)
                     val iterator = commands.checkOrdered(strict = false).orderedDistinct()
 
-                    // TODO: for non-versioned trees, drop old versions of the keys during the merge (PeekingIterator helps here).
+                    // TODO[Feature]: for non-versioned trees, drop old versions of the keys during the merge (PeekingIterator helps here).
 
                     ChronoStoreFileWriter(
                         outputStream = overWriter.outputStream.unclosable().buffered(),
