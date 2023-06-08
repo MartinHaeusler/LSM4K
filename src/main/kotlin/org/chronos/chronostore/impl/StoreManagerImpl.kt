@@ -187,8 +187,6 @@ class StoreManagerImpl(
     private fun ensureSystemStoreExists(systemStore: SystemStore): Store {
         check(this.isOpen) { DB_ALREADY_CLOSED }
         this.lock.write {
-            assertInitialized()
-
             val existingStore = this.storesById[systemStore.id]
             if (existingStore != null) {
                 return existingStore

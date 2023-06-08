@@ -50,11 +50,11 @@ class InMemoryVirtualFileSystem : VirtualFileSystem {
     override fun file(name: String): VirtualReadWriteFile {
         val pathElements = name.split(File.separator)
 
-        val rootDir = InMemoryVirtualDirectory(this, pathElements.first())
         if (pathElements.size == 1) {
             return InMemoryVirtualReadWriteFile(null, this, pathElements.first())
         }
 
+        val rootDir = InMemoryVirtualDirectory(this, pathElements.first())
         var parentDir = rootDir
         for (index in 1 until pathElements.lastIndex) {
             parentDir = InMemoryVirtualDirectory(parentDir, pathElements[index])
@@ -159,7 +159,7 @@ class InMemoryVirtualFileSystem : VirtualFileSystem {
     fun createNewFile(path: String) {
         // creating a new file is an atomic operation on most file systems, so let's make it atomic here as well.
         this.fileSystemLock.withLock {
-            val parent = path.substringBeforeLast(File.separator)
+            val parent = path.substringBeforeLast(File.separator, PATH_PREFIX)
             if (parent != PATH_PREFIX) {
                 if (!this.isDirectory(parent)) {
                     throw IOException("Cannot create file '${path}' - the parent directory does not exist!")
@@ -168,8 +168,9 @@ class InMemoryVirtualFileSystem : VirtualFileSystem {
             if (this.isExistingPath(path)) {
                 throw IOException("Cannot create file '${path}' - there already is an existing element at this path!")
             }
+            val fileName = path.removePrefix(parent).removePrefix(File.separator)
             this.fileContents[path] = Bytes.EMPTY
-            this.fileTree.getOrPut(parent, ::mutableSetOf) += path.substringAfterLast(File.separatorChar)
+            this.fileTree.getOrPut(parent, ::mutableSetOf) += fileName
         }
     }
 

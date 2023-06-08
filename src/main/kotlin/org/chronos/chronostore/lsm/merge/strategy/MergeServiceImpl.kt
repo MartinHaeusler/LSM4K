@@ -51,7 +51,7 @@ class MergeServiceImpl(
             this.taskManager.scheduleRecurringWithFixedRate(this.walCompactionTask, startDelay.milliseconds, 24.hours)
         }
 
-        this.garbageCollectorTask = GarbageCollectorTask(this.storeManager)
+        this.garbageCollectorTask = GarbageCollectorTask(storeManager)
         val garbageCollectionTimeOfDay = this.storeConfig.garbageCollectionTimeOfDay
         if(garbageCollectionTimeOfDay != null){
             val startDelay = garbageCollectionTimeOfDay.nextOccurrence

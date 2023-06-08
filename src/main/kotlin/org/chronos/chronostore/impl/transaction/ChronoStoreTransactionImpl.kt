@@ -75,7 +75,10 @@ class ChronoStoreTransactionImpl(
         get() {
             check(this.isOpen) { TX_ALREADY_CLOSED }
             val allStores = this.storeManager.getAllStores(this)
-            return allStores.map { this.openStoresById[it.id] ?: bindStore(it) }
+            return allStores.asSequence()
+                .filterNot { it.isSystemInternal }
+                .map { this.openStoresById[it.id] ?: bindStore(it) }
+                .toList()
         }
 
     override fun commit(metadata: Bytes?): Timestamp {
@@ -124,7 +127,7 @@ class ChronoStoreTransactionImpl(
     }
 
     private inner class TransactionBoundStoreImpl(
-        override val store: Store
+        override val store: Store,
     ) : TransactionBoundStore {
 
         override val transaction: ChronoStoreTransaction
@@ -211,6 +214,10 @@ class ChronoStoreTransactionImpl(
         }
 
         val transactionContext = TransactionBoundStoreContext(this.store)
+
+        override fun toString(): String {
+            return "TransactionBoundStore[${"${this.store.name} (ID: ${this.store.id})"}]"
+        }
 
     }
 

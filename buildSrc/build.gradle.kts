@@ -7,15 +7,13 @@ plugins {
     kotlin("jvm") version "1.8.0"
 }
 
-tasks.withType<KotlinCompile>().configureEach {
-    kotlinOptions {
-        this.jvmTarget = "17"
-    }
+kotlin {
+    jvmToolchain(8)
 }
 
 java {
     toolchain {
-        languageVersion.set(JavaLanguageVersion.of(17))
+        languageVersion.set(JavaLanguageVersion.of(8))
     }
 }
 

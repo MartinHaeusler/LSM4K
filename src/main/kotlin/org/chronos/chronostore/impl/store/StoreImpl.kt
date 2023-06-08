@@ -29,4 +29,8 @@ class StoreImpl(
 
     val tree = LSMTree(this.directory, mergeService, blockCache, driverFactory, blockReadMode, newFileSettings)
 
+    override fun toString(): String {
+        return "Store[${this.name} (ID: ${this.id})]"
+    }
+
 }

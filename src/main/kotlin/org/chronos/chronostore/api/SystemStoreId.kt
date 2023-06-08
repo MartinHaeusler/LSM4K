@@ -48,7 +48,7 @@ enum class SystemStore {
 
     companion object {
 
-        val NAME_PREFIX = "_chronostore_internal__"
+        const val NAME_PREFIX = "_chronostore_internal__"
 
     }
 

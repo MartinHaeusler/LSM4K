@@ -2,6 +2,7 @@ package org.chronos.chronostore.test.cases.api
 
 import org.chronos.chronostore.api.ChronoStoreConfiguration
 import org.chronos.chronostore.api.ChronoStoreTransaction
+import org.chronos.chronostore.api.SystemStore
 import org.chronos.chronostore.io.structure.ChronoStoreStructure
 import org.chronos.chronostore.io.vfs.VirtualDirectory
 import org.chronos.chronostore.lsm.LSMTreeFile
@@ -273,6 +274,8 @@ class StoreManagementTest {
             val storeDir = rootLevelElements.asSequence()
                 .filterIsInstance<VirtualDirectory>()
                 .filter { it.name.startsWith(ChronoStoreStructure.STORE_DIR_PREFIX) }
+                // it must not be a system store
+                .filter { it.name !in SystemStore.values().map { systemStore -> ChronoStoreStructure.STORE_DIR_PREFIX + systemStore.id } }
                 .singleOrNull()
 
             // since we've performed two flushes, we should have two files in the VFS.

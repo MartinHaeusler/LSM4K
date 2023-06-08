@@ -7,6 +7,9 @@ import org.chronos.chronostore.util.TransactionId
 
 interface Store {
 
+    val isSystemInternal: Boolean
+        get() = this.name.startsWith(SystemStore.NAME_PREFIX)
+
     val id: StoreId
 
     var name: String

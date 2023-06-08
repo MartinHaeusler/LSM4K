@@ -8,10 +8,16 @@ import java.io.InputStream
 open class InMemoryVirtualFile(
     final override val parent: InMemoryVirtualDirectory?,
     final override val fileSystem: InMemoryVirtualFileSystem,
-    final override val name: String
+    final override val name: String,
 ) : VirtualFile, InMemoryVirtualFileSystemElement {
 
-    final override val path: String = "${this.parent?.path ?: InMemoryVirtualFileSystem.PATH_PREFIX}${File.separator}${this.name}"
+    final override val path: String
+        get() {
+            val parentPath = this.parent?.path
+                ?: return InMemoryVirtualFileSystem.PATH_PREFIX + this.name
+
+            return "${parentPath}${File.separator}${this.name}"
+        }
 
     override fun exists(): Boolean {
         return this.fileSystem.isExistingPath(this.path)
