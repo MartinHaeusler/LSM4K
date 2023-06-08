@@ -6,6 +6,8 @@ import org.chronos.chronostore.util.LittleEndianExtensions.readLittleEndianLong
 import org.chronos.chronostore.util.LittleEndianExtensions.writeLittleEndianLong
 import org.chronos.chronostore.util.UUIDExtensions.readUUIDFrom
 import org.chronos.chronostore.util.UUIDExtensions.toBytes
+import org.chronos.chronostore.util.bits.BitTricks.readStableLong
+import org.chronos.chronostore.util.bits.BitTricks.writeStableLong
 import java.io.ByteArrayOutputStream
 
 data class InverseQualifiedTemporalKey(
@@ -20,7 +22,7 @@ data class InverseQualifiedTemporalKey(
             bytes.withInputStream { input ->
                 // format:
                 // [timestamp bytes][storeId bytes][userKeyBytes]
-                val timestamp = input.readLittleEndianLong()
+                val timestamp = input.readStableLong()
                 val storeIdBytes = input.readNBytes(16)
                 require(storeIdBytes.size == 16) { "Failed to read 16 bytes as StoreID from byte input!" }
                 val storeId = readUUIDFrom(storeIdBytes)
@@ -36,10 +38,7 @@ data class InverseQualifiedTemporalKey(
         // format:
         // [timestamp bytes][storeId bytes][userKeyBytes]
         val output = ByteArrayOutputStream(Timestamp.SIZE_BYTES + 16 + userKey.size)
-
-        // FIXME: little endian does not preserve sort order in binary!
-
-        output.writeLittleEndianLong(this.timestamp)
+        output.writeStableLong(this.timestamp)
         output.writeBytes(this.storeId.toBytes())
         output.writeBytes(this.userKey)
         return Bytes(output.toByteArray())
