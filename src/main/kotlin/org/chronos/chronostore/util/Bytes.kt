@@ -4,7 +4,10 @@ import com.google.common.hash.BloomFilter
 import org.chronos.chronostore.io.format.CompressionAlgorithm
 import org.chronos.chronostore.io.vfs.InputSource
 import org.chronos.chronostore.util.ByteArrayExtensions.hex
+import org.chronos.chronostore.util.bits.BitTricks.writeStableInt
+import org.chronos.chronostore.util.bits.BitTricks.writeStableLong
 import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.io.OutputStream
 import java.nio.charset.Charset
@@ -12,7 +15,7 @@ import java.util.*
 import kotlin.math.min
 
 class Bytes(
-    private val array: ByteArray
+    private val array: ByteArray,
 ) : Comparable<Bytes>, Collection<Byte>, InputSource {
 
     companion object {
@@ -65,8 +68,8 @@ class Bytes(
         }
 
         fun Bytes.decompressWith(algorithm: CompressionAlgorithm): Bytes {
-            require(!this.isEmpty()){ "The empty Bytes object cannot be decompressed!" }
-            if(algorithm == CompressionAlgorithm.NONE){
+            require(!this.isEmpty()) { "The empty Bytes object cannot be decompressed!" }
+            if (algorithm == CompressionAlgorithm.NONE) {
                 return this
             }
             return Bytes(algorithm.decompress(this.array))
@@ -74,6 +77,22 @@ class Bytes(
 
         fun OutputStream.writeBytes(bytes: Bytes) {
             this.write(bytes.array)
+        }
+
+        fun stableInt(int: Int): Bytes {
+            val byteArray = ByteArrayOutputStream().use { baos ->
+                baos.writeStableInt(int)
+                baos.toByteArray()
+            }
+            return Bytes(byteArray)
+        }
+
+        fun stableLong(long: Long): Bytes {
+            val byteArray = ByteArrayOutputStream().use { baos ->
+                baos.writeStableLong(long)
+                baos.toByteArray()
+            }
+            return Bytes(byteArray)
         }
 
     }

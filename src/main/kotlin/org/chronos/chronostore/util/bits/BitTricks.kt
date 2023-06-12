@@ -39,4 +39,30 @@ object BitTricks {
         return (c1 shl 56) or (c2 shl 48) or (c3 shl 40) or (c4 shl 32) or
             (c5 shl 24) or (c6 shl 16) or (c7 shl 8) or c8
     }
+
+    fun OutputStream.writeStableInt(int: Int) {
+        this.writeUnsignedInt(int xor Int.MIN_VALUE)
+    }
+
+    private fun OutputStream.writeUnsignedInt(int: Int) {
+        write((int ushr 24).toByte().toInt())
+        write((int ushr 16).toByte().toInt())
+        write((int ushr 8).toByte().toInt())
+        write(int.toByte().toInt())
+    }
+
+    fun InputStream.readStableInt(): Int {
+        return this.readUnsignedInt() xor Int.MIN_VALUE
+    }
+
+    private fun InputStream.readUnsignedInt(): Int {
+        val c1 = read()
+        val c2 = read()
+        val c3 = read()
+        val c4 = read()
+        if ((c1 or c2 or c3 or c4) < 0) {
+            throw IllegalStateException("Input stream read() returned a negative value!")
+        }
+        return (c1 shl 24) or (c2 shl 16) or (c3 shl 8) or c4
+    }
 }

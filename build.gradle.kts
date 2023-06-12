@@ -1,6 +1,7 @@
 plugins {
     kotlin("jvm") version "1.8.0"
     application
+    id("me.champeau.jmh") version "0.7.1"
 }
 
 group = "org.example"
@@ -32,6 +33,19 @@ dependencies {
     testImplementation("ch.qos.logback", "logback-classic", BuildVersions.logback)
 
     testImplementation(kotlin("reflect"))
+
+    jmh("org.apache.commons:commons-math3:3.6.1")
+    jmh("org.jetbrains.xodus:xodus-openAPI:2.0.1")
+    jmh("org.jetbrains.xodus:xodus-environment:2.0.1")
+
+    jmh("org.openjdk.jmh:jmh-core:1.36")
+    jmh("org.openjdk.jmh:jmh-generator-annprocess:1.36")
+
+    jmh("ch.qos.logback", "logback-classic", BuildVersions.logback)
+
+    // this is the line that solves the missing /META-INF/BenchmarkList error
+    jmhAnnotationProcessor("org.openjdk.jmh:jmh-generator-annprocess:1.36")
+    testAnnotationProcessor("org.openjdk.jmh:jmh-generator-annprocess:1.36")
 }
 
 tasks.test {
