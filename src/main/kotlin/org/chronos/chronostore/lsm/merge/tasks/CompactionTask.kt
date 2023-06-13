@@ -57,7 +57,7 @@ class CompactionTask(
         monitor.reportProgress(0.2)
         val fileIndices = filesToMerge.asSequence().map { files.indexOf(it) }.toSet()
         monitor.subTaskWithMonitor(0.8) { mergeMonitor ->
-            lsmTree.mergeFiles(fileIndices, mergeMonitor)
+            lsmTree.mergeFiles(fileIndices, store.retainOldVersions, mergeMonitor)
         }
     }
 

@@ -24,11 +24,14 @@ import org.chronos.chronostore.util.cursor.EmptyCursor
 import org.chronos.chronostore.util.cursor.IndexBasedCursor
 import org.chronos.chronostore.util.cursor.OverlayCursor
 import org.chronos.chronostore.util.iterator.IteratorExtensions.checkOrdered
+import org.chronos.chronostore.util.iterator.IteratorExtensions.filter
+import org.chronos.chronostore.util.iterator.IteratorExtensions.latestVersionOnly
 import org.chronos.chronostore.util.iterator.IteratorExtensions.orderedDistinct
 import org.chronos.chronostore.util.stream.UnclosableOutputStream.Companion.unclosable
 import org.pcollections.TreePMap
 import java.io.File
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.concurrent.read
 import kotlin.concurrent.write
@@ -50,6 +53,7 @@ class LSMTree(
 
     @Volatile
     private var inMemoryTree = TreePMap.empty<KeyAndTimestamp, Command>()
+    private val inMemoryTreeSizeInBytes = AtomicLong(0)
     private val lock = ReentrantReadWriteLock(true)
 
     private val fileList: MutableList<LSMTreeFile>
@@ -110,7 +114,7 @@ class LSMTree(
 
 
     val inMemorySizeBytes: Long
-        get() = this.inMemoryTree.values.sumOf { it.byteSize.toLong() }
+        get() = this.inMemoryTreeSizeInBytes.get()
 
     val path: String
         get() = this.directory.path
@@ -176,6 +180,7 @@ class LSMTree(
 
             val keyAndTimestampToCommand = commands.associateBy { it.keyAndTimestamp }
             this.inMemoryTree = this.inMemoryTree.plusAll(keyAndTimestampToCommand)
+            this.inMemoryTreeSizeInBytes.getAndAdd(keyAndTimestampToCommand.values.sumOf { it.byteSize }.toLong())
             inserted += keyAndTimestampToCommand.size
 
             totalSize = this.inMemoryTree.size
@@ -204,6 +209,7 @@ class LSMTree(
                 monitor.reportDone()
                 return
             }
+            log.debug { "Flushing LSM Tree '${this.directory}'!" }
             val commands = monitor.subTask(0.1, "Collecting Entries to flush") {
                 this.lock.write {
                     this.inMemoryTree.toMap()
@@ -239,6 +245,7 @@ class LSMTree(
                 this.lock.write {
                     this.fileList.add(LSMTreeFile(file, newFileIndex, this.driverFactory, this.blockReadMode, this.blockCache))
                     this.inMemoryTree = this.inMemoryTree.minusAll(commands.keys)
+                    this.inMemoryTreeSizeInBytes.addAndGet(commands.values.sumOf { it.byteSize } * -1L)
                 }
             }
             monitor.reportDone()
@@ -266,7 +273,7 @@ class LSMTree(
         taskMonitor.reportDone()
     }
 
-    fun mergeFiles(fileIndices: Set<Int>, monitor: TaskMonitor) {
+    fun mergeFiles(fileIndices: Set<Int>, retainOldVersions: Boolean, monitor: TaskMonitor) {
         this.performAsyncWriteTask(monitor) {
             monitor.reportStarted("Merging ${fileIndices.size} files")
             val filesToMerge = this.getFilesToMerge(fileIndices)
@@ -296,16 +303,23 @@ class LSMTree(
                     }.toList()
                     val commands = Iterators.mergeSorted(iterators, Comparator.naturalOrder())
                     // ensure ordering and remove duplicates (which is cheap and lazy for ordered iterators)
-                    val iterator = commands.checkOrdered(strict = false).orderedDistinct()
+                    val basicIterator = commands.checkOrdered(strict = false).orderedDistinct()
 
-                    // TODO[Feature]: for non-versioned trees, drop old versions of the keys during the merge (PeekingIterator helps here).
+                    val finalIterator = if (retainOldVersions) {
+                        basicIterator
+                    } else {
+                        // we have to drop old versions...
+                        basicIterator.latestVersionOnly()
+                            // ...and if the latest version happens to be a DELETE, we ignore the key.
+                            .filter { it.opCode != Command.OpCode.DEL }
+                    }
 
                     ChronoStoreFileWriter(
                         outputStream = overWriter.outputStream.unclosable().buffered(),
                         settings = this.newFileSettings,
                         metadata = emptyMap()
                     ).use { writer ->
-                        writer.writeFile(numberOfMerges = maxMerge + 1, orderedCommands = iterator)
+                        writer.writeFile(numberOfMerges = maxMerge + 1, orderedCommands = finalIterator)
                     }
                 } finally {
                     for (cursor in cursors) {

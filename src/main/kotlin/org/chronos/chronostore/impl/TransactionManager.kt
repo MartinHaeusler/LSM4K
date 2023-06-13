@@ -101,7 +101,7 @@ class TransactionManager(
                     (commitLogStore as StoreImpl).tree.put(commitLogCommands)
                 }
             }
-            log.debug { "Performed commit of transaction ${tx.id}. Transaction timestamp: ${tx.lastVisibleTimestamp}, commit timestamp: ${commitTimestamp}." }
+            log.trace { "Performed commit of transaction ${tx.id}. Transaction timestamp: ${tx.lastVisibleTimestamp}, commit timestamp: ${commitTimestamp}." }
             this.closeTransaction(tx)
             return commitTimestamp
         }

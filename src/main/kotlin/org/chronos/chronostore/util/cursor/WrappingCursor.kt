@@ -54,21 +54,21 @@ abstract class WrappingCursor<C : Cursor<*, *>, K, V>(
         this.innerCursor.close()
     }
 
-    override fun checkInvariants() {
-        super.checkInvariants()
-        if (this.lastSeenModCount != innerCursor.modCount) {
-            throw IllegalStateException(
-                "The inner cursor has been moved independently of the wrapper! Please do not move" +
-                    " the inner cursor directly after wrapping it into another cursor!" +
-                    " The wrapper is: '${this}', the inner cursor is: '${this.innerCursor}'"
-            )
-        }
-        if (!this.innerCursor.isOpen) {
-            throw IllegalStateException(
-                "The inner cursor has already been closed! The wrapper is: '${this}', the inner cursor is: '${this.innerCursor}'"
-            )
-        }
-    }
+//    override fun checkInvariants() {
+//        super.checkInvariants()
+//        if (this.lastSeenModCount != innerCursor.modCount) {
+//            throw IllegalStateException(
+//                "The inner cursor has been moved independently of the wrapper! Please do not move" +
+//                    " the inner cursor directly after wrapping it into another cursor!" +
+//                    " The wrapper is: '${this}', the inner cursor is: '${this.innerCursor}'"
+//            )
+//        }
+//        if (!this.innerCursor.isOpen) {
+//            throw IllegalStateException(
+//                "The inner cursor has already been closed! The wrapper is: '${this}', the inner cursor is: '${this.innerCursor}'"
+//            )
+//        }
+//    }
 
     override fun toString(): String {
         return "WrappingCursor['${this.innerCursor}']"

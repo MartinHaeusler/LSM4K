@@ -30,7 +30,9 @@ class DeduplicatingOrderedIterator<T>(
         if (!this.hasNext()) {
             throw NoSuchElementException("Iterator is exhausted")
         }
-        return this.next!!
+        val result = this.next!!
+        this.moveNext()
+        return result
     }
 
 }

@@ -38,7 +38,7 @@ class ChronoStoreTransactionImpl(
     override var isOpen: Boolean = true
 
     init {
-        log.debug { "Started transaction ${this.id} at timestamp ${lastVisibleTimestamp}." }
+        log.trace { "Started transaction ${this.id} at timestamp ${lastVisibleTimestamp}." }
     }
 
     override fun storeOrNull(name: String): TransactionBoundStore? {
@@ -116,7 +116,7 @@ class ChronoStoreTransactionImpl(
             return
         }
         this.isOpen = false
-        log.debug { "Rolled back transaction ${this.id}." }
+        log.trace { "Rolled back transaction ${this.id}." }
     }
 
     private fun bindStore(store: Store): TransactionBoundStoreImpl {

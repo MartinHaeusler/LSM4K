@@ -27,7 +27,7 @@ class ChronoStoreConfiguration {
 
     var mergeIntervalMillis: Long = TimeUnit.MINUTES.toMillis(10)
 
-    var maxInMemoryTreeSizeInBytes: Long = 1024 * 1024 * 64
+    var maxInMemoryTreeSizeInBytes: Long = 1024 * 1024 * 8
 
     /**
      * The time of day at which the Write-Ahead-Log file should be compacted.

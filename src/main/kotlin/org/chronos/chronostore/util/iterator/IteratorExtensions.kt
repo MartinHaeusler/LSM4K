@@ -1,6 +1,9 @@
 package org.chronos.chronostore.util.iterator
 
+import com.google.common.collect.Iterators
+import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.util.sequence.DeduplicatingOrderedIterator
+import org.chronos.chronostore.util.sequence.LatestVersionOnlyIterator
 import org.chronos.chronostore.util.sequence.OrderCheckingIterator
 
 object IteratorExtensions {
@@ -15,6 +18,18 @@ object IteratorExtensions {
 
     fun <T> Iterator<T>.orderedDistinct(): Iterator<T> {
         return DeduplicatingOrderedIterator(this)
+    }
+
+    fun Iterator<Command>.latestVersionOnly(): Iterator<Command> {
+        return LatestVersionOnlyIterator(this)
+    }
+
+    fun <T> Iterator<T>.filter(predicate: (T) -> Boolean): Iterator<T> {
+        return Iterators.filter(this, predicate)
+    }
+
+    fun <T> Iterator<T>.toList(): List<T> {
+        return this.asSequence().toList()
     }
 
 }
