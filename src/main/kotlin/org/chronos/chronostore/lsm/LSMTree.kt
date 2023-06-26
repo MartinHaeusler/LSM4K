@@ -141,17 +141,11 @@ class LSMTree(
     fun openCursor(transaction: ChronoStoreTransaction, timestamp: Timestamp): Cursor<Bytes, Command> {
         require(timestamp <= transaction.lastVisibleTimestamp) { "Cannot open cursor on timestamp ${timestamp}, because the last visible timestamp in the transaction is ${transaction.lastVisibleTimestamp}!" }
         val rawCursor = this.lock.read {
-            // TODO[Performance]: the "toList()" copy here is inefficient. Maybe we can have a cursor directly on the navigablemap itself?
-            val inMemoryDataList = this.inMemoryTree.toList()
-            val inMemoryCursor = if (inMemoryDataList.isEmpty()) {
+            val inMemoryDataMap = this.inMemoryTree
+            val inMemoryCursor = if (inMemoryDataMap.isEmpty()) {
                 EmptyCursor { "In-Memory Cursor" }
             } else {
-                IndexBasedCursor(
-                    minIndex = 0,
-                    maxIndex = inMemoryDataList.lastIndex,
-                    getEntryAtIndex = inMemoryDataList::get,
-                    getCursorName = { "In-Memory Cursor" }
-                )
+                NavigableMapCursor(inMemoryDataMap)
             }
             val fileCursors = this.fileList.asSequence().map { this.cursorManager.openCursorOn(transaction, it) }.toMutableList()
             if (fileCursors.isEmpty()) {

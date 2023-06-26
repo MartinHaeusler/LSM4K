@@ -7,6 +7,7 @@ import org.chronos.chronostore.io.format.BlockMetaData
 import org.chronos.chronostore.util.cursor.Cursor
 import org.chronos.chronostore.util.cursor.EmptyCursor
 import org.chronos.chronostore.util.cursor.IndexBasedCursor
+import org.chronos.chronostore.util.cursor.NavigableMapCursor
 import java.util.*
 
 class EagerDataBlock(
@@ -46,12 +47,7 @@ class EagerDataBlock(
                 getCursorName = { "Data Block #${this.metaData.blockSequenceNumber}" }
             )
         } else {
-            IndexBasedCursor(
-                minIndex = 0,
-                maxIndex = this.dataList.lastIndex,
-                getEntryAtIndex = this.dataList::get,
-                getCursorName = { "Data Block #${this.metaData.blockSequenceNumber}" }
-            )
+            NavigableMapCursor(this.data)
         }
     }
 
