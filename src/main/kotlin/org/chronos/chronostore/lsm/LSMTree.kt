@@ -18,11 +18,9 @@ import org.chronos.chronostore.lsm.event.LsmCursorClosedEvent
 import org.chronos.chronostore.lsm.merge.strategy.MergeService
 import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.model.command.KeyAndTimestamp
+import org.chronos.chronostore.util.Bytes
 import org.chronos.chronostore.util.Timestamp
-import org.chronos.chronostore.util.cursor.Cursor
-import org.chronos.chronostore.util.cursor.EmptyCursor
-import org.chronos.chronostore.util.cursor.IndexBasedCursor
-import org.chronos.chronostore.util.cursor.OverlayCursor
+import org.chronos.chronostore.util.cursor.*
 import org.chronos.chronostore.util.iterator.IteratorExtensions.checkOrdered
 import org.chronos.chronostore.util.iterator.IteratorExtensions.filter
 import org.chronos.chronostore.util.iterator.IteratorExtensions.latestVersionOnly
@@ -140,7 +138,8 @@ class LSMTree(
         }
     }
 
-    fun openCursor(transaction: ChronoStoreTransaction): Cursor<KeyAndTimestamp, Command> {
+    fun openCursor(transaction: ChronoStoreTransaction, timestamp: Timestamp): Cursor<Bytes, Command> {
+        require(timestamp <= transaction.lastVisibleTimestamp) { "Cannot open cursor on timestamp ${timestamp}, because the last visible timestamp in the transaction is ${transaction.lastVisibleTimestamp}!" }
         val rawCursor = this.lock.read {
             // TODO[Performance]: the "toList()" copy here is inefficient. Maybe we can have a cursor directly on the navigablemap itself?
             val inMemoryDataList = this.inMemoryTree.toList()
@@ -156,12 +155,12 @@ class LSMTree(
             }
             val fileCursors = this.fileList.asSequence().map { this.cursorManager.openCursorOn(transaction, it) }.toMutableList()
             if (fileCursors.isEmpty()) {
-                return inMemoryCursor
+                return VersioningCursor(inMemoryCursor, timestamp, includeDeletions = true)
             }
             if (inMemoryCursor !is EmptyCursor) {
                 fileCursors.add(inMemoryCursor)
             }
-            val cursor = fileCursors.reduce { l, r -> OverlayCursor(l, r) }
+            val cursor = fileCursors.asSequence().map { val c: Cursor<Bytes, Command> = VersioningCursor(it, timestamp, includeDeletions = true); c }.reduce { l, r -> OverlayCursor(l, r) }
             cursor
         }
         return rawCursor.onClose {

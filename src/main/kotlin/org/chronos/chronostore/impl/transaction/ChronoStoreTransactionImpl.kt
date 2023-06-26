@@ -166,13 +166,8 @@ class ChronoStoreTransactionImpl(
         }
 
         override fun openCursorOnLatest(): Cursor<Bytes, Bytes> {
-            val treeCursor = (this.store as StoreImpl).tree.openCursor(this@ChronoStoreTransactionImpl)
-            val versioningCursor = VersioningCursor(
-                treeCursor = treeCursor,
-                timestamp = this@ChronoStoreTransactionImpl.lastVisibleTimestamp,
-                includeDeletions = false
-            )
-            val bytesToBytesCursor = versioningCursor.mapValue { it.value }
+            val treeCursor = (this.store as StoreImpl).tree.openCursor(this@ChronoStoreTransactionImpl, this@ChronoStoreTransactionImpl.lastVisibleTimestamp)
+            val bytesToBytesCursor = treeCursor.filterValues { it != null && it.opCode != Command.OpCode.DEL }.mapValue { it.value }
             val transientModifications = this.transactionContext.allModifications.entries.asSequence().mapNotNull {
                 val key = it.key
                 val value = it.value
@@ -199,9 +194,8 @@ class ChronoStoreTransactionImpl(
                     " number less than or equal to the transaction timestamp (${now})!"
             }
             // transient modifications are ignored on historical queries.
-            val treeCursor = (this.store as StoreImpl).tree.openCursor(this@ChronoStoreTransactionImpl)
-            val versioningCursor = VersioningCursor(treeCursor, timestamp, false)
-            return versioningCursor.mapValue { it.value }
+            val treeCursor = (this.store as StoreImpl).tree.openCursor(this@ChronoStoreTransactionImpl, timestamp)
+            return treeCursor.filterValues { it != null && it.opCode != Command.OpCode.DEL }.mapValue { it.value }
         }
 
         override fun renameStore(newName: String) {
