@@ -3,7 +3,9 @@ package org.chronos.chronostore.benchmark
 import org.chronos.chronostore.test.util.ChronoStoreMode
 import org.chronos.chronostore.test.util.ChronoStoreTest
 import org.chronos.chronostore.util.Bytes
+import org.chronos.chronostore.util.statistics.ChronoStoreStatistics
 import org.junit.jupiter.api.Test
+import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
 
 class ReadWriteBenchmark {
@@ -82,7 +84,8 @@ class ReadWriteBenchmark {
                                 } else {
                                     0
                                 }
-                                if(r % 100 == 0){
+                                if(r % 100 == 0 && r > 0){
+                                    println(cursor)
                                     println("${Thread.currentThread().name} :: Read #${r} successful.")
                                 }
                                 sum
@@ -91,6 +94,13 @@ class ReadWriteBenchmark {
                     }
                     val timeAfter = System.currentTimeMillis()
                     println(Thread.currentThread().name + " :: Result: ${totalSum}, Time: ${timeAfter - timeBefore}ms")
+                }
+            }
+
+            val reporter = thread(name = "Reporter"){
+                while(true){
+                    Thread.sleep(TimeUnit.SECONDS.toMillis(10))
+                    println(ChronoStoreStatistics.snapshot().prettyPrint())
                 }
             }
 

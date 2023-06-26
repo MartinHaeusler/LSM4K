@@ -154,7 +154,7 @@ class LSMTree(
                     getCursorName = { "In-Memory Cursor" }
                 )
             }
-            val fileCursors = this.fileList.asReversed().map { this.cursorManager.openCursorOn(transaction, it) }.toMutableList()
+            val fileCursors = this.fileList.asSequence().map { this.cursorManager.openCursorOn(transaction, it) }.toMutableList()
             if (fileCursors.isEmpty()) {
                 return inMemoryCursor
             }

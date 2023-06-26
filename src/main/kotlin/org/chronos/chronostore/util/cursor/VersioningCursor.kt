@@ -5,6 +5,7 @@ import org.chronos.chronostore.model.command.KeyAndTimestamp
 import org.chronos.chronostore.util.Bytes
 import org.chronos.chronostore.util.Order
 import org.chronos.chronostore.util.Timestamp
+import org.chronos.chronostore.util.statistics.ChronoStoreStatistics
 
 class VersioningCursor(
     treeCursor: Cursor<KeyAndTimestamp, Command>,
@@ -12,7 +13,12 @@ class VersioningCursor(
     private val includeDeletions: Boolean,
 ) : WrappingCursor<Cursor<KeyAndTimestamp, Command>, Bytes, Command>(treeCursor), Cursor<Bytes, Command> {
 
+    init {
+        ChronoStoreStatistics.VERSIONING_CURSORS.incrementAndGet()
+    }
+
     override fun doFirst(): Boolean {
+        ChronoStoreStatistics.VERSIONING_CURSOR_FIRST_SEEKS.incrementAndGet()
         if (!this.innerCursor.first()) {
             return false
         }
@@ -27,6 +33,7 @@ class VersioningCursor(
     }
 
     override fun doLast(): Boolean {
+        ChronoStoreStatistics.VERSIONING_CURSOR_LAST_SEEKS.incrementAndGet()
         if (!this.innerCursor.last()) {
             return false
         }
@@ -43,12 +50,19 @@ class VersioningCursor(
 
     override fun doMove(direction: Order): Boolean {
         return when (direction) {
-            Order.ASCENDING -> this.seekToNextHigherTemporalEntry()
-            Order.DESCENDING -> this.seekToNextLowerTemporalEntry()
+            Order.ASCENDING -> {
+                ChronoStoreStatistics.VERSIONING_CURSOR_NEXT_SEEKS.incrementAndGet()
+                this.seekToNextHigherTemporalEntry()
+            }
+            Order.DESCENDING -> {
+                ChronoStoreStatistics.VERSIONING_CURSOR_PREVIOUS_SEEKS.incrementAndGet()
+                this.seekToNextLowerTemporalEntry()
+            }
         }
     }
 
     override fun doSeekExactlyOrPrevious(key: Bytes): Boolean {
+        ChronoStoreStatistics.VERSIONING_CURSOR_EXACTLY_OR_PREVIOUS_SEEKS.incrementAndGet()
         val temporalKey = this.convertUserKeyToUnqualifiedTemporalKey(key)
 
         if (!this.innerCursor.seekExactlyOrPrevious(temporalKey)) {
@@ -63,6 +77,7 @@ class VersioningCursor(
     }
 
     override fun doSeekExactlyOrNext(key: Bytes): Boolean {
+        ChronoStoreStatistics.VERSIONING_CURSOR_EXACTLY_OR_NEXT_SEEKS.incrementAndGet()
         if (!this.innerCursor.first()) {
             return false
         }

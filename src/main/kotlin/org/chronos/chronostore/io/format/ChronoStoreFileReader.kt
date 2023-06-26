@@ -7,6 +7,7 @@ import org.chronos.chronostore.io.format.datablock.BlockReadMode
 import org.chronos.chronostore.io.format.datablock.DataBlock
 import org.chronos.chronostore.lsm.LocalBlockCache
 import org.chronos.chronostore.util.cursor.Cursor
+import org.chronos.chronostore.util.statistics.ChronoStoreStatistics
 
 class ChronoStoreFileReader : AutoCloseable {
 
@@ -14,6 +15,7 @@ class ChronoStoreFileReader : AutoCloseable {
 
         @JvmStatic
         fun loadFileHeader(driver: RandomFileAccessDriver): FileHeader {
+            ChronoStoreStatistics.FILE_HEADER_LOADS_FROM_DISK.incrementAndGet()
             // read and validate the magic bytes
             val magicBytesAndVersion = driver.readBytes(0, ChronoStoreFileFormat.FILE_MAGIC_BYTES.size + Int.SIZE_BYTES)
             val magicBytes = magicBytesAndVersion.slice(0 until ChronoStoreFileFormat.FILE_MAGIC_BYTES.size)
@@ -93,6 +95,7 @@ class ChronoStoreFileReader : AutoCloseable {
     }
 
     private fun getBlockForIndexUncached(blockIndex: Int): DataBlock? {
+        ChronoStoreStatistics.PAGE_LOADS_FROM_DISK.incrementAndGet()
         val (startPosition, length) = this.fileHeader.indexOfBlocks.getBlockStartPositionAndLengthOrNull(blockIndex)
             ?: return null
         val blockBytes = this.driver.readBytes(startPosition, length)
@@ -150,6 +153,10 @@ class ChronoStoreFileReader : AutoCloseable {
         private var currentBlock: DataBlock? = null
         private var currentCursor: Cursor<KeyAndTimestamp, Command>? = null
 
+        init {
+            ChronoStoreStatistics.FILE_CURSORS.incrementAndGet()
+        }
+
         private val driver: RandomFileAccessDriver
             get() = this@ChronoStoreFileReader.driver
 
@@ -164,6 +171,7 @@ class ChronoStoreFileReader : AutoCloseable {
 
         override fun first(): Boolean {
             check(this.isOpen, this::getAlreadyClosedMessage)
+            ChronoStoreStatistics.FILE_CURSOR_FIRST_SEEKS.incrementAndGet()
             this.invalidatePosition()
             val firstBlock = this@ChronoStoreFileReader.getBlockForIndex(0)
             if (firstBlock == null || firstBlock.isEmpty()) {
@@ -181,6 +189,7 @@ class ChronoStoreFileReader : AutoCloseable {
 
         override fun last(): Boolean {
             check(this.isOpen, this::getAlreadyClosedMessage)
+            ChronoStoreStatistics.FILE_CURSOR_LAST_SEEKS.incrementAndGet()
             this.invalidatePosition()
             val numberOfBlocks = fileHeader.metaData.numberOfBlocks
             val lastBlock = getBlockForIndex(numberOfBlocks - 1)
@@ -199,6 +208,7 @@ class ChronoStoreFileReader : AutoCloseable {
 
         override fun next(): Boolean {
             check(this.isOpen, this::getAlreadyClosedMessage)
+            ChronoStoreStatistics.FILE_CURSOR_NEXT_SEEKS.incrementAndGet()
             if (!this.isValidPosition) {
                 return false
             }
@@ -229,6 +239,7 @@ class ChronoStoreFileReader : AutoCloseable {
 
         override fun previous(): Boolean {
             check(this.isOpen, this::getAlreadyClosedMessage)
+            ChronoStoreStatistics.FILE_CURSOR_PREVIOUS_SEEKS.incrementAndGet()
             if (!this.isValidPosition) {
                 return false
             }
@@ -285,6 +296,7 @@ class ChronoStoreFileReader : AutoCloseable {
 
         override fun seekExactlyOrNext(key: KeyAndTimestamp): Boolean {
             check(this.isOpen, this::getAlreadyClosedMessage)
+            ChronoStoreStatistics.FILE_CURSOR_EXACTLY_OR_NEXT_SEEKS.incrementAndGet()
             if(key == this.keyOrNull){
                 // we're already there
                 return true
@@ -308,6 +320,7 @@ class ChronoStoreFileReader : AutoCloseable {
 
         override fun seekExactlyOrPrevious(key: KeyAndTimestamp): Boolean {
             check(this.isOpen, this::getAlreadyClosedMessage)
+            ChronoStoreStatistics.FILE_CURSOR_EXACTLY_OR_PREVIOUS_SEEKS.incrementAndGet()
             if(key == this.keyOrNull){
                 // we're already there
                 return true

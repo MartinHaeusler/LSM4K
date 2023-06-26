@@ -2,16 +2,23 @@ package org.chronos.chronostore.util.cursor
 
 import org.chronos.chronostore.util.Order
 import org.chronos.chronostore.util.Order.*
+import org.chronos.chronostore.util.statistics.ChronoStoreStatistics
+import org.chronos.chronostore.util.statistics.StatisticExtensions
 
 open class OverlayCursor<C1 : Cursor<K, V>, C2 : Cursor<K, V>, K : Comparable<*>, V>(
     base: C1,
-    overlay: C2
+    overlay: C2,
 ) : CombiningCursor<C1, C2, K, V>(base, overlay) {
 
     override var keyOrNullInternal: K? = null
     override var valueOrNullInternal: V? = null
 
+    init {
+        ChronoStoreStatistics.OVERLAY_CURSORS.incrementAndGet()
+    }
+
     override fun doFirst(): Boolean {
+        ChronoStoreStatistics.OVERLAY_CURSOR_FIRST_SEEKS.incrementAndGet()
         // rewind the cursors to their first position. Both resulting keys are nullable,
         // because both collections may be empty, causing "first()" to fail.
         val baseKey = this.cursorA.firstAndReturnKey()
@@ -23,6 +30,7 @@ open class OverlayCursor<C1 : Cursor<K, V>, C2 : Cursor<K, V>, K : Comparable<*>
     }
 
     override fun doLast(): Boolean {
+        ChronoStoreStatistics.OVERLAY_CURSOR_LAST_SEEKS.incrementAndGet()
         // rewind the cursors to their first position. Both resulting keys are nullable, because
         // both collections may be empty, causing "last()" to fail.
         val baseKey = this.cursorA.lastAndReturnKey()
@@ -34,6 +42,11 @@ open class OverlayCursor<C1 : Cursor<K, V>, C2 : Cursor<K, V>, K : Comparable<*>
     }
 
     override fun doMove(direction: Order): Boolean {
+        when (direction) {
+            ASCENDING -> ChronoStoreStatistics.OVERLAY_CURSOR_NEXT_SEEKS.incrementAndGet()
+            DESCENDING -> ChronoStoreStatistics.OVERLAY_CURSOR_PREVIOUS_SEEKS.incrementAndGet()
+        }
+
         val baseCursorKey = this.cursorA.moveUntilAfterKeyAndReturnKey(this.keyOrNull!!, direction)
         this.updateLastModifiedCursorA()
         val overlayCursorKey = this.cursorB.moveUntilAfterKeyAndReturnKey(this.keyOrNull!!, direction)
@@ -44,6 +57,7 @@ open class OverlayCursor<C1 : Cursor<K, V>, C2 : Cursor<K, V>, K : Comparable<*>
 
 
     override fun doSeekExactlyOrPrevious(key: K): Boolean {
+        ChronoStoreStatistics.OVERLAY_CURSOR_EXACTLY_OR_PREVIOUS_SEEKS.incrementAndGet()
         val baseCursorKey = if (this.cursorA.seekExactlyOrPrevious(key)) {
             this.cursorA.keyOrNull
         } else {
@@ -71,6 +85,7 @@ open class OverlayCursor<C1 : Cursor<K, V>, C2 : Cursor<K, V>, K : Comparable<*>
 
 
     override fun doSeekExactlyOrNext(key: K): Boolean {
+        ChronoStoreStatistics.OVERLAY_CURSOR_EXACTLY_OR_NEXT_SEEKS.incrementAndGet()
         val baseCursorKey = if (this.cursorA.seekExactlyOrNext(key)) {
             this.cursorA.keyOrNull
         } else {
