@@ -220,6 +220,69 @@ interface Cursor<K, V> : AutoCloseable {
     }
 
     /**
+     * Performs a look-ahead to the next element.
+     *
+     * If this cursor is in an [invalid][isValidPosition] position, `null` will be returned.
+     * If there is no next element (because the cursor is currently located at the last element), `null` will be returned.
+     *
+     * No matter which result is returned, the (observable) current position of the cursor does not change.
+     *
+     * @return The next entry in the store (or `null` if there is none) without moving this cursor.
+     */
+    fun peekNext(): Pair<K, V>? {
+        if (!this.isValidPosition) {
+            return null
+        }
+        if (!this.next()) {
+            return null
+        }
+        val entry = this.key to this.value
+        this.previousOrThrow()
+        return entry
+    }
+
+    /**
+     * Performs a look-behind to the previous element.
+     *
+     * If this cursor is in an [invalid][isValidPosition] position, `null` will be returned.
+     * If there is no previous element (because the cursor is currently located at the first element), `null` will be returned.
+     *
+     * No matter which result is returned, the (observable) current position of the cursor does not change.
+     *
+     * @return The previous entry in the store (or `null` if there is none) without moving this cursor.
+     */
+    fun peekPrevious(): Pair<K, V>? {
+        if (!this.isValidPosition) {
+            return null
+        }
+        if (!this.previous()) {
+            return null
+        }
+        val entry = this.key to this.value
+        this.nextOrThrow()
+        return entry
+    }
+
+    /**
+     * Performs a look-ahead or look-behind while maintaining the current cursor position.
+     *
+     * If this cursor is in an [invalid][isValidPosition] position, `null` will be returned.
+     * If there is no element in the given [direction] (because we've reached the first / last element of the store), `null` will be returned.
+     *
+     * No matter which result is returned, the (observable) current position of the cursor does not change.
+     *
+     * @param direction The direction to move to. [Order.ASCENDING] performs [peekNext], [Order.DESCENDING] performs [peekPrevious].
+     *
+     * @return The next entry in the given direction (or `null` if there is none) without moving this cursor.
+     */
+    fun peek(direction: Order): Pair<K, V>? {
+        return when(direction){
+            Order.ASCENDING -> peekNext()
+            Order.DESCENDING -> peekPrevious()
+        }
+    }
+
+    /**
      * Returns the key of the entry the cursor is pointing to, or `null` if the cursor position [is invalid][isValidPosition].
      */
     val keyOrNull: K?
@@ -551,7 +614,7 @@ interface Cursor<K, V> : AutoCloseable {
      * @return The full list of keys in this cursor, in descending order.
      */
     fun listAllKeysDescending(): List<K> {
-        if(!this.last()){
+        if (!this.last()) {
             this.invalidatePosition()
             return emptyList()
         }
@@ -591,7 +654,7 @@ interface Cursor<K, V> : AutoCloseable {
      * @return The full list of values in this cursor, in descending key order.
      */
     fun listAllValuesDescending(): List<V> {
-        if(!this.last()){
+        if (!this.last()) {
             this.invalidatePosition()
             return emptyList()
         }
@@ -631,7 +694,7 @@ interface Cursor<K, V> : AutoCloseable {
      * @return The full list of entries in this cursor, in descending key order.
      */
     fun listAllEntriesDescending(): List<Pair<K, V>> {
-        if(!this.last()){
+        if (!this.last()) {
             this.invalidatePosition()
             return emptyList()
         }

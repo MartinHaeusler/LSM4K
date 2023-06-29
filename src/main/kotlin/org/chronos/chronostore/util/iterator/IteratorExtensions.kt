@@ -1,6 +1,7 @@
 package org.chronos.chronostore.util.iterator
 
 import com.google.common.collect.Iterators
+import com.google.common.collect.PeekingIterator
 import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.util.sequence.DeduplicatingOrderedIterator
 import org.chronos.chronostore.util.sequence.LatestVersionOnlyIterator
@@ -30,6 +31,18 @@ object IteratorExtensions {
 
     fun <T> Iterator<T>.toList(): List<T> {
         return this.asSequence().toList()
+    }
+
+    fun <T> Iterator<T>.toPeekingIterator(): PeekingIterator<T> {
+        return Iterators.peekingIterator(this)
+    }
+
+    fun <T> Iterable<T>.peekingIterator(): PeekingIterator<T> {
+        return Iterators.peekingIterator(this.iterator())
+    }
+
+    fun <K, V> Map<K, V>.peekingIterator(): PeekingIterator<Map.Entry<K, V>> {
+        return Iterators.peekingIterator(this.iterator())
     }
 
 }

@@ -189,16 +189,7 @@ class VersioningCursor(
             // cursor state is invalid
             return null
         }
-        if (!this.innerCursor.next()) {
-            // no next entry, so the inner cursor remained
-            // in its original position (if next() returns false,
-            // then the cursor keeps its position)
-            return null
-        }
-        val nextKey = this.getTemporalKeyOrNull()
-        // return to original location (this will always work because we just arrived from there)
-        this.innerCursor.previousOrThrow()
-        return nextKey
+        return this.innerCursor.peekNext()?.first
     }
 
     private fun valueIsDeletionMarker(): Boolean {

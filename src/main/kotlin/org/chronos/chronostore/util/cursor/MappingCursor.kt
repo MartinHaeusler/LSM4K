@@ -35,6 +35,19 @@ class MappingCursor<C : Cursor<K, V>, K, V, MK, MV>(
         return this.innerCursor.seekExactlyOrPrevious(mapKeyInverse(key))
     }
 
+
+    override fun peekNext(): Pair<MK, MV>? {
+        val nextEntry = this.innerCursor.peekNext()
+            ?: return null
+        return mapKey(nextEntry.first) to mapValue(nextEntry.second)
+    }
+
+    override fun peekPrevious(): Pair<MK, MV>? {
+        val previousEntry = this.innerCursor.peekPrevious()
+            ?: return null
+        return mapKey(previousEntry.first) to mapValue(previousEntry.second)
+    }
+
     override fun toString(): String {
         return "MappingCursor[${this.innerCursor}]"
     }

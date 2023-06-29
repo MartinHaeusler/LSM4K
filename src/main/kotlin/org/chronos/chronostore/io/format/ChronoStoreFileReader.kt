@@ -268,6 +268,28 @@ class ChronoStoreFileReader : AutoCloseable {
             return true
         }
 
+        override fun peekNext(): Pair<KeyAndTimestamp, Command>? {
+            if(!this.isValidPosition){
+                return null
+            }
+            val cursor = this.currentCursor
+                ?: return super.peekNext() // fall back to default implementation
+
+            return cursor.peekNext() // fast track
+                ?: return super.peekNext() // fall back to default implementation
+        }
+
+        override fun peekPrevious(): Pair<KeyAndTimestamp, Command>? {
+            if(!this.isValidPosition){
+                return null
+            }
+            val cursor = this.currentCursor
+                ?: return super.peekPrevious() // fall back to default implementation
+
+            return cursor.peekPrevious() // fast track
+                ?: return super.peekPrevious()
+        }
+
         override val keyOrNull: KeyAndTimestamp?
             get() {
                 check(this.isOpen, this::getAlreadyClosedMessage)

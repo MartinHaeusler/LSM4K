@@ -8,20 +8,18 @@ import org.junit.jupiter.api.Test
 import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
 
-class ReadWriteBenchmark {
+object ReadWriteBenchmark {
 
-    companion object {
 
-        private const val NUMBER_OF_COMMITS = 10_000
-        private const val WRITES_PER_COMMIT = 100
-        private const val NUMBER_OF_UNIQUE_KEYS = 1000
+    private const val NUMBER_OF_COMMITS = 10_000
+    private const val WRITES_PER_COMMIT = 100
+    private const val NUMBER_OF_UNIQUE_KEYS = 1000
 
-        private const val NUMBER_OF_READER_THREADS = 4
-        private const val NUMBER_OF_READS = 20_000
-    }
+    private const val NUMBER_OF_READER_THREADS = 4
+    private const val NUMBER_OF_READS = 20_000
 
-    @Test
-    fun canPerformParallelReadsAndWrites() {
+    @JvmStatic
+    fun main(args: Array<String>) {
         println("ATTACH PROFILER NOW!!")
         Thread.sleep(10_000)
         println("RUNNING")
@@ -46,7 +44,7 @@ class ReadWriteBenchmark {
                                 store.delete(keyBytes)
                             } else {
                                 val strValue = "${value}"
-                                if(strValue.isEmpty()){
+                                if (strValue.isEmpty()) {
                                     throw IllegalStateException("String is empty!")
                                 }
                                 val valueBytes = Bytes(strValue)
@@ -56,7 +54,7 @@ class ReadWriteBenchmark {
                         }
                         tx.commit()
                     }
-                    if(c % 100 == 0){
+                    if (c % 100 == 0) {
                         println("${Thread.currentThread().name} :: Commit #${c} successful.")
                     }
                 }
@@ -84,8 +82,7 @@ class ReadWriteBenchmark {
                                 } else {
                                     0
                                 }
-                                if(r % 100 == 0 && r > 0){
-                                    println(cursor)
+                                if (r % 1000 == 0 && r > 0) {
                                     println("${Thread.currentThread().name} :: Read #${r} successful.")
                                 }
                                 sum
@@ -97,17 +94,20 @@ class ReadWriteBenchmark {
                 }
             }
 
-            val reporter = thread(name = "Reporter"){
-                while(true){
-                    Thread.sleep(TimeUnit.SECONDS.toMillis(10))
-                    println(ChronoStoreStatistics.snapshot().prettyPrint())
-                }
-            }
+//            thread(name = "Reporter", isDaemon = true) {
+//                while (true) {
+//                    Thread.sleep(TimeUnit.SECONDS.toMillis(10))
+//                    println(ChronoStoreStatistics.snapshot().prettyPrint())
+//                }
+//            }
 
             writer.join()
             for (reader in readers) {
                 reader.join()
             }
+
+            println("FINAL STATISTICS")
+            println(ChronoStoreStatistics.snapshot().prettyPrint())
         }
     }
 

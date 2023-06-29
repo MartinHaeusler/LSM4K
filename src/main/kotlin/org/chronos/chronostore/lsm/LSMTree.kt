@@ -154,7 +154,9 @@ class LSMTree(
             if (inMemoryCursor !is EmptyCursor) {
                 fileCursors.add(inMemoryCursor)
             }
-            val cursor = fileCursors.asSequence().map { val c: Cursor<Bytes, Command> = VersioningCursor(it, timestamp, includeDeletions = true); c }.reduce { l, r -> OverlayCursor(l, r) }
+            val cursor = fileCursors.asSequence()
+                    .map { VersioningCursor(it, timestamp, includeDeletions = true) }
+                    .reduce(::OverlayCursor)
             cursor
         }
         return rawCursor.onClose {

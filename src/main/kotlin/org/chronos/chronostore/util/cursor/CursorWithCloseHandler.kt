@@ -27,6 +27,14 @@ open class CursorWithCloseHandler<C : Cursor<K, V>, K, V>(
         return this.innerCursor.seekExactlyOrPrevious(key)
     }
 
+    override fun peekNext(): Pair<K, V>? {
+        return this.innerCursor.peekNext()
+    }
+
+    override fun peekPrevious(): Pair<K, V>? {
+        return this.innerCursor.peekPrevious()
+    }
+
     override val keyOrNullInternal: K?
         get() = this.innerCursor.keyOrNull
 
