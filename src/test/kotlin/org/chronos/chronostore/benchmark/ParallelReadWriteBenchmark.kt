@@ -1,14 +1,11 @@
 package org.chronos.chronostore.benchmark
 
 import org.chronos.chronostore.test.util.ChronoStoreMode
-import org.chronos.chronostore.test.util.ChronoStoreTest
 import org.chronos.chronostore.util.Bytes
 import org.chronos.chronostore.util.statistics.ChronoStoreStatistics
-import org.junit.jupiter.api.Test
-import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
 
-object ReadWriteBenchmark {
+object ParallelReadWriteBenchmark {
 
 
     private const val NUMBER_OF_COMMITS = 10_000

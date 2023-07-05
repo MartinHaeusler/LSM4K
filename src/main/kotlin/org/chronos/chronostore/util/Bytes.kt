@@ -13,6 +13,7 @@ import java.io.OutputStream
 import java.nio.charset.Charset
 import java.util.*
 import kotlin.math.min
+import kotlin.random.Random
 
 class Bytes(
     private val array: ByteArray,

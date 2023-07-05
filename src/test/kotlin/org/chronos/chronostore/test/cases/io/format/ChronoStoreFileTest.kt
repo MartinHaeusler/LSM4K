@@ -13,7 +13,7 @@ import org.chronos.chronostore.test.util.VirtualFileSystemTest
 import org.chronos.chronostore.util.Bytes
 import strikt.api.expectThat
 import strikt.assertions.*
-import java.util.*
+import kotlin.random.Random
 
 class ChronoStoreFileTest {
 
@@ -100,7 +100,7 @@ class ChronoStoreFileTest {
                     settings = ChronoStoreFileSettings(CompressionAlgorithm.NONE, 1024 * 16, 4),
                     metadata = emptyMap()
                 )
-                val random = Random()
+                val random = Random(System.currentTimeMillis())
                 val commands = (0 until 1000).asSequence().map { i ->
                     if (i.mod(100) == 0 && i > 0) {
                         Command.del(theKey, (i + 1) * 1000L)
@@ -212,7 +212,7 @@ class ChronoStoreFileTest {
                     settings = ChronoStoreFileSettings(CompressionAlgorithm.NONE, 1024 * 16, 4),
                     metadata = emptyMap()
                 )
-                val random = Random()
+                val random = Random(System.currentTimeMillis())
                 val commands = (0 until 1000).asSequence().map { i ->
                     if (i.mod(100) == 0 && i > 0) {
                         Command.del(theKey, (i + 1) * 1000L)

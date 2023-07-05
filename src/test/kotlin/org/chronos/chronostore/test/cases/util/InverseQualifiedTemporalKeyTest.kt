@@ -6,7 +6,7 @@ import org.chronos.chronostore.util.StoreId
 import org.junit.jupiter.api.Test
 import strikt.api.expectThat
 import strikt.assertions.isEqualTo
-import java.util.*
+import kotlin.random.Random
 
 class InverseQualifiedTemporalKeyTest {
 
@@ -14,7 +14,7 @@ class InverseQualifiedTemporalKeyTest {
     @Test
     fun canSerializeAndDeserialize() {
         val storeId = StoreId.randomUUID()
-        val userKey = Bytes.random(Random(), 256)
+        val userKey = Bytes.random(Random(System.currentTimeMillis()), 256)
         val original = InverseQualifiedTemporalKey(1234, storeId, userKey)
         val serialized = original.toBytes()
         val deserialized = InverseQualifiedTemporalKey.fromBytes(serialized)

@@ -28,11 +28,13 @@ import org.chronos.chronostore.util.iterator.IteratorExtensions.orderedDistinct
 import org.chronos.chronostore.util.stream.UnclosableOutputStream.Companion.unclosable
 import org.pcollections.TreePMap
 import java.io.File
+import java.lang.Exception
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.concurrent.read
 import kotlin.concurrent.write
+import kotlin.system.measureTimeMillis
 
 class LSMTree(
     private val directory: VirtualDirectory,
@@ -61,6 +63,8 @@ class LSMTree(
 
     private val activeTaskLock = ReentrantReadWriteLock(true)
     private val activeTaskCondition = activeTaskLock.writeLock().newCondition()
+
+    @Volatile
     private var activeTaskMonitor: TaskMonitor? = null
 
     private var garbageFileManager: GarbageFileManager
@@ -155,8 +159,8 @@ class LSMTree(
                 fileCursors.add(inMemoryCursor)
             }
             val cursor = fileCursors.asSequence()
-                    .map { VersioningCursor(it, timestamp, includeDeletions = true) }
-                    .reduce(::OverlayCursor)
+                .map { VersioningCursor(it, timestamp, includeDeletions = true) }
+                .reduce(::OverlayCursor)
             cursor
         }
         return rawCursor.onClose {
@@ -197,6 +201,7 @@ class LSMTree(
     }
 
     fun flushInMemoryDataToDisk(minFlushSizeBytes: Long, monitor: TaskMonitor) {
+        log.debug { "TASK: Flush in-memory data to disk" }
         this.performAsyncWriteTask(monitor) {
             monitor.reportStarted("Flushing Data to Disk")
             if (this.inMemorySizeBytes < minFlushSizeBytes) {
@@ -206,9 +211,7 @@ class LSMTree(
             }
             log.debug { "Flushing LSM Tree '${this.directory}'!" }
             val commands = monitor.subTask(0.1, "Collecting Entries to flush") {
-                this.lock.write {
-                    this.inMemoryTree.toMap()
-                }
+                this.inMemoryTree
             }
             val lastFileIndex = this.fileList.lastOrNull()?.index
             val newFileIndex = if (lastFileIndex == null) {
@@ -216,30 +219,36 @@ class LSMTree(
             } else {
                 lastFileIndex + 1
             }
+            log.debug { "Target file index ${newFileIndex} will be used for flush of tree ${this.path}" }
             val file = this.directory.file("${newFileIndex}${FILE_EXTENSION}")
-            monitor.subTask(0.8, "Writing File") {
-                file.deleteOverWriterFileIfExists()
-                file.withOverWriter { overWriter ->
-                    ChronoStoreFileWriter(
-                        outputStream = overWriter.outputStream.unclosable().buffered(),
-                        settings = this.newFileSettings,
-                        metadata = emptyMap()
-                    ).use { writer ->
-                        log.debug { "Flushing ${commands.size} commands from in-memory segment into '${file.path}'." }
-                        writer.writeFile(
-                            // we're flushing this file from in-memory,
-                            // so the resulting file has never been merged.
-                            numberOfMerges = 0,
-                            orderedCommands = commands.values.iterator()
-                        )
+            val flushTime = measureTimeMillis {
+                monitor.subTask(0.8, "Writing File") {
+                    file.deleteOverWriterFileIfExists()
+                    file.withOverWriter { overWriter ->
+                        ChronoStoreFileWriter(
+                            outputStream = overWriter.outputStream.unclosable().buffered(),
+                            settings = this.newFileSettings,
+                            metadata = emptyMap()
+                        ).use { writer ->
+                            log.debug { "Flushing ${commands.size} commands from in-memory segment into '${file.path}'." }
+                            writer.writeFile(
+                                // we're flushing this file from in-memory,
+                                // so the resulting file has never been merged.
+                                numberOfMerges = 0,
+                                orderedCommands = commands.values.iterator()
+                            )
+                        }
+                        overWriter.commit()
                     }
-                    overWriter.commit()
                 }
             }
+            log.debug { "Flush into index file ${newFileIndex} completed in ${flushTime}ms. Redirecting traffic to new data file for LSM tree ${this.path}" }
             monitor.subTask(0.1, "Redirecting traffic to file") {
                 this.lock.write {
                     this.fileList.add(LSMTreeFile(file, newFileIndex, this.driverFactory, this.blockReadMode, this.blockCache))
+                    log.debug { "Removing ${commands.keys.size} keys from the in-memory tree (which has ${this.inMemoryTree.size} keys)..." }
                     this.inMemoryTree = this.inMemoryTree.minusAll(commands.keys)
+                    log.debug { "${inMemoryTree.size} entries remaining in-memory after flush of tree ${this.path}" }
                     this.inMemoryTreeSizeInBytes.addAndGet(commands.values.sumOf { it.byteSize } * -1L)
                 }
             }
@@ -269,6 +278,7 @@ class LSMTree(
     }
 
     fun mergeFiles(fileIndices: Set<Int>, retainOldVersions: Boolean, monitor: TaskMonitor) {
+        log.debug { "TASK: merge files: ${fileIndices.sorted().joinToString(prefix = "[", separator = ", ", postfix = "]")}" }
         this.performAsyncWriteTask(monitor) {
             monitor.reportStarted("Merging ${fileIndices.size} files")
             val filesToMerge = this.getFilesToMerge(fileIndices)
@@ -354,18 +364,30 @@ class LSMTree(
 
     private inline fun <T> performAsyncWriteTask(monitor: TaskMonitor, task: () -> T): T {
         this.activeTaskLock.write {
+            log.debug("Lock acquired.")
             while (this.activeTaskMonitor != null) {
+                log.debug("Other management operation is ongoing. Waiting...")
                 this.activeTaskCondition.awaitUninterruptibly()
             }
+            log.debug("No other management operation is ongoing. Setting active task monitor.")
             this.activeTaskMonitor = monitor
         }
         try {
-            return task()
+            log.debug("RUNNING TASK")
+            return task().also {
+                log.debug("TASK COMPLETE")
+            }
+        } catch (e: Throwable) {
+            log.error(e) { "Exception during async write task: ${e}" }
+            throw e
         } finally {
             this.activeTaskLock.write {
+                log.debug("Unsetting active task monitor...")
                 this.activeTaskMonitor = null
+                log.debug("Signalling condition")
                 this.activeTaskCondition.signalAll()
             }
+            log.debug("Lock released.")
         }
     }
 
