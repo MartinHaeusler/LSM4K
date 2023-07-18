@@ -1,10 +1,14 @@
 package org.chronos.chronostore.api
 
+import jdk.incubator.vector.VectorOperators.Binary
 import org.chronos.chronostore.io.fileaccess.FileChannelDriver
 import org.chronos.chronostore.io.fileaccess.RandomFileAccessDriverFactory
 import org.chronos.chronostore.io.format.CompressionAlgorithm
 import org.chronos.chronostore.io.format.datablock.BlockReadMode
-import java.util.concurrent.TimeUnit
+import org.chronos.chronostore.util.unit.BinarySize
+import org.chronos.chronostore.util.unit.MiB
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.minutes
 
 class ChronoStoreConfiguration {
 
@@ -16,7 +20,7 @@ class ChronoStoreConfiguration {
     var compressionAlgorithm: CompressionAlgorithm = CompressionAlgorithm.SNAPPY
 
     /** When writing new files: the maximum (uncompressed) size of a single data block.*/
-    var maxBlockSizeInBytes: Int = 1024 * 1024 * 64
+    var maxBlockSize: BinarySize = 64.MiB
 
     /** When writing new files: every n-th key will be part of the block-internal index.*/
     var indexRate: Int = 100
@@ -25,9 +29,9 @@ class ChronoStoreConfiguration {
 
     var mergeStrategy: MergeStrategy = MergeStrategy.DEFAULT
 
-    var mergeIntervalMillis: Long = TimeUnit.MINUTES.toMillis(10)
+    var mergeInterval: Duration = 10.minutes
 
-    var maxInMemoryTreeSizeInBytes: Long = 1024 * 1024 * 8
+    var maxInMemoryTreeSize: BinarySize = 80.MiB
 
     /**
      * The time of day at which the Write-Ahead-Log file should be compacted.

@@ -2,6 +2,7 @@ package org.chronos.chronostore.lsm.merge.strategy
 
 import org.chronos.chronostore.api.StoreManager
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor
+import org.chronos.chronostore.lsm.event.InMemoryLsmFlushEvent
 import org.chronos.chronostore.lsm.event.InMemoryLsmInsertEvent
 import org.chronos.chronostore.lsm.event.LsmCursorClosedEvent
 import org.chronos.chronostore.wal.WriteAheadLog
@@ -26,6 +27,8 @@ interface MergeService {
     fun flushAllInMemoryStoresToDisk(taskMonitor: TaskMonitor = TaskMonitor.create())
 
     fun handleInMemoryInsertEvent(event: InMemoryLsmInsertEvent)
+
+    fun handleInMemoryFlushEvent(event: InMemoryLsmFlushEvent)
 
     fun handleCursorClosedEvent(lsmCursorClosedEvent: LsmCursorClosedEvent)
 

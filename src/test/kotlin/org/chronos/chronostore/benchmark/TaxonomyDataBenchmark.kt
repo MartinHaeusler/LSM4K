@@ -8,6 +8,7 @@ import org.chronos.chronostore.io.format.CompressionAlgorithm
 import org.chronos.chronostore.io.vfs.VirtualReadWriteFile.Companion.withOverWriter
 import org.chronos.chronostore.io.vfs.disk.DiskBasedVirtualFileSystem
 import org.chronos.chronostore.util.Bytes
+import org.chronos.chronostore.util.unit.MiB
 import java.io.File
 
 object TaxonomyDataBenchmark {
@@ -40,7 +41,7 @@ object TaxonomyDataBenchmark {
         outputFile.withOverWriter { overWriter ->
             val writer = ChronoStoreFileWriter(
                 outputStream = overWriter.outputStream.buffered(),
-                settings = ChronoStoreFileSettings(CompressionAlgorithm.LZO_1X, 1024 * 1024 * 16, 100),
+                settings = ChronoStoreFileSettings(CompressionAlgorithm.LZO_1X, 10.MiB, 100),
                 metadata = emptyMap()
             )
             writer.writeFile(0, orderedCommands.iterator())

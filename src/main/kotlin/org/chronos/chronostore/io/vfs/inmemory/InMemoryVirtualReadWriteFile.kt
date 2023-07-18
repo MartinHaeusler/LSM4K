@@ -2,8 +2,10 @@ package org.chronos.chronostore.io.vfs.inmemory
 
 import org.chronos.chronostore.io.vfs.VirtualReadWriteFile
 import org.chronos.chronostore.util.Bytes
+import org.chronos.chronostore.util.stream.UnclosableOutputStream.Companion.unclosable
 import java.io.ByteArrayOutputStream
 import java.io.OutputStream
+import kotlin.reflect.jvm.internal.impl.protobuf.ByteString.Output
 
 class InMemoryVirtualReadWriteFile(
     parent: InMemoryVirtualDirectory?,
@@ -41,10 +43,16 @@ class InMemoryVirtualReadWriteFile(
     inner class OverWriterImpl : VirtualReadWriteFile.OverWriter {
 
         private var isOpen: Boolean = true
-        override val outputStream: ByteArrayOutputStream = ByteArrayOutputStream()
+
+        private val stream = ByteArrayOutputStream()
+
+        override val outputStream: OutputStream
             get() {
                 assertIsOpen()
-                return field
+                // only expose unclosable variants of the stream to
+                // the "outside world". We want to have control over
+                // when this stream gets closed inside this class.
+                return stream.unclosable()
             }
 
         private fun assertIsOpen() {
@@ -57,12 +65,13 @@ class InMemoryVirtualReadWriteFile(
             this.assertIsOpen()
             val file = this@InMemoryVirtualReadWriteFile
             this.outputStream.flush()
+            this.stream.flush()
             if (!file.exists()) {
                 file.parent?.mkdirs()
                 file.create()
             }
-            file.fileSystem.overwrite(file.path, Bytes(this.outputStream.toByteArray()))
-            this.outputStream.close()
+            file.fileSystem.overwrite(file.path, Bytes(this.stream.toByteArray()))
+            this.stream.close()
             this.isOpen = false
         }
 
@@ -70,7 +79,7 @@ class InMemoryVirtualReadWriteFile(
             if (!this.isOpen) {
                 return
             }
-            this.outputStream.close()
+            this.stream.close()
             this.isOpen = false
         }
 

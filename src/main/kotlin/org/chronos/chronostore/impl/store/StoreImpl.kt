@@ -11,6 +11,7 @@ import org.chronos.chronostore.lsm.merge.strategy.MergeService
 import org.chronos.chronostore.util.StoreId
 import org.chronos.chronostore.util.Timestamp
 import org.chronos.chronostore.util.TransactionId
+import org.chronos.chronostore.util.unit.BinarySize
 
 class StoreImpl(
     override val id: StoreId,
@@ -25,9 +26,18 @@ class StoreImpl(
     blockCache: LocalBlockCache,
     driverFactory: RandomFileAccessDriverFactory,
     newFileSettings: ChronoStoreFileSettings,
+    maxInMemoryTreeSize: BinarySize,
 ) : Store {
 
-    val tree = LSMTree(this.directory, mergeService, blockCache, driverFactory, blockReadMode, newFileSettings)
+    val tree = LSMTree(
+        directory = this.directory,
+        mergeService = mergeService,
+        blockCache = blockCache,
+        driverFactory = driverFactory,
+        blockReadMode = blockReadMode,
+        newFileSettings = newFileSettings,
+        maxInMemoryTreeSize = maxInMemoryTreeSize,
+    )
 
     override fun toString(): String {
         return "Store[${this.name} (ID: ${this.id})]"

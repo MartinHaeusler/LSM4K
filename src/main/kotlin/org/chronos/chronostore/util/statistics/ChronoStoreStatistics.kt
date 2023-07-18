@@ -15,6 +15,8 @@ class ChronoStoreStatistics(
     val pageLoadsFromDisk: Long,
     /** How many times did we have to load a file header from disk?  */
     val fileHeaderLoadsFromDisk: Long,
+    /** How long have writer threads been stalled because of full in-memory trees? */
+    val totalWriteStallTimeMillis: Long,
 ) {
 
     companion object {
@@ -88,6 +90,9 @@ class ChronoStoreStatistics(
         /** How many times did we have to load a file header from disk?  */
         val FILE_HEADER_LOADS_FROM_DISK = AtomicLong(0L)
 
+        /** How long have writer threads been stalled because of full in-memory trees? */
+        val TOTAL_WRITE_STALL_TIME_MILLIS = AtomicLong(0L)
+
         fun snapshot(): ChronoStoreStatistics {
             return ChronoStoreStatistics(
                 CursorStatistics(
@@ -122,6 +127,7 @@ class ChronoStoreStatistics(
                 ),
                 pageLoadsFromDisk = PAGE_LOADS_FROM_DISK.get(),
                 fileHeaderLoadsFromDisk = FILE_HEADER_LOADS_FROM_DISK.get(),
+                totalWriteStallTimeMillis = TOTAL_WRITE_STALL_TIME_MILLIS.get(),
             )
         }
 
@@ -183,6 +189,7 @@ class ChronoStoreStatistics(
             | 
             | Header Loads: ${this.fileHeaderLoadsFromDisk}
             | Page Loads: ${this.pageLoadsFromDisk}
+            | Write Stall Time: ${this.totalWriteStallTimeMillis}ms
         """.trimMargin()
     }
 

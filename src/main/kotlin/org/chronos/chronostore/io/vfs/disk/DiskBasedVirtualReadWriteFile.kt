@@ -3,6 +3,7 @@ package org.chronos.chronostore.io.vfs.disk
 import mu.KotlinLogging
 import org.chronos.chronostore.io.vfs.VirtualReadWriteFile
 import org.chronos.chronostore.util.IOExtensions.sync
+import org.chronos.chronostore.util.stream.UnclosableOutputStream.Companion.unclosable
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
@@ -75,7 +76,10 @@ class DiskBasedVirtualReadWriteFile(
         override val outputStream: OutputStream
             get() {
                 assertNotClosed()
-                return stream
+                // only expose unclosable variants of the stream to
+                // the "outside world". We want to have control over
+                // when this stream gets closed inside this class.
+                return stream.unclosable()
             }
 
         private fun assertNotClosed() {

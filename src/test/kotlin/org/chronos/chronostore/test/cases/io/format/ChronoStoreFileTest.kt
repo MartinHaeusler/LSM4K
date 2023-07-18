@@ -11,6 +11,8 @@ import org.chronos.chronostore.lsm.LocalBlockCache
 import org.chronos.chronostore.test.util.VFSMode
 import org.chronos.chronostore.test.util.VirtualFileSystemTest
 import org.chronos.chronostore.util.Bytes
+import org.chronos.chronostore.util.unit.KiB
+import org.chronos.chronostore.util.unit.MiB
 import strikt.api.expectThat
 import strikt.assertions.*
 import kotlin.random.Random
@@ -25,7 +27,7 @@ class ChronoStoreFileTest {
             file.withOverWriter { overWriter ->
                 val writer = ChronoStoreFileWriter(
                     outputStream = overWriter.outputStream.buffered(),
-                    settings = ChronoStoreFileSettings(CompressionAlgorithm.NONE, 1024 * 1024 * 16, 100),
+                    settings = ChronoStoreFileSettings(CompressionAlgorithm.NONE, 16.MiB, 100),
                     metadata = emptyMap()
                 )
                 writer.writeFile(0, orderedCommands = emptySequence<Command>().iterator())
@@ -57,7 +59,7 @@ class ChronoStoreFileTest {
                                 get { this.createdAt }.isGreaterThan(0L)
                                 get { this.settings }.and {
                                     get { this.compression }.isEqualTo(CompressionAlgorithm.NONE)
-                                    get { this.maxBlockSizeInBytes }.isEqualTo(1024 * 1024 * 16)
+                                    get { this.maxBlockSize }.isEqualTo(16.MiB)
                                     get { this.indexRate }.isEqualTo(100)
                                 }
                             }
@@ -97,7 +99,7 @@ class ChronoStoreFileTest {
             file.withOverWriter { overWriter ->
                 val writer = ChronoStoreFileWriter(
                     outputStream = overWriter.outputStream.buffered(),
-                    settings = ChronoStoreFileSettings(CompressionAlgorithm.NONE, 1024 * 16, 4),
+                    settings = ChronoStoreFileSettings(CompressionAlgorithm.NONE, 16.KiB, 4),
                     metadata = emptyMap()
                 )
                 val random = Random(System.currentTimeMillis())
@@ -209,7 +211,7 @@ class ChronoStoreFileTest {
             file.withOverWriter { overWriter ->
                 val writer = ChronoStoreFileWriter(
                     outputStream = overWriter.outputStream.buffered(),
-                    settings = ChronoStoreFileSettings(CompressionAlgorithm.NONE, 1024 * 16, 4),
+                    settings = ChronoStoreFileSettings(CompressionAlgorithm.NONE, 16.KiB, 4),
                     metadata = emptyMap()
                 )
                 val random = Random(System.currentTimeMillis())

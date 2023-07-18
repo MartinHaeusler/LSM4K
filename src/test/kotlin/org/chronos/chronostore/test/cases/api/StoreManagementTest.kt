@@ -13,11 +13,14 @@ import org.chronos.chronostore.test.extensions.transaction.ChronoStoreTransactio
 import org.chronos.chronostore.test.util.ChronoStoreMode
 import org.chronos.chronostore.test.util.ChronoStoreTest
 import org.chronos.chronostore.util.Bytes
+import org.chronos.chronostore.util.unit.Bytes
+import org.chronos.chronostore.util.unit.GiB
 import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.fail
 import strikt.api.expectThat
 import strikt.assertions.*
 import kotlin.math.min
+import kotlin.time.Duration.Companion.minutes
 
 class StoreManagementTest {
 
@@ -153,8 +156,8 @@ class StoreManagementTest {
 
         val config = ChronoStoreConfiguration()
         // disable flushing and merging, we will do it manually in this test
-        config.maxInMemoryTreeSizeInBytes = Long.MAX_VALUE
-        config.mergeIntervalMillis = Long.MAX_VALUE
+        config.maxInMemoryTreeSize = 10.GiB
+        config.mergeInterval = (-1).minutes
         mode.withChronoStore(config) { chronoStore ->
             chronoStore.transaction { tx ->
                 val data = tx.createNewStore("data", versioned = true)
@@ -202,8 +205,8 @@ class StoreManagementTest {
     fun canIterateOverAllVersionsWithMultipleFiles(mode: ChronoStoreMode) {
         val config = ChronoStoreConfiguration()
         // disable flushing and merging, we will do it manually in this test
-        config.maxInMemoryTreeSizeInBytes = Long.MAX_VALUE
-        config.mergeIntervalMillis = Long.MAX_VALUE
+        config.maxInMemoryTreeSize = 10.GiB
+        config.mergeInterval = (-1).minutes
 
         val numberOfEntries = 20
         mode.withChronoStore(config) { chronoStore, vfs ->

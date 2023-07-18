@@ -13,6 +13,7 @@ import org.chronos.chronostore.io.format.datablock.BlockReadMode
 import org.chronos.chronostore.io.vfs.VirtualDirectory
 import org.chronos.chronostore.io.vfs.VirtualReadWriteFile.Companion.withOverWriter
 import org.chronos.chronostore.lsm.LSMTreeFile.Companion.FILE_EXTENSION
+import org.chronos.chronostore.lsm.event.InMemoryLsmFlushEvent
 import org.chronos.chronostore.lsm.event.InMemoryLsmInsertEvent
 import org.chronos.chronostore.lsm.event.LsmCursorClosedEvent
 import org.chronos.chronostore.lsm.merge.strategy.MergeService
@@ -25,10 +26,13 @@ import org.chronos.chronostore.util.iterator.IteratorExtensions.checkOrdered
 import org.chronos.chronostore.util.iterator.IteratorExtensions.filter
 import org.chronos.chronostore.util.iterator.IteratorExtensions.latestVersionOnly
 import org.chronos.chronostore.util.iterator.IteratorExtensions.orderedDistinct
-import org.chronos.chronostore.util.stream.UnclosableOutputStream.Companion.unclosable
+import org.chronos.chronostore.util.log.LogMarkers
+import org.chronos.chronostore.util.statistics.ChronoStoreStatistics
+import org.chronos.chronostore.util.unit.BinarySize
+import org.chronos.chronostore.util.unit.Bytes
 import org.pcollections.TreePMap
+import org.slf4j.MarkerFactory
 import java.io.File
-import java.lang.Exception
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.locks.ReentrantReadWriteLock
@@ -43,6 +47,7 @@ class LSMTree(
     private val driverFactory: RandomFileAccessDriverFactory,
     private val blockReadMode: BlockReadMode,
     private val newFileSettings: ChronoStoreFileSettings,
+    private val maxInMemoryTreeSize: BinarySize,
 ) {
 
     companion object {
@@ -55,6 +60,7 @@ class LSMTree(
     private var inMemoryTree = TreePMap.empty<KeyAndTimestamp, Command>()
     private val inMemoryTreeSizeInBytes = AtomicLong(0)
     private val lock = ReentrantReadWriteLock(true)
+    private val treeSizeChangedCondition = this.lock.writeLock().newCondition()
 
     private val fileList: MutableList<LSMTreeFile>
     private val nextFreeFileIndex = AtomicInteger(0)
@@ -115,8 +121,8 @@ class LSMTree(
     }
 
 
-    val inMemorySizeBytes: Long
-        get() = this.inMemoryTreeSizeInBytes.get()
+    val inMemorySize: BinarySize
+        get() = this.inMemoryTreeSizeInBytes.get().Bytes
 
     val path: String
         get() = this.directory.path
@@ -169,29 +175,66 @@ class LSMTree(
     }
 
     fun put(commands: Iterable<Command>) {
-        var inserted = 0
-        val totalSize: Int
-        this.lock.write {
+        val event = this.lock.write {
             val containedEntry = commands.asSequence().map { it.keyAndTimestamp }.firstOrNull(this.inMemoryTree::containsKey)
             require(containedEntry == null) {
                 "The key-and-timestamp ${containedEntry} is already contained in in-memory LSM tree!"
             }
 
+            // if the tree size gets too big, we have to block the writes until we have enough space
+            // again. This is very unfortunate, but cannot be avoided. If the writer generates more
+            // data per second than the flush task can write to disk, the only other alternative is
+            // to claim more and more RAM until we eventually run into an OutOfMemoryError.
+            this.waitUntilInMemoryTreeHasCapacity()
+
+            // capture this value within the lock in order to avoid concurrency issues which
+            // might cause "treeSizeBefore" to be greater than "treeSizeAfter"
+            val treeSizeBefore = this.inMemorySize
+            val treeCountBefore = this.inMemoryTree.size
+
             val keyAndTimestampToCommand = commands.associateBy { it.keyAndTimestamp }
             this.inMemoryTree = this.inMemoryTree.plusAll(keyAndTimestampToCommand)
             this.inMemoryTreeSizeInBytes.getAndAdd(keyAndTimestampToCommand.values.sumOf { it.byteSize }.toLong())
-            inserted += keyAndTimestampToCommand.size
 
-            totalSize = this.inMemoryTree.size
+            val treeCountAfter = this.inMemoryTree.size
+            val treeSizeAfter = this.inMemorySize
+
+            // the in-memory tree size has changed, notify listeners
+            this.treeSizeChangedCondition.signalAll()
+
+            InMemoryLsmInsertEvent(
+                lsmTree = this,
+                inMemoryElementCountBefore = treeCountBefore,
+                inMemoryElementCountAfter = treeCountAfter,
+                inMemorySizeBefore = treeSizeBefore,
+                inMemorySizeAfter = treeSizeAfter,
+            )
         }
         // let the merge strategy know what happened
-        this.mergeService.handleInMemoryInsertEvent(
-            InMemoryLsmInsertEvent(
-                this,
-                inserted,
-                totalSize,
-            )
-        )
+        this.mergeService.handleInMemoryInsertEvent(event)
+    }
+
+    private fun waitUntilInMemoryTreeHasCapacity() {
+        var timeBeforeWriteStall = -1L
+        while (this.inMemorySize >= this.maxInMemoryTreeSize) {
+            // tree size is too big -> stall the write
+            try {
+                if (timeBeforeWriteStall < 0) {
+                    timeBeforeWriteStall = System.nanoTime()
+                    log.trace(LogMarkers.PERF) { "Stalling write to '${this.path}' because the in-memory tree cannot hold more data." }
+                }
+                this.treeSizeChangedCondition.await()
+            } catch (e: Exception) {
+                log.trace(LogMarkers.PERF) { "Caught exception while awaiting 'treeSizeChanged' condition: ${e}" }
+            }
+        }
+        if (timeBeforeWriteStall >= 0) {
+            // report the write stall time in the statistics
+            val timeAfterWriteStall = System.nanoTime()
+            val writeStallTime = (timeAfterWriteStall - timeBeforeWriteStall) / 1_000_000
+            log.trace(LogMarkers.PERF) { "Write to '${this.path}' will no longer be stalled and may continue. Stall time: ${writeStallTime}ms." }
+            ChronoStoreStatistics.TOTAL_WRITE_STALL_TIME_MILLIS.addAndGet(writeStallTime)
+        }
     }
 
     fun getMaxPersistedTimestamp(): Timestamp {
@@ -200,16 +243,16 @@ class LSMTree(
             .maxOrNull() ?: -1
     }
 
-    fun flushInMemoryDataToDisk(minFlushSizeBytes: Long, monitor: TaskMonitor) {
-        log.debug { "TASK: Flush in-memory data to disk" }
+    fun flushInMemoryDataToDisk(minFlushSize: BinarySize, monitor: TaskMonitor) {
+        log.trace(LogMarkers.PERF) { "TASK: Flush in-memory data to disk" }
         this.performAsyncWriteTask(monitor) {
             monitor.reportStarted("Flushing Data to Disk")
-            if (this.inMemorySizeBytes < minFlushSizeBytes) {
+            if (this.inMemorySize < minFlushSize) {
                 // flush not necessary
                 monitor.reportDone()
                 return
             }
-            log.debug { "Flushing LSM Tree '${this.directory}'!" }
+            log.trace(LogMarkers.PERF) { "Flushing LSM Tree '${this.directory}'!" }
             val commands = monitor.subTask(0.1, "Collecting Entries to flush") {
                 this.inMemoryTree
             }
@@ -219,18 +262,18 @@ class LSMTree(
             } else {
                 lastFileIndex + 1
             }
-            log.debug { "Target file index ${newFileIndex} will be used for flush of tree ${this.path}" }
+            log.trace(LogMarkers.PERF) { "Target file index ${newFileIndex} will be used for flush of tree ${this.path}" }
             val file = this.directory.file("${newFileIndex}${FILE_EXTENSION}")
             val flushTime = measureTimeMillis {
                 monitor.subTask(0.8, "Writing File") {
                     file.deleteOverWriterFileIfExists()
                     file.withOverWriter { overWriter ->
                         ChronoStoreFileWriter(
-                            outputStream = overWriter.outputStream.unclosable().buffered(),
+                            outputStream = overWriter.outputStream,
                             settings = this.newFileSettings,
                             metadata = emptyMap()
                         ).use { writer ->
-                            log.debug { "Flushing ${commands.size} commands from in-memory segment into '${file.path}'." }
+                            log.trace(LogMarkers.PERF) { "Flushing ${commands.size} commands from in-memory segment into '${file.path}'." }
                             writer.writeFile(
                                 // we're flushing this file from in-memory,
                                 // so the resulting file has never been merged.
@@ -242,16 +285,26 @@ class LSMTree(
                     }
                 }
             }
-            log.debug { "Flush into index file ${newFileIndex} completed in ${flushTime}ms. Redirecting traffic to new data file for LSM tree ${this.path}" }
-            monitor.subTask(0.1, "Redirecting traffic to file") {
+            log.trace(LogMarkers.PERF) { "Flush into index file ${newFileIndex} completed in ${flushTime}ms. Redirecting traffic to new data file for LSM tree ${this.path}" }
+            val event = monitor.subTask(0.1, "Redirecting traffic to file") {
                 this.lock.write {
                     this.fileList.add(LSMTreeFile(file, newFileIndex, this.driverFactory, this.blockReadMode, this.blockCache))
-                    log.debug { "Removing ${commands.keys.size} keys from the in-memory tree (which has ${this.inMemoryTree.size} keys)..." }
+                    log.trace(LogMarkers.PERF) { "Removing ${commands.keys.size} keys from the in-memory tree (which has ${this.inMemoryTree.size} keys)..." }
                     this.inMemoryTree = this.inMemoryTree.minusAll(commands.keys)
-                    log.debug { "${inMemoryTree.size} entries remaining in-memory after flush of tree ${this.path}" }
+                    log.trace(LogMarkers.PERF) { "${inMemoryTree.size} entries remaining in-memory after flush of tree ${this.path}" }
                     this.inMemoryTreeSizeInBytes.addAndGet(commands.values.sumOf { it.byteSize } * -1L)
+
+                    // the in-memory tree size has changed, notify listeners
+                    this.treeSizeChangedCondition.signalAll()
+
+                    InMemoryLsmFlushEvent(
+                        lsmTree = this,
+                        flushedEntryCount = commands.size
+                    )
                 }
             }
+
+            this.mergeService.handleInMemoryFlushEvent(event)
             monitor.reportDone()
         }
     }
@@ -320,7 +373,7 @@ class LSMTree(
                     }
 
                     ChronoStoreFileWriter(
-                        outputStream = overWriter.outputStream.unclosable().buffered(),
+                        outputStream = overWriter.outputStream,
                         settings = this.newFileSettings,
                         metadata = emptyMap()
                     ).use { writer ->
@@ -364,30 +417,21 @@ class LSMTree(
 
     private inline fun <T> performAsyncWriteTask(monitor: TaskMonitor, task: () -> T): T {
         this.activeTaskLock.write {
-            log.debug("Lock acquired.")
             while (this.activeTaskMonitor != null) {
-                log.debug("Other management operation is ongoing. Waiting...")
                 this.activeTaskCondition.awaitUninterruptibly()
             }
-            log.debug("No other management operation is ongoing. Setting active task monitor.")
             this.activeTaskMonitor = monitor
         }
         try {
-            log.debug("RUNNING TASK")
-            return task().also {
-                log.debug("TASK COMPLETE")
-            }
+            return task()
         } catch (e: Throwable) {
             log.error(e) { "Exception during async write task: ${e}" }
             throw e
         } finally {
             this.activeTaskLock.write {
-                log.debug("Unsetting active task monitor...")
                 this.activeTaskMonitor = null
-                log.debug("Signalling condition")
                 this.activeTaskCondition.signalAll()
             }
-            log.debug("Lock released.")
         }
     }
 

@@ -4,10 +4,11 @@ import org.chronos.chronostore.async.taskmonitor.TaskMonitor
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.subTaskWithMonitor
 import org.chronos.chronostore.async.tasks.AsyncTask
 import org.chronos.chronostore.lsm.LSMTree
+import org.chronos.chronostore.util.unit.BinarySize
 
 class FlushInMemoryTreeToDiskTask(
     private val lsmTree: LSMTree,
-    private val maxInMemoryTreeSizeInBytes: Long,
+    private val maxInMemoryTreeSize: BinarySize,
 ) : AsyncTask {
 
     override val name: String
@@ -15,9 +16,15 @@ class FlushInMemoryTreeToDiskTask(
 
     override fun run(monitor: TaskMonitor) {
         monitor.reportStarted(this.name)
+        println("FLUSH TASK START")
         monitor.subTaskWithMonitor(1.0) { subMonitor ->
-            lsmTree.flushInMemoryDataToDisk(this.maxInMemoryTreeSizeInBytes, subMonitor)
+            // the tree must be at least 33% full, otherwise we won't flush.
+            lsmTree.flushInMemoryDataToDisk(
+                minFlushSize = this.maxInMemoryTreeSize / 10,
+                monitor = subMonitor
+            )
         }
+        println("FLUSH TASK DONE")
         monitor.reportDone()
     }
 

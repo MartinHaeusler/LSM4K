@@ -19,7 +19,7 @@ import kotlin.math.max
 
 class ChronoStoreImpl(
     private val vfs: VirtualFileSystem,
-    private val configuration: ChronoStoreConfiguration
+    private val configuration: ChronoStoreConfiguration,
 ) : ChronoStore {
 
     companion object {
@@ -44,7 +44,8 @@ class ChronoStoreImpl(
         blockReadMode = configuration.blockReadMode,
         mergeService = mergeService,
         driverFactory = configuration.randomFileAccessDriverFactory,
-        newFileSettings = ChronoStoreFileSettings(configuration.compressionAlgorithm, configuration.maxBlockSizeInBytes, configuration.indexRate)
+        newFileSettings = ChronoStoreFileSettings(configuration.compressionAlgorithm, configuration.maxBlockSize, configuration.indexRate),
+        maxInMemoryTreeSize = configuration.maxInMemoryTreeSize,
     )
 
     private val writeAheadLog: WriteAheadLog

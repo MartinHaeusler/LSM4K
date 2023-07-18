@@ -22,6 +22,7 @@ import org.chronos.chronostore.util.Timestamp
 import org.chronos.chronostore.util.TransactionId
 import org.chronos.chronostore.util.json.JsonUtil
 import org.chronos.chronostore.util.stream.UnclosableOutputStream.Companion.unclosable
+import org.chronos.chronostore.util.unit.BinarySize
 import java.util.*
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.concurrent.read
@@ -34,6 +35,7 @@ class StoreManagerImpl(
     private val mergeService: MergeService,
     private val driverFactory: RandomFileAccessDriverFactory,
     private val newFileSettings: ChronoStoreFileSettings,
+    private val maxInMemoryTreeSize: BinarySize,
 ) : StoreManager, AutoCloseable {
 
     companion object {
@@ -78,6 +80,7 @@ class StoreManagerImpl(
                         blockCache = this.blockCacheManager.getBlockCache(storeInfo.storeId),
                         driverFactory = this.driverFactory,
                         newFileSettings = this.newFileSettings,
+                        maxInMemoryTreeSize = this.maxInMemoryTreeSize,
                     )
                     this.registerStoreInCaches(store)
                 }
@@ -168,6 +171,7 @@ class StoreManagerImpl(
             blockCache = this.blockCacheManager.getBlockCache(storeId),
             driverFactory = this.driverFactory,
             newFileSettings = this.newFileSettings,
+            maxInMemoryTreeSize = this.maxInMemoryTreeSize,
         )
 
         this.registerStoreInCaches(store)
@@ -342,12 +346,7 @@ class StoreManagerImpl(
     private fun overwriteStoreInfoJson(storeInfos: List<StoreInfo>) {
         this.lock.write {
             this.storeInfoFile.createOverWriter().use { overWriter ->
-                // we have to protect our output stream from being closed here,
-                // because Jackson will close it. If that happens, the overWriter
-                // is no longer able to call fsync on the stream. To prevent that
-                // from happening, we pass a wrapper output stream to jackson which
-                // does NOT forward the "close()" call to our output stream.
-                JsonUtil.writeJson(storeInfos, overWriter.outputStream.unclosable())
+                JsonUtil.writeJson(storeInfos, overWriter.outputStream)
                 overWriter.commit()
             }
         }

@@ -1,8 +1,10 @@
 package org.chronos.chronostore.benchmark
 
+import org.chronos.chronostore.api.ChronoStoreConfiguration
 import org.chronos.chronostore.test.util.ChronoStoreMode
 import org.chronos.chronostore.util.Bytes
 import org.chronos.chronostore.util.statistics.ChronoStoreStatistics
+import org.chronos.chronostore.util.unit.GiB
 import kotlin.random.Random
 import kotlin.system.measureTimeMillis
 
@@ -26,11 +28,16 @@ object SerialReadWriteBenchmark {
         val random = Random(System.currentTimeMillis())
         val uniqueKeys = (0 until NUMBER_OF_UNIQUE_KEYS).map { "key#${it}" }
 
-        ChronoStoreMode.ONDISK.withChronoStore { chronoStore ->
+        val config = ChronoStoreConfiguration()
+        config.maxInMemoryTreeSize = 1.GiB
+
+        ChronoStoreMode.ONDISK.withChronoStore(config) { chronoStore ->
             chronoStore.transaction { tx ->
                 tx.createNewStore("test", versioned = true)
                 tx.commit()
             }
+
+            val startTime = System.currentTimeMillis()
 
             println("Starting writer.")
             measureTimeMillis {
@@ -49,7 +56,10 @@ object SerialReadWriteBenchmark {
                         tx.commit()
                     }
                     if (c % 100 == 0) {
-                        println("${Thread.currentThread().name} :: Commit #${c} successful.")
+                        val runtime = System.currentTimeMillis() - startTime
+                        val stallTime = ChronoStoreStatistics.TOTAL_WRITE_STALL_TIME_MILLIS.get()
+                        val stallTimePercent = (stallTime / runtime.toDouble()) * 100
+                        println("${Thread.currentThread().name} :: Commit #${c} successful. Stall time: ${stallTime}ms (${stallTimePercent}%).")
                     }
                 }
             }.let { println("Writer completed in ${it}ms.") }

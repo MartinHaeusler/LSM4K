@@ -190,7 +190,7 @@ class ChronoStoreFileWriter : AutoCloseable {
         // in order to create an appropriately sized bloom filter for the block later on,
         // we must keep track of all of the keys within the block.
         val allKeysInBlock = mutableListOf<Bytes>()
-        while (commands.hasNext() && (blockPositionTrackingStream.position + commands.peek().byteSize) < this.settings.maxBlockSizeInBytes) {
+        while (commands.hasNext() && (blockPositionTrackingStream.position + commands.peek().byteSize) < this.settings.maxBlockSize.bytes) {
             val command = commands.next()
             blockIndexBuilder.visit(command, blockPositionTrackingStream.position.toInt())
             blockPositionTrackingStream.write(command.toBytes())
