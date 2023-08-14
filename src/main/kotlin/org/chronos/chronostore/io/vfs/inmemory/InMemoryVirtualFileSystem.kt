@@ -17,7 +17,7 @@ class InMemoryVirtualFileSystem : VirtualFileSystem {
 
     companion object {
 
-        val PATH_PREFIX = "<memory>://"
+        val PATH_PREFIX = "<memory>::"
 
     }
 
