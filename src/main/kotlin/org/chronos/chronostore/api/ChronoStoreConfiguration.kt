@@ -1,10 +1,8 @@
 package org.chronos.chronostore.api
 
-import jdk.incubator.vector.VectorOperators.Binary
 import org.chronos.chronostore.io.fileaccess.FileChannelDriver
 import org.chronos.chronostore.io.fileaccess.RandomFileAccessDriverFactory
 import org.chronos.chronostore.io.format.CompressionAlgorithm
-import org.chronos.chronostore.io.format.datablock.BlockReadMode
 import org.chronos.chronostore.util.unit.BinarySize
 import org.chronos.chronostore.util.unit.MiB
 import kotlin.time.Duration
@@ -13,8 +11,6 @@ import kotlin.time.Duration.Companion.minutes
 class ChronoStoreConfiguration {
 
     var maxWriterThreads: Int = 5
-
-    var blockReadMode: BlockReadMode = BlockReadMode.IN_MEMORY_EAGER
 
     /** When writing new files: the compression algorithm to use. All old files will remain readable if this setting is changed.*/
     var compressionAlgorithm: CompressionAlgorithm = CompressionAlgorithm.SNAPPY

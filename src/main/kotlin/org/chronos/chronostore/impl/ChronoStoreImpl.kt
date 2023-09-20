@@ -2,7 +2,10 @@ package org.chronos.chronostore.impl
 
 import com.google.common.annotations.VisibleForTesting
 import mu.KotlinLogging
-import org.chronos.chronostore.api.*
+import org.chronos.chronostore.api.ChronoStore
+import org.chronos.chronostore.api.ChronoStoreConfiguration
+import org.chronos.chronostore.api.ChronoStoreTransaction
+import org.chronos.chronostore.api.Store
 import org.chronos.chronostore.async.executor.AsyncTaskManagerImpl
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor
 import org.chronos.chronostore.impl.store.StoreImpl
@@ -41,7 +44,6 @@ class ChronoStoreImpl(
     private val storeManager = StoreManagerImpl(
         vfs = this.vfs,
         blockCacheManager = this.blockCacheManager,
-        blockReadMode = configuration.blockReadMode,
         mergeService = mergeService,
         driverFactory = configuration.randomFileAccessDriverFactory,
         newFileSettings = ChronoStoreFileSettings(configuration.compressionAlgorithm, configuration.maxBlockSize, configuration.indexRate),

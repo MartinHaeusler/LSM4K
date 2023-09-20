@@ -5,7 +5,6 @@ import org.chronos.chronostore.model.command.KeyAndTimestamp
 import org.chronos.chronostore.io.fileaccess.RandomFileAccessDriverFactory
 import org.chronos.chronostore.io.fileaccess.RandomFileAccessDriverFactory.Companion.withDriver
 import org.chronos.chronostore.io.format.ChronoStoreFileReader
-import org.chronos.chronostore.io.format.datablock.BlockReadMode
 import org.chronos.chronostore.io.vfs.VirtualFile
 import org.chronos.chronostore.util.cursor.Cursor
 
@@ -13,7 +12,6 @@ class LSMTreeFile(
     val virtualFile: VirtualFile,
     val index: Int,
     val driverFactory: RandomFileAccessDriverFactory,
-    val blockReadMode: BlockReadMode,
     val blockCache: LocalBlockCache,
 ) {
 
@@ -35,7 +33,7 @@ class LSMTreeFile(
 
     fun get(keyAndTimestamp: KeyAndTimestamp): Command? {
         this.driverFactory.withDriver(this.virtualFile) { driver ->
-            ChronoStoreFileReader(driver, this.header, this.blockCache, this.blockReadMode).use { reader ->
+            ChronoStoreFileReader(driver, this.header, this.blockCache).use { reader ->
                 return reader.get(keyAndTimestamp)
             }
         }
@@ -43,7 +41,7 @@ class LSMTreeFile(
 
     fun cursor(): Cursor<KeyAndTimestamp, Command> {
         val driver = this.driverFactory.createDriver(this.virtualFile)
-        val file = ChronoStoreFileReader(driver, this.header, this.blockCache, this.blockReadMode)
+        val file = ChronoStoreFileReader(driver, this.header, this.blockCache)
         val cursor = file.openCursor()
         return cursor.onClose {
             file.close()

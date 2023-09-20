@@ -9,7 +9,6 @@ import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.forEachWi
 import org.chronos.chronostore.impl.store.StoreImpl
 import org.chronos.chronostore.io.fileaccess.RandomFileAccessDriverFactory
 import org.chronos.chronostore.io.format.ChronoStoreFileSettings
-import org.chronos.chronostore.io.format.datablock.BlockReadMode
 import org.chronos.chronostore.io.structure.ChronoStoreStructure.STORE_DIR_PREFIX
 import org.chronos.chronostore.io.structure.ChronoStoreStructure.STORE_INFO_FILE_NAME
 import org.chronos.chronostore.io.vfs.VirtualFileSystem
@@ -21,7 +20,6 @@ import org.chronos.chronostore.util.StoreId
 import org.chronos.chronostore.util.Timestamp
 import org.chronos.chronostore.util.TransactionId
 import org.chronos.chronostore.util.json.JsonUtil
-import org.chronos.chronostore.util.stream.UnclosableOutputStream.Companion.unclosable
 import org.chronos.chronostore.util.unit.BinarySize
 import java.util.*
 import java.util.concurrent.locks.ReentrantReadWriteLock
@@ -31,7 +29,6 @@ import kotlin.concurrent.write
 class StoreManagerImpl(
     private val vfs: VirtualFileSystem,
     private val blockCacheManager: BlockCacheManager,
-    private val blockReadMode: BlockReadMode,
     private val mergeService: MergeService,
     private val driverFactory: RandomFileAccessDriverFactory,
     private val newFileSettings: ChronoStoreFileSettings,
@@ -75,7 +72,6 @@ class StoreManagerImpl(
                         validTo = storeInfo.validTo,
                         createdByTransactionId = storeInfo.createdByTransactionId,
                         directory = vfs.directory(STORE_DIR_PREFIX + storeInfo.storeId),
-                        blockReadMode = this.blockReadMode,
                         mergeService = this.mergeService,
                         blockCache = this.blockCacheManager.getBlockCache(storeInfo.storeId),
                         driverFactory = this.driverFactory,
@@ -166,7 +162,6 @@ class StoreManagerImpl(
             validTo = newStoreInfo.validTo,
             createdByTransactionId = transactionId,
             directory = directory,
-            blockReadMode = this.blockReadMode,
             mergeService = this.mergeService,
             blockCache = this.blockCacheManager.getBlockCache(storeId),
             driverFactory = this.driverFactory,

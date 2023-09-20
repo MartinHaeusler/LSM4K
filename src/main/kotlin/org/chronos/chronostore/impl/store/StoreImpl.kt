@@ -3,7 +3,6 @@ package org.chronos.chronostore.impl.store
 import org.chronos.chronostore.api.Store
 import org.chronos.chronostore.io.fileaccess.RandomFileAccessDriverFactory
 import org.chronos.chronostore.io.format.ChronoStoreFileSettings
-import org.chronos.chronostore.io.format.datablock.BlockReadMode
 import org.chronos.chronostore.io.vfs.VirtualDirectory
 import org.chronos.chronostore.lsm.LocalBlockCache
 import org.chronos.chronostore.lsm.LSMTree
@@ -21,7 +20,6 @@ class StoreImpl(
     override var validTo: Timestamp?,
     override val createdByTransactionId: TransactionId,
     override val directory: VirtualDirectory,
-    blockReadMode: BlockReadMode,
     mergeService: MergeService,
     blockCache: LocalBlockCache,
     driverFactory: RandomFileAccessDriverFactory,
@@ -34,7 +32,6 @@ class StoreImpl(
         mergeService = mergeService,
         blockCache = blockCache,
         driverFactory = driverFactory,
-        blockReadMode = blockReadMode,
         newFileSettings = newFileSettings,
         maxInMemoryTreeSize = maxInMemoryTreeSize,
     )

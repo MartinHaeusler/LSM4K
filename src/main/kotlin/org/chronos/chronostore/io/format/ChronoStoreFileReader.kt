@@ -1,11 +1,10 @@
 package org.chronos.chronostore.io.format
 
-import org.chronos.chronostore.model.command.Command
-import org.chronos.chronostore.model.command.KeyAndTimestamp
 import org.chronos.chronostore.io.fileaccess.RandomFileAccessDriver
-import org.chronos.chronostore.io.format.datablock.BlockReadMode
 import org.chronos.chronostore.io.format.datablock.DataBlock
 import org.chronos.chronostore.lsm.LocalBlockCache
+import org.chronos.chronostore.model.command.Command
+import org.chronos.chronostore.model.command.KeyAndTimestamp
 import org.chronos.chronostore.util.cursor.Cursor
 import org.chronos.chronostore.util.statistics.ChronoStoreStatistics
 
@@ -32,18 +31,15 @@ class ChronoStoreFileReader : AutoCloseable {
 
 
     private val driver: RandomFileAccessDriver
-    private val blockReadMode: BlockReadMode
 
     val fileHeader: FileHeader
     private val blockCache: LocalBlockCache
 
     constructor(
         driver: RandomFileAccessDriver,
-        blockReadMode: BlockReadMode,
         blockCache: LocalBlockCache
     ) {
         this.driver = driver
-        this.blockReadMode = blockReadMode
         this.fileHeader = loadFileHeader(driver)
         this.blockCache = blockCache
     }
@@ -52,11 +48,9 @@ class ChronoStoreFileReader : AutoCloseable {
         driver: RandomFileAccessDriver,
         header: FileHeader,
         blockCache: LocalBlockCache,
-        blockReadMode: BlockReadMode
     ) {
         // skip all the validation, it has already been done for us.
         this.driver = driver
-        this.blockReadMode = blockReadMode
         this.fileHeader = header
         this.blockCache = blockCache
     }
@@ -100,11 +94,7 @@ class ChronoStoreFileReader : AutoCloseable {
             ?: return null
         val blockBytes = this.driver.readBytes(startPosition, length)
         val compressionAlgorithm = this.fileHeader.metaData.settings.compression
-        return when (this.blockReadMode) {
-            BlockReadMode.IN_MEMORY_EAGER -> DataBlock.createEagerLoadingInMemoryBlock(blockBytes.createInputStream(), compressionAlgorithm)
-            BlockReadMode.IN_MEMORY_LAZY -> DataBlock.createLazyLoadingInMemoryBlock(blockBytes.createInputStream(), compressionAlgorithm)
-            BlockReadMode.DISK_BASED -> DataBlock.createDiskBasedDataBlock(blockBytes.createInputStream(), compressionAlgorithm, startPosition)
-        }
+        return DataBlock.createEagerLoadingInMemoryBlock(blockBytes.createInputStream(), compressionAlgorithm)
     }
 
     fun openCursor(): Cursor<KeyAndTimestamp, Command> {
@@ -128,7 +118,6 @@ class ChronoStoreFileReader : AutoCloseable {
     fun copy(): ChronoStoreFileReader {
         return ChronoStoreFileReader(
             driver = this.driver.copy(),
-            blockReadMode = this.blockReadMode,
             header = this.fileHeader,
             blockCache = this.blockCache,
         )

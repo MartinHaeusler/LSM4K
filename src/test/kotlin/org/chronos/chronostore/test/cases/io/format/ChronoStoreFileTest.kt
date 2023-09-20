@@ -5,7 +5,6 @@ import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.model.command.KeyAndTimestamp
 import org.chronos.chronostore.io.fileaccess.MemorySegmentFileDriver
 import org.chronos.chronostore.io.format.*
-import org.chronos.chronostore.io.format.datablock.BlockReadMode
 import org.chronos.chronostore.io.vfs.VirtualReadWriteFile.Companion.withOverWriter
 import org.chronos.chronostore.lsm.LocalBlockCache
 import org.chronos.chronostore.test.util.VFSMode
@@ -41,7 +40,7 @@ class ChronoStoreFileTest {
 
             val factory = MemorySegmentFileDriver.Factory
             factory.createDriver(file).use { driver ->
-                ChronoStoreFileReader(driver, BlockReadMode.DISK_BASED, LocalBlockCache.NONE).use { reader ->
+                ChronoStoreFileReader(driver, LocalBlockCache.NONE).use { reader ->
                     expectThat(reader) {
                         get { fileHeader }.and {
                             get { this.indexOfBlocks.isEmpty }.isTrue()
@@ -76,22 +75,9 @@ class ChronoStoreFileTest {
         }
     }
 
-    @VirtualFileSystemTest
-    fun canCreateAndReadFileWith1000VersionsOfSameKeyDiskBased(mode: VFSMode) {
-        runCreateAndReadFileWith1000VersionsOfSameKeyTest(mode, BlockReadMode.DISK_BASED)
-    }
 
     @VirtualFileSystemTest
-    fun canCreateAndReadFileWith1000VersionsOfSameKeyInMemoryLazy(mode: VFSMode) {
-        runCreateAndReadFileWith1000VersionsOfSameKeyTest(mode, BlockReadMode.IN_MEMORY_LAZY)
-    }
-
-    @VirtualFileSystemTest
-    fun canCreateAndReadFileWith1000VersionsOfSameKeyInMemoryEager(mode: VFSMode) {
-        runCreateAndReadFileWith1000VersionsOfSameKeyTest(mode, BlockReadMode.IN_MEMORY_EAGER)
-    }
-
-    private fun runCreateAndReadFileWith1000VersionsOfSameKeyTest(mode: VFSMode, blockReadMode: BlockReadMode) {
+    fun canCreateAndReadFileWith1000VersionsOfSameKey(mode: VFSMode) {
         mode.withVFS { vfs ->
             val file = vfs.file("test.chronostore")
 
@@ -115,13 +101,13 @@ class ChronoStoreFileTest {
             }
 
             expectThat(file) {
-                get { this.exists() }.isTrue()
-                get { this.length }.isGreaterThan(0L)
+                get { exists() }.isTrue()
+                get { length }.isGreaterThan(0L)
             }
 
             val factory = FileChannelDriver.Factory
             factory.createDriver(file).use { driver ->
-                ChronoStoreFileReader(driver, blockReadMode, LocalBlockCache.NONE).use { reader ->
+                ChronoStoreFileReader(driver, LocalBlockCache.NONE).use { reader ->
                     val min = reader.fileHeader.metaData.minTimestamp!!
                     val max = reader.fileHeader.metaData.maxTimestamp!!
 
@@ -129,58 +115,58 @@ class ChronoStoreFileTest {
                         get { fileHeader.indexOfBlocks.size }.isGreaterThan(1)
 
                         get { get(KeyAndTimestamp(theKey, max + 1)) }.isNotNull().and {
-                            get { this.key }.isEqualTo(theKey)
-                            get { this.timestamp }.isEqualTo(max)
-                            get { this.opCode }.isEqualTo(Command.OpCode.PUT)
-                            get { this.value }.hasSize(1024)
+                            get { key }.isEqualTo(theKey)
+                            get { timestamp }.isEqualTo(max)
+                            get { opCode }.isEqualTo(Command.OpCode.PUT)
+                            get { value }.hasSize(1024)
                         }
 
                         get { get(KeyAndTimestamp(theKey, min - 1)) }.isNull()
 
                         get { get(KeyAndTimestamp(theKey, 101_000)) }.isNotNull().and {
-                            get { this.opCode }.isEqualTo(Command.OpCode.DEL)
-                            get { this.timestamp }.isEqualTo(101_000)
-                            get { this.value }.isEmpty()
+                            get { opCode }.isEqualTo(Command.OpCode.DEL)
+                            get { timestamp }.isEqualTo(101_000)
+                            get { value }.isEmpty()
                         }
                         get { get(KeyAndTimestamp(theKey, 101_001)) }.isNotNull().and {
-                            get { this.opCode }.isEqualTo(Command.OpCode.DEL)
-                            get { this.timestamp }.isEqualTo(101_000)
-                            get { this.value }.isEmpty()
+                            get { opCode }.isEqualTo(Command.OpCode.DEL)
+                            get { timestamp }.isEqualTo(101_000)
+                            get { value }.isEmpty()
                         }
                         get { get(KeyAndTimestamp(theKey, 101_002)) }.isNotNull().and {
-                            get { this.opCode }.isEqualTo(Command.OpCode.DEL)
-                            get { this.timestamp }.isEqualTo(101_000)
-                            get { this.value }.isEmpty()
+                            get { opCode }.isEqualTo(Command.OpCode.DEL)
+                            get { timestamp }.isEqualTo(101_000)
+                            get { value }.isEmpty()
                         }
                         get { get(KeyAndTimestamp(theKey, 101_010)) }.isNotNull().and {
-                            get { this.opCode }.isEqualTo(Command.OpCode.DEL)
-                            get { this.timestamp }.isEqualTo(101_000)
-                            get { this.value }.isEmpty()
+                            get { opCode }.isEqualTo(Command.OpCode.DEL)
+                            get { timestamp }.isEqualTo(101_000)
+                            get { value }.isEmpty()
                         }
                         get { get(KeyAndTimestamp(theKey, 101_100)) }.isNotNull().and {
-                            get { this.opCode }.isEqualTo(Command.OpCode.DEL)
-                            get { this.timestamp }.isEqualTo(101_000)
-                            get { this.value }.isEmpty()
+                            get { opCode }.isEqualTo(Command.OpCode.DEL)
+                            get { timestamp }.isEqualTo(101_000)
+                            get { value }.isEmpty()
                         }
                         get { get(KeyAndTimestamp(theKey, 101_990)) }.isNotNull().and {
-                            get { this.opCode }.isEqualTo(Command.OpCode.DEL)
-                            get { this.timestamp }.isEqualTo(101_000)
-                            get { this.value }.isEmpty()
+                            get { opCode }.isEqualTo(Command.OpCode.DEL)
+                            get { timestamp }.isEqualTo(101_000)
+                            get { value }.isEmpty()
                         }
                         get { get(KeyAndTimestamp(theKey, 101_999)) }.isNotNull().and {
-                            get { this.opCode }.isEqualTo(Command.OpCode.DEL)
-                            get { this.timestamp }.isEqualTo(101_000)
-                            get { this.value }.isEmpty()
+                            get { opCode }.isEqualTo(Command.OpCode.DEL)
+                            get { timestamp }.isEqualTo(101_000)
+                            get { value }.isEmpty()
                         }
                         get { get(KeyAndTimestamp(theKey, 102_000)) }.isNotNull().and {
-                            get { this.opCode }.isEqualTo(Command.OpCode.PUT)
-                            get { this.timestamp }.isEqualTo(102_000)
-                            get { this.value }.hasSize(1024)
+                            get { opCode }.isEqualTo(Command.OpCode.PUT)
+                            get { timestamp }.isEqualTo(102_000)
+                            get { value }.hasSize(1024)
                         }
                         get { get(KeyAndTimestamp(theKey, 102_001)) }.isNotNull().and {
-                            get { this.opCode }.isEqualTo(Command.OpCode.PUT)
-                            get { this.timestamp }.isEqualTo(102_000)
-                            get { this.value }.hasSize(1024)
+                            get { opCode }.isEqualTo(Command.OpCode.PUT)
+                            get { timestamp }.isEqualTo(102_000)
+                            get { value }.hasSize(1024)
                         }
                     }
                 }
@@ -189,21 +175,7 @@ class ChronoStoreFileTest {
     }
 
     @VirtualFileSystemTest
-    fun canIterateOverFileWith1000VersionsOfSameKeyWithCursorDiskBased(mode: VFSMode) {
-        canIterateOverFileWith1000VersionsOfSameKeyWithCursor(mode, BlockReadMode.DISK_BASED)
-    }
-
-    @VirtualFileSystemTest
-    fun canIterateOverFileWith1000VersionsOfSameKeyWithCursorInMemoryLazy(mode: VFSMode) {
-        canIterateOverFileWith1000VersionsOfSameKeyWithCursor(mode, BlockReadMode.IN_MEMORY_LAZY)
-    }
-
-    @VirtualFileSystemTest
-    fun canIterateOverFileWith1000VersionsOfSameKeyWithCursorInMemoryEager(mode: VFSMode) {
-        canIterateOverFileWith1000VersionsOfSameKeyWithCursor(mode, BlockReadMode.IN_MEMORY_EAGER)
-    }
-
-    private fun canIterateOverFileWith1000VersionsOfSameKeyWithCursor(mode: VFSMode, blockReadMode: BlockReadMode) {
+    fun canIterateOverFileWith1000VersionsOfSameKeyWithCursor(mode: VFSMode) {
         mode.withVFS { vfs ->
             val file = vfs.file("test.chronostore")
 
@@ -233,7 +205,7 @@ class ChronoStoreFileTest {
 
             val factory = FileChannelDriver.Factory
             factory.createDriver(file).use { driver ->
-                ChronoStoreFileReader(driver, blockReadMode, LocalBlockCache.NONE).use { reader ->
+                ChronoStoreFileReader(driver, LocalBlockCache.NONE).use { reader ->
                     reader.openCursor().use { cursor ->
                         assert(!cursor.isValidPosition) { "cursor.isValidPosition returned TRUE after initialization!" }
                         assert(cursor.first()) { "cursor.first returned FALSE!" }

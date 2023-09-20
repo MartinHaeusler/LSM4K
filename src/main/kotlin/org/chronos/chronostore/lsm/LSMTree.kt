@@ -9,7 +9,6 @@ import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.subTask
 import org.chronos.chronostore.io.fileaccess.RandomFileAccessDriverFactory
 import org.chronos.chronostore.io.format.ChronoStoreFileSettings
 import org.chronos.chronostore.io.format.ChronoStoreFileWriter
-import org.chronos.chronostore.io.format.datablock.BlockReadMode
 import org.chronos.chronostore.io.vfs.VirtualDirectory
 import org.chronos.chronostore.io.vfs.VirtualReadWriteFile.Companion.withOverWriter
 import org.chronos.chronostore.lsm.LSMTreeFile.Companion.FILE_EXTENSION
@@ -31,7 +30,6 @@ import org.chronos.chronostore.util.statistics.ChronoStoreStatistics
 import org.chronos.chronostore.util.unit.BinarySize
 import org.chronos.chronostore.util.unit.Bytes
 import org.pcollections.TreePMap
-import org.slf4j.MarkerFactory
 import java.io.File
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
@@ -45,7 +43,6 @@ class LSMTree(
     private val mergeService: MergeService,
     private val blockCache: LocalBlockCache,
     private val driverFactory: RandomFileAccessDriverFactory,
-    private val blockReadMode: BlockReadMode,
     private val newFileSettings: ChronoStoreFileSettings,
     private val maxInMemoryTreeSize: BinarySize,
 ) {
@@ -95,7 +92,6 @@ class LSMTree(
                     virtualFile = this.directory.file(it),
                     index = index,
                     driverFactory = this.driverFactory,
-                    blockReadMode = this.blockReadMode,
                     blockCache = this.blockCache
                 )
             }
@@ -288,7 +284,7 @@ class LSMTree(
             log.trace(LogMarkers.PERF) { "Flush into index file ${newFileIndex} completed in ${flushTime}ms. Redirecting traffic to new data file for LSM tree ${this.path}" }
             val event = monitor.subTask(0.1, "Redirecting traffic to file") {
                 this.lock.write {
-                    this.fileList.add(LSMTreeFile(file, newFileIndex, this.driverFactory, this.blockReadMode, this.blockCache))
+                    this.fileList.add(LSMTreeFile(file, newFileIndex, this.driverFactory, this.blockCache))
                     log.trace(LogMarkers.PERF) { "Removing ${commands.keys.size} keys from the in-memory tree (which has ${this.inMemoryTree.size} keys)..." }
                     this.inMemoryTree = this.inMemoryTree.minusAll(commands.keys)
                     log.trace(LogMarkers.PERF) { "${inMemoryTree.size} entries remaining in-memory after flush of tree ${this.path}" }

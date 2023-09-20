@@ -1,16 +1,14 @@
 package org.chronos.chronostore.io.format.datablock
 
-import com.google.common.hash.BloomFilter
-import com.google.common.hash.Funnels
-import org.chronos.chronostore.model.command.Command
-import org.chronos.chronostore.model.command.KeyAndTimestamp
 import org.chronos.chronostore.io.fileaccess.RandomFileAccessDriver
 import org.chronos.chronostore.io.format.BlockMetaData
 import org.chronos.chronostore.io.format.ChronoStoreFileFormat
 import org.chronos.chronostore.io.format.CompressionAlgorithm
+import org.chronos.chronostore.model.command.Command
+import org.chronos.chronostore.model.command.KeyAndTimestamp
 import org.chronos.chronostore.util.Bytes
-import org.chronos.chronostore.util.cursor.Cursor
 import org.chronos.chronostore.util.LittleEndianExtensions.readLittleEndianInt
+import org.chronos.chronostore.util.cursor.Cursor
 import java.io.ByteArrayInputStream
 import java.io.InputStream
 import java.util.*
@@ -69,10 +67,6 @@ interface DataBlock {
             // skip the bloom filter, we don't need it for eager-loaded blocks
             inputStream.skipNBytes(bloomFilterSize.toLong())
 
-            val blockIndexSize = inputStream.readLittleEndianInt()
-            // skip the block index, we don't need it for eager-loaded blocks
-            inputStream.skipNBytes(blockIndexSize.toLong())
-
             val compressedSize = inputStream.readLittleEndianInt()
             val compressedBytes = inputStream.readNBytes(compressedSize)
 
@@ -93,110 +87,6 @@ interface DataBlock {
                 metaData = blockMetaData,
                 data = commands
             )
-        }
-
-        @JvmStatic
-        fun createLazyLoadingInMemoryBlock(
-            inputStream: InputStream,
-            compressionAlgorithm: CompressionAlgorithm
-        ): DataBlock {
-            val magicBytes = Bytes(inputStream.readNBytes(ChronoStoreFileFormat.BLOCK_MAGIC_BYTES.size))
-            if (magicBytes != ChronoStoreFileFormat.BLOCK_MAGIC_BYTES) {
-                throw IllegalArgumentException(
-                    "Cannot read block from input: the magic bytes do not match!" +
-                        " Expected ${ChronoStoreFileFormat.BLOCK_MAGIC_BYTES.hex()}, found ${magicBytes.hex()}!"
-                )
-            }
-            // read the individual parts of the binary format
-            inputStream.readLittleEndianInt() // block size; not needed here
-            val blockMetadataSize = inputStream.readLittleEndianInt()
-            val blockMetadataBytes = inputStream.readNBytes(blockMetadataSize)
-            val bloomFilterSize = inputStream.readLittleEndianInt()
-            val bloomFilterBytes = inputStream.readNBytes(bloomFilterSize)
-            val blockIndexSize = inputStream.readLittleEndianInt()
-            val blockIndexBytes = inputStream.readNBytes(blockIndexSize)
-            val compressedSize = inputStream.readLittleEndianInt()
-            val compressedBytes = inputStream.readNBytes(compressedSize)
-
-            // deserialize the binary representations
-            val blockMetaData = BlockMetaData.readFrom(ByteArrayInputStream(blockMetadataBytes))
-            val bloomFilter = BloomFilter.readFrom(ByteArrayInputStream(bloomFilterBytes), Funnels.byteArrayFunnel())
-            val blockIndex = readBlockIndexFromBytes(blockIndexBytes)
-
-            // decompress the data
-            val decompressedData = Bytes(compressionAlgorithm.decompress(compressedBytes))
-
-            return LazyDataBlock(
-                metaData = blockMetaData,
-                bloomFilter = bloomFilter,
-                blockIndex = blockIndex,
-                data = decompressedData
-            )
-        }
-
-        @JvmStatic
-        fun createDiskBasedDataBlock(
-            inputStream: InputStream,
-            compressionAlgorithm: CompressionAlgorithm,
-            blockStartOffset: Long,
-        ): DataBlock {
-            require(compressionAlgorithm == CompressionAlgorithm.NONE) {
-                // TODO[Performance]: check HBase implementation about details how to read partially from a compressed byte array
-                "Disk-based data blocks do not support compression at the moment."
-            }
-            val magicBytes = Bytes(inputStream.readNBytes(ChronoStoreFileFormat.BLOCK_MAGIC_BYTES.size))
-            if (magicBytes != ChronoStoreFileFormat.BLOCK_MAGIC_BYTES) {
-                throw IllegalArgumentException(
-                    "Cannot read block from input: the magic bytes do not match!" +
-                        " Expected ${ChronoStoreFileFormat.BLOCK_MAGIC_BYTES.hex()}, found ${magicBytes.hex()}!"
-                )
-            }
-            // read the individual parts of the binary format
-            val blockSize = inputStream.readLittleEndianInt()
-            val blockMetadataSize = inputStream.readLittleEndianInt()
-            val blockMetadataBytes = inputStream.readNBytes(blockMetadataSize)
-            val bloomFilterSize = inputStream.readLittleEndianInt()
-            val bloomFilterBytes = inputStream.readNBytes(bloomFilterSize)
-            val blockIndexSize = inputStream.readLittleEndianInt()
-            val blockIndexBytes = inputStream.readNBytes(blockIndexSize)
-            val compressedSize = inputStream.readLittleEndianInt()
-            // skip over the actual data, we load it lazily
-            inputStream.skipNBytes(compressedSize.toLong())
-
-            // deserialize the binary representations
-            val blockMetaData = BlockMetaData.readFrom(ByteArrayInputStream(blockMetadataBytes))
-            val bloomFilter = BloomFilter.readFrom(ByteArrayInputStream(bloomFilterBytes), Funnels.byteArrayFunnel())
-            val blockIndex = readBlockIndexFromBytes(blockIndexBytes)
-
-            val actualBlockStartOffset = blockStartOffset +
-                ChronoStoreFileFormat.BLOCK_MAGIC_BYTES.size + // skip magic bytes at the start of the block
-                Int.SIZE_BYTES // skip block size
-
-            return DiskBasedDataBlock(
-                metaData = blockMetaData,
-                bloomFilter = bloomFilter,
-                blockIndex = blockIndex,
-                blockStartOffset = actualBlockStartOffset,
-                blockEndOffset = actualBlockStartOffset + blockSize,
-                blockDataStartOffset = actualBlockStartOffset
-                    + Int.SIZE_BYTES + blockMetadataBytes.size // skip block metadata
-                    + Int.SIZE_BYTES + bloomFilterBytes.size // skip bloom filter
-                    + Int.SIZE_BYTES + blockIndexBytes.size // skip block index
-                    + Int.SIZE_BYTES, // skip compressed size
-            )
-        }
-
-        private fun readBlockIndexFromBytes(blockIndexBytes: ByteArray): NavigableMap<KeyAndTimestamp, Int> {
-            blockIndexBytes.inputStream().use { inputStream ->
-                val tree = TreeMap<KeyAndTimestamp, Int>()
-                while (true) {
-                    val keyAndTimestamp = KeyAndTimestamp.readFromStreamOrNull(inputStream)
-                        ?: break
-                    val offset = inputStream.readLittleEndianInt()
-                    tree[keyAndTimestamp] = offset
-                }
-                return tree
-            }
         }
 
     }
