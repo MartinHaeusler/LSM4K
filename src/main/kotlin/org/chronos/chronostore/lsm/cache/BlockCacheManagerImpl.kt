@@ -4,7 +4,6 @@ import com.google.common.cache.Cache
 import com.google.common.cache.CacheBuilder
 import org.chronos.chronostore.api.ChronoStoreConfiguration
 import org.chronos.chronostore.io.format.datablock.DataBlock
-import org.chronos.chronostore.lsm.LocalBlockCache
 import org.chronos.chronostore.util.StoreId
 import java.util.UUID
 

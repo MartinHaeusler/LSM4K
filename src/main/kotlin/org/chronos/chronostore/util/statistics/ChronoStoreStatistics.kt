@@ -1,10 +1,13 @@
 package org.chronos.chronostore.util.statistics
 
+import org.chronos.chronostore.util.Timestamp
 import org.chronos.chronostore.util.cursor.OverlayCursor
 import org.chronos.chronostore.util.cursor.VersioningCursor
 import java.util.concurrent.atomic.AtomicLong
 
 class ChronoStoreStatistics(
+    /** The timestamp at which the tracking of statistics has started. */
+    val trackingStartedAt: Timestamp,
     /** Statistics on actual low-level file cursors.*/
     val fileCursorStatistics: CursorStatistics,
     /** Statistics on cursors which combine two cursors by overlaying them. */
@@ -17,9 +20,14 @@ class ChronoStoreStatistics(
     val fileHeaderLoadsFromDisk: Long,
     /** How long have writer threads been stalled because of full in-memory trees? */
     val totalWriteStallTimeMillis: Long,
+    /** How many times have writer threads been stalled because of full in-memory trees? */
+    val writeStallEvents: Long,
 ) {
 
     companion object {
+
+        /** When did the tracking of events start? Will be reassigned when [reset] is called. */
+        val TRACKING_START = AtomicLong(System.currentTimeMillis())
 
         /** How many file cursors have been opened so far? */
         val FILE_CURSORS = AtomicLong(0L)
@@ -93,8 +101,15 @@ class ChronoStoreStatistics(
         /** How long have writer threads been stalled because of full in-memory trees? */
         val TOTAL_WRITE_STALL_TIME_MILLIS = AtomicLong(0L)
 
+        /** How many times have writer threads been stalled because of full in-memory trees? */
+        val WRITE_STALL_EVENTS = AtomicLong(0L)
+
+        /**
+         * Retrieves an immutable snapshot of all statistics at the current point in time.
+         */
         fun snapshot(): ChronoStoreStatistics {
             return ChronoStoreStatistics(
+                trackingStartedAt = TRACKING_START.get(),
                 CursorStatistics(
                     groupName = "File Cursors",
                     cursors = FILE_CURSORS.get(),
@@ -128,9 +143,44 @@ class ChronoStoreStatistics(
                 pageLoadsFromDisk = PAGE_LOADS_FROM_DISK.get(),
                 fileHeaderLoadsFromDisk = FILE_HEADER_LOADS_FROM_DISK.get(),
                 totalWriteStallTimeMillis = TOTAL_WRITE_STALL_TIME_MILLIS.get(),
+                writeStallEvents = WRITE_STALL_EVENTS.get(),
             )
         }
 
+        /**
+         * Resets the statistics.
+         *
+         * The [TRACKING_START] will be set to [System.currentTimeMillis], and all
+         * other statistics will be set to zero.
+         */
+        fun reset() {
+            TRACKING_START.set(System.currentTimeMillis())
+            FILE_CURSORS.set(0L)
+            FILE_CURSOR_EXACTLY_OR_NEXT_SEEKS.set(0L)
+            FILE_CURSOR_EXACTLY_OR_PREVIOUS_SEEKS.set(0L)
+            FILE_CURSOR_FIRST_SEEKS.set(0L)
+            FILE_CURSOR_LAST_SEEKS.set(0L)
+            FILE_CURSOR_NEXT_SEEKS.set(0L)
+            FILE_CURSOR_PREVIOUS_SEEKS.set(0L)
+            OVERLAY_CURSORS.set(0L)
+            OVERLAY_CURSOR_EXACTLY_OR_NEXT_SEEKS.set(0L)
+            OVERLAY_CURSOR_EXACTLY_OR_PREVIOUS_SEEKS.set(0L)
+            OVERLAY_CURSOR_FIRST_SEEKS.set(0L)
+            OVERLAY_CURSOR_LAST_SEEKS.set(0L)
+            OVERLAY_CURSOR_NEXT_SEEKS.set(0L)
+            OVERLAY_CURSOR_PREVIOUS_SEEKS.set(0L)
+            VERSIONING_CURSORS.set(0L)
+            VERSIONING_CURSOR_EXACTLY_OR_NEXT_SEEKS.set(0L)
+            VERSIONING_CURSOR_EXACTLY_OR_PREVIOUS_SEEKS.set(0L)
+            VERSIONING_CURSOR_FIRST_SEEKS.set(0L)
+            VERSIONING_CURSOR_LAST_SEEKS.set(0L)
+            VERSIONING_CURSOR_NEXT_SEEKS.set(0L)
+            VERSIONING_CURSOR_PREVIOUS_SEEKS.set(0L)
+            PAGE_LOADS_FROM_DISK.set(0L)
+            FILE_HEADER_LOADS_FROM_DISK.set(0L)
+            TOTAL_WRITE_STALL_TIME_MILLIS.set(0L)
+            WRITE_STALL_EVENTS.set(0L)
+        }
     }
 
     val cursorGroups = listOf(this.fileCursorStatistics, this.overlayCursorStatistics, this.versioningCursorStatistics)

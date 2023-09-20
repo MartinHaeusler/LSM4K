@@ -12,6 +12,7 @@ import org.chronos.chronostore.impl.store.StoreImpl
 import org.chronos.chronostore.io.format.ChronoStoreFileSettings
 import org.chronos.chronostore.io.structure.ChronoStoreStructure
 import org.chronos.chronostore.io.vfs.VirtualFileSystem
+import org.chronos.chronostore.lsm.LSMForestMemoryManager
 import org.chronos.chronostore.lsm.cache.BlockCacheManagerImpl
 import org.chronos.chronostore.lsm.merge.strategy.MergeService
 import org.chronos.chronostore.lsm.merge.strategy.MergeServiceImpl
@@ -41,13 +42,19 @@ class ChronoStoreImpl(
     @VisibleForTesting
     val mergeService: MergeService = MergeServiceImpl(this.taskManager, this.configuration)
 
+    val forest: LSMForestMemoryManager = LSMForestMemoryManager(
+        asyncTaskManager = this.taskManager,
+        maxForestSize = this.configuration.maxForestSize.bytes,
+        flushThresholdSize = (this.configuration.maxForestSize.bytes * this.configuration.forestFlushThreshold).toLong()
+    )
+
     private val storeManager = StoreManagerImpl(
         vfs = this.vfs,
         blockCacheManager = this.blockCacheManager,
-        mergeService = mergeService,
-        driverFactory = configuration.randomFileAccessDriverFactory,
+        mergeService = this.mergeService,
+        forest = this.forest,
+        driverFactory = this.configuration.randomFileAccessDriverFactory,
         newFileSettings = ChronoStoreFileSettings(configuration.compressionAlgorithm, configuration.maxBlockSize, configuration.indexRate),
-        maxInMemoryTreeSize = configuration.maxInMemoryTreeSize,
     )
 
     private val writeAheadLog: WriteAheadLog

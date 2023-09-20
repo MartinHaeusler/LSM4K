@@ -29,7 +29,7 @@ object SerialReadWriteBenchmark {
         val uniqueKeys = (0 until NUMBER_OF_UNIQUE_KEYS).map { "key#${it}" }
 
         val config = ChronoStoreConfiguration()
-        config.maxInMemoryTreeSize = 1.GiB
+        config.maxForestSize = 1.GiB
 
         ChronoStoreMode.ONDISK.withChronoStore(config) { chronoStore ->
             chronoStore.transaction { tx ->

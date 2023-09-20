@@ -12,6 +12,7 @@ import org.chronos.chronostore.io.format.ChronoStoreFileSettings
 import org.chronos.chronostore.io.structure.ChronoStoreStructure.STORE_DIR_PREFIX
 import org.chronos.chronostore.io.structure.ChronoStoreStructure.STORE_INFO_FILE_NAME
 import org.chronos.chronostore.io.vfs.VirtualFileSystem
+import org.chronos.chronostore.lsm.LSMForestMemoryManager
 import org.chronos.chronostore.lsm.LSMTree
 import org.chronos.chronostore.lsm.cache.BlockCacheManager
 import org.chronos.chronostore.lsm.merge.strategy.MergeService
@@ -30,9 +31,9 @@ class StoreManagerImpl(
     private val vfs: VirtualFileSystem,
     private val blockCacheManager: BlockCacheManager,
     private val mergeService: MergeService,
+    private val forest: LSMForestMemoryManager,
     private val driverFactory: RandomFileAccessDriverFactory,
     private val newFileSettings: ChronoStoreFileSettings,
-    private val maxInMemoryTreeSize: BinarySize,
 ) : StoreManager, AutoCloseable {
 
     companion object {
@@ -72,11 +73,11 @@ class StoreManagerImpl(
                         validTo = storeInfo.validTo,
                         createdByTransactionId = storeInfo.createdByTransactionId,
                         directory = vfs.directory(STORE_DIR_PREFIX + storeInfo.storeId),
+                        forest = this.forest,
                         mergeService = this.mergeService,
                         blockCache = this.blockCacheManager.getBlockCache(storeInfo.storeId),
                         driverFactory = this.driverFactory,
                         newFileSettings = this.newFileSettings,
-                        maxInMemoryTreeSize = this.maxInMemoryTreeSize,
                     )
                     this.registerStoreInCaches(store)
                 }
@@ -162,11 +163,11 @@ class StoreManagerImpl(
             validTo = newStoreInfo.validTo,
             createdByTransactionId = transactionId,
             directory = directory,
+            forest = this.forest,
             mergeService = this.mergeService,
             blockCache = this.blockCacheManager.getBlockCache(storeId),
             driverFactory = this.driverFactory,
             newFileSettings = this.newFileSettings,
-            maxInMemoryTreeSize = this.maxInMemoryTreeSize,
         )
 
         this.registerStoreInCaches(store)

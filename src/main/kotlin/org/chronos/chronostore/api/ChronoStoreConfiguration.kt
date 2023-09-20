@@ -27,7 +27,11 @@ class ChronoStoreConfiguration {
 
     var mergeInterval: Duration = 10.minutes
 
-    var maxInMemoryTreeSize: BinarySize = 80.MiB
+    /** The maximum size of the in-memory trees. If this value is exceeded by an insert, the insert is blocked (stalled) until flush tasks have freed memory. */
+    var maxForestSize: BinarySize = 250.MiB
+
+    /** This fraction of [maxForestSize] determines when we start flushing to disk. Must be greater than zero and less than 1.0. */
+    var forestFlushThreshold: Double = 0.33
 
     /**
      * The time of day at which the Write-Ahead-Log file should be compacted.

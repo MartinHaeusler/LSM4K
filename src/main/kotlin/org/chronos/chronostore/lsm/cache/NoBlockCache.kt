@@ -1,4 +1,4 @@
-package org.chronos.chronostore.lsm
+package org.chronos.chronostore.lsm.cache
 
 import org.chronos.chronostore.io.format.datablock.DataBlock
 import java.util.*

@@ -6,6 +6,7 @@ import org.chronos.chronostore.io.fileaccess.RandomFileAccessDriverFactory
 import org.chronos.chronostore.io.fileaccess.RandomFileAccessDriverFactory.Companion.withDriver
 import org.chronos.chronostore.io.format.ChronoStoreFileReader
 import org.chronos.chronostore.io.vfs.VirtualFile
+import org.chronos.chronostore.lsm.cache.LocalBlockCache
 import org.chronos.chronostore.util.cursor.Cursor
 
 class LSMTreeFile(

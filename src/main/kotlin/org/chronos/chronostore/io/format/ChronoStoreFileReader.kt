@@ -2,7 +2,7 @@ package org.chronos.chronostore.io.format
 
 import org.chronos.chronostore.io.fileaccess.RandomFileAccessDriver
 import org.chronos.chronostore.io.format.datablock.DataBlock
-import org.chronos.chronostore.lsm.LocalBlockCache
+import org.chronos.chronostore.lsm.cache.LocalBlockCache
 import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.model.command.KeyAndTimestamp
 import org.chronos.chronostore.util.cursor.Cursor

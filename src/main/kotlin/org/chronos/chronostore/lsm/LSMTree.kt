@@ -12,6 +12,7 @@ import org.chronos.chronostore.io.format.ChronoStoreFileWriter
 import org.chronos.chronostore.io.vfs.VirtualDirectory
 import org.chronos.chronostore.io.vfs.VirtualReadWriteFile.Companion.withOverWriter
 import org.chronos.chronostore.lsm.LSMTreeFile.Companion.FILE_EXTENSION
+import org.chronos.chronostore.lsm.cache.LocalBlockCache
 import org.chronos.chronostore.lsm.event.InMemoryLsmFlushEvent
 import org.chronos.chronostore.lsm.event.InMemoryLsmInsertEvent
 import org.chronos.chronostore.lsm.event.LsmCursorClosedEvent
@@ -39,12 +40,12 @@ import kotlin.concurrent.write
 import kotlin.system.measureTimeMillis
 
 class LSMTree(
+    private val forest: LSMForestMemoryManager,
     private val directory: VirtualDirectory,
     private val mergeService: MergeService,
     private val blockCache: LocalBlockCache,
     private val driverFactory: RandomFileAccessDriverFactory,
     private val newFileSettings: ChronoStoreFileSettings,
-    private val maxInMemoryTreeSize: BinarySize,
 ) {
 
     companion object {
@@ -79,6 +80,7 @@ class LSMTree(
         this.garbageFileManager = GarbageFileManager(this.directory.file(GarbageFileManager.FILE_NAME))
         this.fileList = loadFileList()
         this.nextFreeFileIndex.set(this.fileList.maxOfOrNull { it.index } ?: 0)
+        forest.addTree(this)
     }
 
     private fun loadFileList(): MutableList<LSMTreeFile> {
@@ -177,20 +179,22 @@ class LSMTree(
                 "The key-and-timestamp ${containedEntry} is already contained in in-memory LSM tree!"
             }
 
+            val keyAndTimestampToCommand = commands.associateBy { it.keyAndTimestamp }
+            val bytesToInsert = keyAndTimestampToCommand.values.sumOf { it.byteSize }.toLong()
+
             // if the tree size gets too big, we have to block the writes until we have enough space
             // again. This is very unfortunate, but cannot be avoided. If the writer generates more
             // data per second than the flush task can write to disk, the only other alternative is
             // to claim more and more RAM until we eventually run into an OutOfMemoryError.
-            this.waitUntilInMemoryTreeHasCapacity()
+            this.waitUntilInMemoryTreeHasCapacity(bytesToInsert)
 
             // capture this value within the lock in order to avoid concurrency issues which
             // might cause "treeSizeBefore" to be greater than "treeSizeAfter"
             val treeSizeBefore = this.inMemorySize
             val treeCountBefore = this.inMemoryTree.size
 
-            val keyAndTimestampToCommand = commands.associateBy { it.keyAndTimestamp }
             this.inMemoryTree = this.inMemoryTree.plusAll(keyAndTimestampToCommand)
-            this.inMemoryTreeSizeInBytes.getAndAdd(keyAndTimestampToCommand.values.sumOf { it.byteSize }.toLong())
+            this.inMemoryTreeSizeInBytes.getAndAdd(bytesToInsert)
 
             val treeCountAfter = this.inMemoryTree.size
             val treeSizeAfter = this.inMemorySize
@@ -210,27 +214,8 @@ class LSMTree(
         this.mergeService.handleInMemoryInsertEvent(event)
     }
 
-    private fun waitUntilInMemoryTreeHasCapacity() {
-        var timeBeforeWriteStall = -1L
-        while (this.inMemorySize >= this.maxInMemoryTreeSize) {
-            // tree size is too big -> stall the write
-            try {
-                if (timeBeforeWriteStall < 0) {
-                    timeBeforeWriteStall = System.nanoTime()
-                    log.trace(LogMarkers.PERF) { "Stalling write to '${this.path}' because the in-memory tree cannot hold more data." }
-                }
-                this.treeSizeChangedCondition.await()
-            } catch (e: Exception) {
-                log.trace(LogMarkers.PERF) { "Caught exception while awaiting 'treeSizeChanged' condition: ${e}" }
-            }
-        }
-        if (timeBeforeWriteStall >= 0) {
-            // report the write stall time in the statistics
-            val timeAfterWriteStall = System.nanoTime()
-            val writeStallTime = (timeAfterWriteStall - timeBeforeWriteStall) / 1_000_000
-            log.trace(LogMarkers.PERF) { "Write to '${this.path}' will no longer be stalled and may continue. Stall time: ${writeStallTime}ms." }
-            ChronoStoreStatistics.TOTAL_WRITE_STALL_TIME_MILLIS.addAndGet(writeStallTime)
-        }
+    private fun waitUntilInMemoryTreeHasCapacity(bytesToInsert: Long) {
+        this.forest.onBeforeInMemoryInsert(this, bytesToInsert)
     }
 
     fun getMaxPersistedTimestamp(): Timestamp {
@@ -291,7 +276,7 @@ class LSMTree(
                     this.inMemoryTreeSizeInBytes.addAndGet(commands.values.sumOf { it.byteSize } * -1L)
 
                     // the in-memory tree size has changed, notify listeners
-                    this.treeSizeChangedCondition.signalAll()
+                    this.forest.onInMemoryFlush(this)
 
                     InMemoryLsmFlushEvent(
                         lsmTree = this,

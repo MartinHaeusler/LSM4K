@@ -156,7 +156,7 @@ class StoreManagementTest {
 
         val config = ChronoStoreConfiguration()
         // disable flushing and merging, we will do it manually in this test
-        config.maxInMemoryTreeSize = 10.GiB
+        config.maxForestSize = 10.GiB
         config.mergeInterval = (-1).minutes
         mode.withChronoStore(config) { chronoStore ->
             chronoStore.transaction { tx ->
@@ -205,7 +205,7 @@ class StoreManagementTest {
     fun canIterateOverAllVersionsWithMultipleFiles(mode: ChronoStoreMode) {
         val config = ChronoStoreConfiguration()
         // disable flushing and merging, we will do it manually in this test
-        config.maxInMemoryTreeSize = 10.GiB
+        config.maxForestSize = 10.GiB
         config.mergeInterval = (-1).minutes
 
         val numberOfEntries = 20
@@ -252,7 +252,7 @@ class StoreManagementTest {
             }
 
             // flush the in-memory stores to the VFS
-            chronoStore.mergeService.flushAllInMemoryStoresToDisk()
+            chronoStore.forest.flushAllInMemoryStoresToDisk()
 
             val commitTimestamp3 = chronoStore.transaction { tx ->
                 val data = tx.store("data")
@@ -263,7 +263,7 @@ class StoreManagementTest {
             }
 
             // flush the in-memory stores to the VFS
-            chronoStore.mergeService.flushAllInMemoryStoresToDisk()
+            chronoStore.forest.flushAllInMemoryStoresToDisk()
 
             val commitTimestamp4 = chronoStore.transaction { tx ->
                 val data = tx.store("data")

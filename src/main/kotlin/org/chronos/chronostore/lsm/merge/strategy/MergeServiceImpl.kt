@@ -78,35 +78,35 @@ class MergeServiceImpl(
 
     override fun handleInMemoryInsertEvent(event: InMemoryLsmInsertEvent) {
         check(this.initialized) { "MergeService has not yet been initialized!" }
-        val oldFillRate = event.inMemorySizeBefore.bytes / this.storeConfig.maxInMemoryTreeSize.bytes.toDouble()
-        val newFillRate = event.inMemorySizeAfter.bytes / this.storeConfig.maxInMemoryTreeSize.bytes.toDouble()
-
-        // when we "cross" the 60% fill rate, we schedule a new flush task.
-        // Important: we *could* schedule a flush whenever we are above the fill rate threshold. However,
-        // this can create an entire wave of flush tasks hitting the scheduler, and we only really need to
-        // run one of them. In case that the tree is still too big after the flush due to concurrent inserts,
-        // we schedule another flush after the first one (see: "handleInMemoryFlushEvent").
-        if (oldFillRate < FILL_RATE_FLUSH_THRESHOLD && newFillRate >= FILL_RATE_FLUSH_THRESHOLD) {
-            this.taskManager.executeAsync(FlushInMemoryTreeToDiskTask(event.lsmTree, this.storeConfig.maxInMemoryTreeSize))
-        }
+//        val oldFillRate = event.inMemorySizeBefore.bytes / this.storeConfig.maxInMemoryTreeSize.bytes.toDouble()
+//        val newFillRate = event.inMemorySizeAfter.bytes / this.storeConfig.maxInMemoryTreeSize.bytes.toDouble()
+//
+//        // when we "cross" the 60% fill rate, we schedule a new flush task.
+//        // Important: we *could* schedule a flush whenever we are above the fill rate threshold. However,
+//        // this can create an entire wave of flush tasks hitting the scheduler, and we only really need to
+//        // run one of them. In case that the tree is still too big after the flush due to concurrent inserts,
+//        // we schedule another flush after the first one (see: "handleInMemoryFlushEvent").
+//        if (oldFillRate < FILL_RATE_FLUSH_THRESHOLD && newFillRate >= FILL_RATE_FLUSH_THRESHOLD) {
+//            this.taskManager.executeAsync(FlushInMemoryTreeToDiskTask(event.lsmTree, this.storeConfig.maxInMemoryTreeSize))
+//        }
     }
 
     override fun handleInMemoryFlushEvent(event: InMemoryLsmFlushEvent) {
         check(this.initialized) { "MergeService has not yet been initialized!" }
-        val newFillRate = event.lsmTree.inMemorySize.bytes / this.storeConfig.maxInMemoryTreeSize.bytes.toDouble()
-        if (newFillRate >= FILL_RATE_FLUSH_THRESHOLD) {
-            println("REFLUSH")
-            // a flush has occurred, but there's still too much data in the in-memory tree.
-            // Schedule another flush (this will be repeated indefinitely until the tree becomes smaller than the threshold).
-            this.taskManager.executeAsync(FlushInMemoryTreeToDiskTask(event.lsmTree, this.storeConfig.maxInMemoryTreeSize))
-        }else{
-            println("NO REFLUSH NECESSARY")
-        }
+//        val newFillRate = event.lsmTree.inMemorySize.bytes / this.storeConfig.maxInMemoryTreeSize.bytes.toDouble()
+//        if (newFillRate >= FILL_RATE_FLUSH_THRESHOLD) {
+//            println("REFLUSH")
+//            // a flush has occurred, but there's still too much data in the in-memory tree.
+//            // Schedule another flush (this will be repeated indefinitely until the tree becomes smaller than the threshold).
+//            this.taskManager.executeAsync(FlushInMemoryTreeToDiskTask(event.lsmTree, this.storeConfig.maxInMemoryTreeSize))
+//        }else{
+//            println("NO REFLUSH NECESSARY")
+//        }
     }
 
     override fun flushAllInMemoryStoresToDisk(taskMonitor: TaskMonitor) {
         taskMonitor.forEachWithMonitor(1.0, "Flushing In-Memory segments of LSM Trees", this.storeManager.getAllLsmTrees()) { subTaskMonitor, lsmTree ->
-            val task = FlushInMemoryTreeToDiskTask(lsmTree, maxInMemoryTreeSize = 0.Bytes)
+            val task = FlushInMemoryTreeToDiskTask(lsmTree)
             task.run(subTaskMonitor)
         }
         taskMonitor.reportDone()
