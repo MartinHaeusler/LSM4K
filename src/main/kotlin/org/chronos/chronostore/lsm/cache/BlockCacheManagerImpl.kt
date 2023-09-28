@@ -24,7 +24,9 @@ class BlockCacheManagerImpl(
         return LocalBlockCacheImpl(storeId)
     }
 
-    private inner class LocalBlockCacheImpl(val storeId: StoreId) : LocalBlockCache {
+    private inner class LocalBlockCacheImpl(
+        override val storeId: StoreId
+    ) : LocalBlockCache {
 
 
         override fun getBlock(fileId: UUID, blockIndex: Int, loader: (Int) -> DataBlock?): DataBlock? {

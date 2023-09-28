@@ -6,6 +6,8 @@ import org.chronos.chronostore.io.vfs.InputSource
 import org.chronos.chronostore.util.ByteArrayExtensions.hex
 import org.chronos.chronostore.util.bits.BitTricks.writeStableInt
 import org.chronos.chronostore.util.bits.BitTricks.writeStableLong
+import org.chronos.chronostore.util.bits.ByteSizeUtil
+import org.chronos.chronostore.util.unit.Bytes
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
@@ -183,7 +185,7 @@ class Bytes(
     }
 
     override fun toString(): String {
-        return "Bytes[${this.array.hex()}]"
+        return "Bytes[${this.array.hex(16)} (${this.size.Bytes.toHumanReadableString()})]"
     }
 
     fun readLittleEndianInt(position: Int = 0): Int {

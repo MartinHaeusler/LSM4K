@@ -204,7 +204,7 @@ interface TransactionBoundStore {
     fun deleteStore()
 
     /**
-     * Returns `true` if the [transaction] is still open, or `false` if it has been [committed][commit] or [rolled back][rollback].
+     * Returns `true` if the [transaction] is still open, or `false` if it has been [committed][ChronoStoreTransaction.commit] or [rolled back][ChronoStoreTransaction.rollback].
      */
     val isOpen: Boolean
         get() = this.transaction.isOpen

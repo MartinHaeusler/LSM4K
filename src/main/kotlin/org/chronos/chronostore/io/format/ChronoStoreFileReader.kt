@@ -92,6 +92,7 @@ class ChronoStoreFileReader : AutoCloseable {
         ChronoStoreStatistics.PAGE_LOADS_FROM_DISK.incrementAndGet()
         val (startPosition, length) = this.fileHeader.indexOfBlocks.getBlockStartPositionAndLengthOrNull(blockIndex)
             ?: return null
+//            ?: throw IllegalStateException("Could not fetch block #${blockIndex} from Store '${this.blockCache.storeId}' (file: '${this.fileHeader.metaData.fileUUID}')! The block index contains ${this.fileHeader.indexOfBlocks.size} entries.")
         val blockBytes = this.driver.readBytes(startPosition, length)
         val compressionAlgorithm = this.fileHeader.metaData.settings.compression
         return DataBlock.createEagerLoadingInMemoryBlock(blockBytes.createInputStream(), compressionAlgorithm)

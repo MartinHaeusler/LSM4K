@@ -4,8 +4,8 @@ import java.util.*
 
 object ByteArrayExtensions {
 
-    fun ByteArray.hex(): String {
-        return HexFormat.of().formatHex(this)
+    fun ByteArray.hex(maxLength: Int = Int.MAX_VALUE): String {
+        return HexFormat.of().formatHex(this, 0, maxLength)
     }
 
 }

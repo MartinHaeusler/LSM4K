@@ -132,7 +132,7 @@ class LSMTree(
         this.lock.read {
             // first, check the in-memory tree
             val inMemoryEntry = this.inMemoryTree.floorEntry(keyAndTimestamp)
-            if (inMemoryEntry != null && inMemoryEntry.key.key == keyAndTimestamp.key) {
+            if ((inMemoryEntry != null) && (inMemoryEntry.key.key == keyAndTimestamp.key)) {
                 return inMemoryEntry.value
             }
             // then, search the on-disk files (in reverse order, latest first)
@@ -224,14 +224,14 @@ class LSMTree(
             .maxOrNull() ?: -1
     }
 
-    fun flushInMemoryDataToDisk(minFlushSize: BinarySize, monitor: TaskMonitor) {
+    fun flushInMemoryDataToDisk(minFlushSize: BinarySize, monitor: TaskMonitor): Long {
         log.trace(LogMarkers.PERF) { "TASK: Flush in-memory data to disk" }
         this.performAsyncWriteTask(monitor) {
             monitor.reportStarted("Flushing Data to Disk")
             if (this.inMemorySize < minFlushSize) {
                 // flush not necessary
                 monitor.reportDone()
-                return
+                return -1L
             }
             log.trace(LogMarkers.PERF) { "Flushing LSM Tree '${this.directory}'!" }
             val commands = monitor.subTask(0.1, "Collecting Entries to flush") {
@@ -287,12 +287,13 @@ class LSMTree(
 
             this.mergeService.handleInMemoryFlushEvent(event)
             monitor.reportDone()
+            return file.length
         }
     }
 
     fun performGarbageCollection(storeName: String, taskMonitor: TaskMonitor) {
         taskMonitor.reportStarted("Collecting Garbage in '${storeName}'")
-        val deleted = mutableListOf<String>()
+        val deleted = mutableSetOf<String>()
         taskMonitor.forEach(1.0, "Deleting old files", this.garbageFileManager.garbageFiles) { fileName ->
             if (this.cursorManager.hasOpenCursorOnFile(fileName)) {
                 // we must not delete any files we're currently iterating over.
@@ -369,7 +370,7 @@ class LSMTree(
                 this.lock.write {
                     overWriter.commit()
                     this.garbageFileManager.addAll(filesToMerge.map { it.virtualFile.name })
-                    this.fileList.removeAll(filesToMerge)
+                    this.fileList.removeAll(filesToMerge.toSet())
                 }
             }
         }

@@ -1,5 +1,7 @@
 package org.chronos.chronostore.util.unit
 
+import org.chronos.chronostore.util.bits.ByteSizeUtil
+
 enum class SizeUnit {
 
     BYTE,
@@ -66,6 +68,10 @@ class BinarySize(
 
     override fun hashCode(): Int {
         return bytes.hashCode()
+    }
+
+    fun toHumanReadableString(): String {
+        return ByteSizeUtil.humanReadableByteCountBin(this.bytes)
     }
 
 }

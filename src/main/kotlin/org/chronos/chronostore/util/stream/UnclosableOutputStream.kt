@@ -9,18 +9,36 @@ import java.io.OutputStream
  * but we want our stream to remain open.
  */
 class UnclosableOutputStream(
-    private val out: OutputStream
-): OutputStream() {
+    private val out: OutputStream,
+) : OutputStream() {
 
     companion object {
 
-        fun OutputStream.unclosable(): OutputStream{
+        fun OutputStream.unclosable(): OutputStream {
             return UnclosableOutputStream(this)
         }
 
     }
 
+    override fun write(b: ByteArray, off: Int, len: Int) {
+        this.out.write(b, off, len)
+    }
+
+    override fun write(b: ByteArray) {
+        // performance optimization: we forward the bulk-write API directly
+        // here. The default implementation uses the write(Int) method repeatedly,
+        // but doing so makes any buffering in the output useless and the bytes
+        // will arrive one by one in the destination stream. By explicitly overriding
+        // this method. we guarantee that buffering will have the desired effect.
+        this.out.write(b)
+    }
+
     override fun write(b: Int) {
+        // performance optimization: we forward the bulk-write API directly
+        // here. The default implementation uses the write(Int) method repeatedly,
+        // but doing so makes any buffering in the output useless and the bytes
+        // will arrive one by one in the destination stream. By explicitly overriding
+        // this method. we guarantee that buffering will have the desired effect.
         this.out.write(b)
     }
 

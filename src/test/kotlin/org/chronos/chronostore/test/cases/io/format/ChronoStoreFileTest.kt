@@ -1,11 +1,14 @@
 package org.chronos.chronostore.test.cases.io.format
 
+import org.chronos.chronostore.api.ChronoStoreConfiguration
 import org.chronos.chronostore.io.fileaccess.FileChannelDriver
 import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.model.command.KeyAndTimestamp
 import org.chronos.chronostore.io.fileaccess.MemorySegmentFileDriver
 import org.chronos.chronostore.io.format.*
 import org.chronos.chronostore.io.vfs.VirtualReadWriteFile.Companion.withOverWriter
+import org.chronos.chronostore.lsm.cache.BlockCacheManager
+import org.chronos.chronostore.lsm.cache.BlockCacheManagerImpl
 import org.chronos.chronostore.lsm.cache.LocalBlockCache
 import org.chronos.chronostore.test.util.VFSMode
 import org.chronos.chronostore.test.util.VirtualFileSystemTest
@@ -14,6 +17,7 @@ import org.chronos.chronostore.util.unit.KiB
 import org.chronos.chronostore.util.unit.MiB
 import strikt.api.expectThat
 import strikt.assertions.*
+import java.util.*
 import kotlin.random.Random
 
 class ChronoStoreFileTest {
@@ -105,9 +109,11 @@ class ChronoStoreFileTest {
                 get { length }.isGreaterThan(0L)
             }
 
+            //val blockCache = BlockCacheManagerImpl(ChronoStoreConfiguration())
+
             val factory = FileChannelDriver.Factory
             factory.createDriver(file).use { driver ->
-                ChronoStoreFileReader(driver, LocalBlockCache.NONE).use { reader ->
+                ChronoStoreFileReader(driver, LocalBlockCache.NONE /* blockCache.getBlockCache(UUID.randomUUID()) */ ).use { reader ->
                     val min = reader.fileHeader.metaData.minTimestamp!!
                     val max = reader.fileHeader.metaData.maxTimestamp!!
 
