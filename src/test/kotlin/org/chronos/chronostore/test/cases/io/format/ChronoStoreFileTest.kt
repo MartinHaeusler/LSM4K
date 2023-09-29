@@ -1,18 +1,17 @@
 package org.chronos.chronostore.test.cases.io.format
 
-import org.chronos.chronostore.api.ChronoStoreConfiguration
 import org.chronos.chronostore.io.fileaccess.FileChannelDriver
-import org.chronos.chronostore.model.command.Command
-import org.chronos.chronostore.model.command.KeyAndTimestamp
 import org.chronos.chronostore.io.fileaccess.MemorySegmentFileDriver
 import org.chronos.chronostore.io.format.*
 import org.chronos.chronostore.io.vfs.VirtualReadWriteFile.Companion.withOverWriter
-import org.chronos.chronostore.lsm.cache.BlockCacheManager
 import org.chronos.chronostore.lsm.cache.BlockCacheManagerImpl
 import org.chronos.chronostore.lsm.cache.LocalBlockCache
+import org.chronos.chronostore.model.command.Command
+import org.chronos.chronostore.model.command.KeyAndTimestamp
 import org.chronos.chronostore.test.util.VFSMode
 import org.chronos.chronostore.test.util.VirtualFileSystemTest
 import org.chronos.chronostore.util.Bytes
+import org.chronos.chronostore.util.StoreId
 import org.chronos.chronostore.util.unit.KiB
 import org.chronos.chronostore.util.unit.MiB
 import strikt.api.expectThat
@@ -30,7 +29,7 @@ class ChronoStoreFileTest {
             file.withOverWriter { overWriter ->
                 val writer = ChronoStoreFileWriter(
                     outputStream = overWriter.outputStream.buffered(),
-                    settings = ChronoStoreFileSettings(CompressionAlgorithm.NONE, 16.MiB, 100),
+                    settings = ChronoStoreFileSettings(CompressionAlgorithm.NONE, 16.MiB),
                     metadata = emptyMap()
                 )
                 writer.writeFile(0, orderedCommands = emptySequence<Command>().iterator())
@@ -42,9 +41,11 @@ class ChronoStoreFileTest {
                 get { this.length }.isGreaterThan(0L)
             }
 
+            val blockCache = BlockCacheManagerImpl(10.MiB)
+
             val factory = MemorySegmentFileDriver.Factory
             factory.createDriver(file).use { driver ->
-                ChronoStoreFileReader(driver, LocalBlockCache.NONE).use { reader ->
+                ChronoStoreFileReader(driver, blockCache.getBlockCache(StoreId.randomUUID())).use { reader ->
                     expectThat(reader) {
                         get { fileHeader }.and {
                             get { this.indexOfBlocks.isEmpty }.isTrue()
@@ -63,7 +64,6 @@ class ChronoStoreFileTest {
                                 get { this.settings }.and {
                                     get { this.compression }.isEqualTo(CompressionAlgorithm.NONE)
                                     get { this.maxBlockSize }.isEqualTo(16.MiB)
-                                    get { this.indexRate }.isEqualTo(100)
                                 }
                             }
                             get { this.trailer }.and {
@@ -89,7 +89,7 @@ class ChronoStoreFileTest {
             file.withOverWriter { overWriter ->
                 val writer = ChronoStoreFileWriter(
                     outputStream = overWriter.outputStream.buffered(),
-                    settings = ChronoStoreFileSettings(CompressionAlgorithm.NONE, 16.KiB, 4),
+                    settings = ChronoStoreFileSettings(CompressionAlgorithm.NONE, 16.KiB),
                     metadata = emptyMap()
                 )
                 val random = Random(System.currentTimeMillis())
@@ -109,11 +109,11 @@ class ChronoStoreFileTest {
                 get { length }.isGreaterThan(0L)
             }
 
-            //val blockCache = BlockCacheManagerImpl(ChronoStoreConfiguration())
+            val blockCache = BlockCacheManagerImpl(250.MiB)
 
             val factory = FileChannelDriver.Factory
             factory.createDriver(file).use { driver ->
-                ChronoStoreFileReader(driver, LocalBlockCache.NONE /* blockCache.getBlockCache(UUID.randomUUID()) */ ).use { reader ->
+                ChronoStoreFileReader(driver, blockCache.getBlockCache(UUID.randomUUID()) ).use { reader ->
                     val min = reader.fileHeader.metaData.minTimestamp!!
                     val max = reader.fileHeader.metaData.maxTimestamp!!
 
@@ -189,7 +189,7 @@ class ChronoStoreFileTest {
             file.withOverWriter { overWriter ->
                 val writer = ChronoStoreFileWriter(
                     outputStream = overWriter.outputStream.buffered(),
-                    settings = ChronoStoreFileSettings(CompressionAlgorithm.NONE, 16.KiB, 4),
+                    settings = ChronoStoreFileSettings(CompressionAlgorithm.NONE, 16.KiB),
                     metadata = emptyMap()
                 )
                 val random = Random(System.currentTimeMillis())

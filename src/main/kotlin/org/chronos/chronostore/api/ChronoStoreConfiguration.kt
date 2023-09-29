@@ -4,6 +4,7 @@ import org.chronos.chronostore.io.fileaccess.FileChannelDriver
 import org.chronos.chronostore.io.fileaccess.RandomFileAccessDriverFactory
 import org.chronos.chronostore.io.format.CompressionAlgorithm
 import org.chronos.chronostore.util.unit.BinarySize
+import org.chronos.chronostore.util.unit.Bytes
 import org.chronos.chronostore.util.unit.MiB
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
@@ -17,9 +18,6 @@ class ChronoStoreConfiguration {
 
     /** When writing new files: the maximum (uncompressed) size of a single data block.*/
     var maxBlockSize: BinarySize = 64.MiB
-
-    /** When writing new files: every n-th key will be part of the block-internal index.*/
-    var indexRate: Int = 100
 
     var randomFileAccessDriverFactory: RandomFileAccessDriverFactory = FileChannelDriver.Factory
 
@@ -60,8 +58,8 @@ class ChronoStoreConfiguration {
     /**
      * The maximum size of the block cache to use, in bytes.
      *
-     * By default, 50% of the JVM heap space is used.
+     * By default, 25% of the JVM heap space is used.
      */
-    var blockCacheSizeInBytes: Long = Runtime.getRuntime().maxMemory() / 2
+    var blockCacheSize: BinarySize = (Runtime.getRuntime().maxMemory() / 4).toInt().Bytes
 
 }

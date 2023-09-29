@@ -7,16 +7,4 @@ class ChronoStoreFileSettings(
     val compression: CompressionAlgorithm,
     /** The maximum size of a single block. */
     val maxBlockSize: BinarySize,
-    /**
-     * Every N-th key per block will be indexed.
-     *
-     * For example, if [indexRate] = 10, every 10th key will be
-     * added to the block index.
-     *
-     * The first and the last entry of the block will always
-     * be part of the index.
-     */
-    val indexRate: Int,
-) {
-
-}
+)

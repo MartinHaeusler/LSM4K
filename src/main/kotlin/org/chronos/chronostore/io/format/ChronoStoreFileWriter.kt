@@ -17,7 +17,6 @@ import org.chronos.chronostore.util.Timestamp
 import org.chronos.chronostore.util.iterator.IteratorExtensions.checkOrdered
 import java.io.ByteArrayOutputStream
 import java.io.OutputStream
-import java.lang.UnsupportedOperationException
 import java.util.*
 
 /**
@@ -45,6 +44,7 @@ class ChronoStoreFileWriter : AutoCloseable {
      * @param outputStream The output stream to write to. Will be closed when the writer is closed.
      * @param settings The settings to use for writing the file. Will also be persisted in the file itself.
      */
+    @Suppress("ConvertSecondaryConstructorToPrimary")
     constructor(outputStream: OutputStream, settings: ChronoStoreFileSettings, metadata: Map<Bytes, Bytes>) {
         this.outputStream = PositionTrackingStream(outputStream.buffered())
         this.settings = settings
@@ -187,7 +187,7 @@ class ChronoStoreFileWriter : AutoCloseable {
         val allKeysInBlock = mutableListOf<Bytes>()
         while (commands.hasNext() && (blockPositionTrackingStream.position + commands.peek().byteSize) < this.settings.maxBlockSize.bytes) {
             val command = commands.next()
-            blockPositionTrackingStream.write(command.toBytes())
+            command.writeToStream(blockPositionTrackingStream)
             minTimestamp = min(minTimestamp, command.timestamp)
             maxTimestamp = max(maxTimestamp, command.timestamp)
             allKeysInBlock += command.keyAndTimestamp.key

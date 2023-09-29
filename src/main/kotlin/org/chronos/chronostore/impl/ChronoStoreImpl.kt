@@ -36,7 +36,7 @@ class ChronoStoreImpl(
     private var isOpen = true
 
     private val timeManager: TimeManager
-    private val blockCacheManager = BlockCacheManagerImpl(configuration)
+    private val blockCacheManager = BlockCacheManagerImpl(configuration.blockCacheSize)
     private val taskManager = AsyncTaskManagerImpl(Executors.newScheduledThreadPool(configuration.maxWriterThreads))
 
     @VisibleForTesting
@@ -54,7 +54,7 @@ class ChronoStoreImpl(
         mergeService = this.mergeService,
         forest = this.forest,
         driverFactory = this.configuration.randomFileAccessDriverFactory,
-        newFileSettings = ChronoStoreFileSettings(configuration.compressionAlgorithm, configuration.maxBlockSize, configuration.indexRate),
+        newFileSettings = ChronoStoreFileSettings(configuration.compressionAlgorithm, configuration.maxBlockSize),
     )
 
     private val writeAheadLog: WriteAheadLog

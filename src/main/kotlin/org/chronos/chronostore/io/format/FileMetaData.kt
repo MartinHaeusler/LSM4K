@@ -14,7 +14,7 @@ import org.chronos.chronostore.util.unit.Bytes
 import java.io.ByteArrayInputStream
 import java.io.InputStream
 import java.io.OutputStream
-import java.util.UUID
+import java.util.*
 
 class FileMetaData(
     /** The settings used to write the file. */
@@ -50,7 +50,6 @@ class FileMetaData(
             val settings = ChronoStoreFileSettings(
                 compression = CompressionAlgorithm.fromAlgorithmIndex(inputStream.readLittleEndianInt()),
                 maxBlockSize = inputStream.readLittleEndianInt().Bytes,
-                indexRate = inputStream.readLittleEndianInt(),
             )
             val fileUUID = readUUIDFrom(inputStream.readNBytes(Long.SIZE_BYTES * 2))
             val minKey = PrefixIO.readBytes(inputStream).takeIf { it.isNotEmpty() }
@@ -92,7 +91,6 @@ class FileMetaData(
     fun writeTo(outputStream: OutputStream) {
         outputStream.writeLittleEndianInt(this.settings.compression.algorithmIndex)
         outputStream.writeLittleEndianInt(this.settings.maxBlockSize.bytes.toInt())
-        outputStream.writeLittleEndianInt(this.settings.indexRate)
         outputStream.write(fileUUID.toBytes())
         PrefixIO.writeBytes(outputStream, this.minKey ?: Bytes.EMPTY)
         PrefixIO.writeBytes(outputStream, this.maxKey ?: Bytes.EMPTY)

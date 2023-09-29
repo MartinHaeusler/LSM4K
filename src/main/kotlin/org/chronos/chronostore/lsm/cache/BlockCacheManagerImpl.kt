@@ -2,21 +2,27 @@ package org.chronos.chronostore.lsm.cache
 
 import com.google.common.cache.Cache
 import com.google.common.cache.CacheBuilder
-import org.chronos.chronostore.api.ChronoStoreConfiguration
 import org.chronos.chronostore.io.format.datablock.DataBlock
 import org.chronos.chronostore.util.StoreId
-import java.util.UUID
+import org.chronos.chronostore.util.unit.BinarySize
+import java.util.*
 
 class BlockCacheManagerImpl(
-    config: ChronoStoreConfiguration
+    val maxSize: BinarySize
 ) : BlockCacheManager {
 
     private val cache: Cache<CacheKey, DataBlock> = CacheBuilder.newBuilder()
-        .maximumWeight(config.blockCacheSizeInBytes)
+        .maximumWeight(maxSize.bytes)
         .weigher(this::computeBlockCacheWeight)
         .build()
 
-    private fun computeBlockCacheWeight(key: CacheKey, value: DataBlock): Int {
+    private fun computeBlockCacheWeight(
+        // The cache key is a necessary parameter to fulfill the guava cache API.
+        // If we would remove this parameter here, we couldn't use this method as
+        // a method reference for the cache loader.
+        @Suppress("UNUSED_PARAMETER") key: CacheKey,
+        value: DataBlock
+    ): Int {
         return value.metaData.byteSize
     }
 

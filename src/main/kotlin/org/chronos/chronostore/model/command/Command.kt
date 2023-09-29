@@ -9,6 +9,7 @@ import org.chronos.chronostore.util.StringExtensions.ellipsis
 import org.chronos.chronostore.util.Timestamp
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
+import java.io.OutputStream
 
 class Command(
     val opCode: OpCode,
@@ -50,7 +51,17 @@ class Command(
         }
 
         fun readFromStream(inputStream: InputStream): Command {
-            val opCode = OpCode.fromByte(inputStream.read())
+            return readFromStreamOrNull(inputStream)
+                ?: throw IllegalStateException("Cannot read Command from input stream: it has no more data!")
+        }
+
+        fun readFromStreamOrNull(inputStream: InputStream): Command? {
+            val firstByte = inputStream.read()
+            if(firstByte < 0){
+                // end of input
+                return null
+            }
+            val opCode = OpCode.fromByte(firstByte)
             val key = PrefixIO.readBytes(inputStream)
             val timestamp = inputStream.readLittleEndianLong()
             val value = when (opCode) {
@@ -96,8 +107,7 @@ class Command(
 
     }
 
-    fun toBytes(): Bytes {
-        val outputStream = ByteArrayOutputStream(1 + 8 + key.size + value.size)
+    fun writeToStream(outputStream: OutputStream){
         outputStream.write(this.opCode.byte.toInt())
         PrefixIO.writeBytes(outputStream, this.key)
         outputStream.writeLittleEndianLong(timestamp)
@@ -110,6 +120,11 @@ class Command(
                 /* No Op*/
             }
         }
+    }
+
+    fun toBytes(): Bytes {
+        val outputStream = ByteArrayOutputStream(1 + 8 + key.size + value.size)
+        writeToStream(outputStream)
         return Bytes(outputStream.toByteArray())
     }
 

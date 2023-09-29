@@ -85,14 +85,20 @@ class ChronoStoreFileReader : AutoCloseable {
     }
 
     private fun getBlockForIndex(blockIndex: Int): DataBlock? {
+        if (!this.fileHeader.indexOfBlocks.isValidBlockIndex(blockIndex)) {
+            // block index is out of range, no need to look for it.
+            return null
+        }
         return this.blockCache.getBlock(this.fileHeader.metaData.fileUUID, blockIndex, ::getBlockForIndexUncached)
     }
 
-    private fun getBlockForIndexUncached(blockIndex: Int): DataBlock? {
+    private fun getBlockForIndexUncached(blockIndex: Int): DataBlock {
         ChronoStoreStatistics.PAGE_LOADS_FROM_DISK.incrementAndGet()
         val (startPosition, length) = this.fileHeader.indexOfBlocks.getBlockStartPositionAndLengthOrNull(blockIndex)
-            ?: return null
-//            ?: throw IllegalStateException("Could not fetch block #${blockIndex} from Store '${this.blockCache.storeId}' (file: '${this.fileHeader.metaData.fileUUID}')! The block index contains ${this.fileHeader.indexOfBlocks.size} entries.")
+            ?: throw IllegalStateException(
+                "Could not fetch block #${blockIndex} from Store '${this.blockCache.storeId}' (file: '${this.fileHeader.metaData.fileUUID}')!" +
+                    " The block index contains ${this.fileHeader.indexOfBlocks.size} entries."
+            )
         val blockBytes = this.driver.readBytes(startPosition, length)
         val compressionAlgorithm = this.fileHeader.metaData.settings.compression
         return DataBlock.createEagerLoadingInMemoryBlock(blockBytes.createInputStream(), compressionAlgorithm)
@@ -259,7 +265,7 @@ class ChronoStoreFileReader : AutoCloseable {
         }
 
         override fun peekNext(): Pair<KeyAndTimestamp, Command>? {
-            if(!this.isValidPosition){
+            if (!this.isValidPosition) {
                 return null
             }
             val cursor = this.currentCursor
@@ -270,7 +276,7 @@ class ChronoStoreFileReader : AutoCloseable {
         }
 
         override fun peekPrevious(): Pair<KeyAndTimestamp, Command>? {
-            if(!this.isValidPosition){
+            if (!this.isValidPosition) {
                 return null
             }
             val cursor = this.currentCursor
@@ -309,7 +315,7 @@ class ChronoStoreFileReader : AutoCloseable {
         override fun seekExactlyOrNext(key: KeyAndTimestamp): Boolean {
             check(this.isOpen, this::getAlreadyClosedMessage)
             ChronoStoreStatistics.FILE_CURSOR_EXACTLY_OR_NEXT_SEEKS.incrementAndGet()
-            if(key == this.keyOrNull){
+            if (key == this.keyOrNull) {
                 // we're already there
                 return true
             }
@@ -333,7 +339,7 @@ class ChronoStoreFileReader : AutoCloseable {
         override fun seekExactlyOrPrevious(key: KeyAndTimestamp): Boolean {
             check(this.isOpen, this::getAlreadyClosedMessage)
             ChronoStoreStatistics.FILE_CURSOR_EXACTLY_OR_PREVIOUS_SEEKS.incrementAndGet()
-            if(key == this.keyOrNull){
+            if (key == this.keyOrNull) {
                 // we're already there
                 return true
             }
