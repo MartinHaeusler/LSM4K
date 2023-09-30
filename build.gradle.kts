@@ -21,7 +21,8 @@ dependencies {
 
     // compression
     implementation("org.xerial.snappy:snappy-java:1.1.9.1")
-    implementation("org.anarres.lzo:lzo-core:1.0.6")
+    implementation("com.github.luben:zstd-jni:1.5.5-5")
+    implementation("org.lz4:lz4-java:1.8.0")
 
     implementation("org.pcollections:pcollections:4.0.1")
 

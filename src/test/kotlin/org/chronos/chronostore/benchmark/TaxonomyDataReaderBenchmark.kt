@@ -10,7 +10,7 @@ import java.io.File
 object TaxonomyDataReaderBenchmark {
 
     val inputDir = File("/home/martin/Documents/chronostore-test")
-    val inputFileName = "taxonomy_none.chronostore"
+    val inputFileName = "taxonomy_zstd_apache.chronostore"
 
     val driverFactory = MemorySegmentFileDriver.Factory
 
