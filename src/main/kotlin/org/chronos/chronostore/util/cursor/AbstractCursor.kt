@@ -1,5 +1,6 @@
 package org.chronos.chronostore.util.cursor
 
+import org.chronos.chronostore.api.exceptions.ChronoStoreCursorException
 import org.chronos.chronostore.util.Order
 import org.chronos.chronostore.util.Order.*
 
@@ -8,6 +9,8 @@ abstract class AbstractCursor<K, V> : Cursor<K, V> {
     override var isOpen: Boolean = true
     override var modCount: Long = 0
     override var isValidPosition: Boolean = false
+
+    private val closeHandlers = mutableListOf<CloseHandler>()
 
     override fun invalidatePosition() {
         this.checkInvariants()
@@ -59,7 +62,7 @@ abstract class AbstractCursor<K, V> : Cursor<K, V> {
 
     final override fun seekExactlyOrNext(key: K): Boolean {
         this.checkInvariants()
-        if(key == this.keyOrNull){
+        if (key == this.keyOrNull) {
             // we're already there
             return true
         }
@@ -70,7 +73,7 @@ abstract class AbstractCursor<K, V> : Cursor<K, V> {
 
     final override fun seekExactlyOrPrevious(key: K): Boolean {
         this.checkInvariants()
-        if(key == this.keyOrNull){
+        if (key == this.keyOrNull) {
             // we're already there
             return true
         }
@@ -95,7 +98,13 @@ abstract class AbstractCursor<K, V> : Cursor<K, V> {
             return
         }
         this.isOpen = false
-        this.closeInternal()
+        CursorUtils.executeCloseHandlers(this::closeInternal, this.closeHandlers)
+    }
+
+    final override fun onClose(action: CloseHandler): Cursor<K, V> {
+        this.checkInvariants()
+        this.closeHandlers += action
+        return this
     }
 
     protected open fun checkInvariants() {

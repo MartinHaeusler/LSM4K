@@ -2,13 +2,14 @@ package org.chronos.chronostore.util.cursor
 
 class EmptyCursor<K, V>(
     val getCursorName: () -> String
-): Cursor<K, V> {
+) : Cursor<K, V> {
 
 
     override var modCount: Long = 0
 
     override var isOpen: Boolean = true
 
+    private val closeHandlers = mutableListOf<CloseHandler>()
 
     override val isValidPosition: Boolean
         get() = false
@@ -54,8 +55,15 @@ class EmptyCursor<K, V>(
             return null
         }
 
+    override fun onClose(action: CloseHandler): Cursor<K, V> {
+        check(this.isOpen, ::createAlreadyClosedMessage)
+        this.closeHandlers += action
+        return this
+    }
+
     override fun close() {
         this.isOpen = false
+        CursorUtils.executeCloseHandlers(this.closeHandlers)
     }
 
     override fun seekExactlyOrNext(key: K): Boolean {

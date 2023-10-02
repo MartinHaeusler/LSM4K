@@ -15,6 +15,8 @@ class IndexBasedCursor<K : Comparable<K>, V>(
 
     private var currentEntry: Pair<K, V>? = null
 
+    private val closeHandlers = mutableListOf<CloseHandler>()
+
     init {
         require(minIndex >= 0) { "Argument 'minIndex' (${minIndex}) must not be negative!" }
         require(maxIndex >= 0) { "Argument 'maxIndex' (${maxIndex}) must not be negative!" }
@@ -98,13 +100,20 @@ class IndexBasedCursor<K : Comparable<K>, V>(
             return entry.second
         }
 
+    override fun onClose(action: CloseHandler): Cursor<K, V> {
+        check(this.isOpen, ::createAlreadyClosedMessage)
+        this.closeHandlers += action
+        return this
+    }
+
     override fun close() {
         this.isOpen = false
+        CursorUtils.executeCloseHandlers(this.closeHandlers)
     }
 
     override fun seekExactlyOrNext(key: K): Boolean {
         check(this.isOpen, ::createAlreadyClosedMessage)
-        if(key == this.keyOrNull){
+        if (key == this.keyOrNull) {
             // we're already there
             return true
         }
@@ -122,7 +131,7 @@ class IndexBasedCursor<K : Comparable<K>, V>(
 
     override fun seekExactlyOrPrevious(key: K): Boolean {
         check(this.isOpen, ::createAlreadyClosedMessage)
-        if(key == this.keyOrNull){
+        if (key == this.keyOrNull) {
             // we're already there
             return true
         }

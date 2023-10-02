@@ -1,5 +1,7 @@
 package org.chronos.chronostore.util.cursor
 
+import org.chronos.chronostore.api.exceptions.ChronoStoreCursorException
+import org.chronos.chronostore.api.exceptions.ChronoStoreException
 import org.chronos.chronostore.util.Order
 
 abstract class CombiningCursor<C1 : Cursor<*, *>, C2 : Cursor<*, *>, K, V>(
@@ -54,28 +56,7 @@ abstract class CombiningCursor<C1 : Cursor<*, *>, C2 : Cursor<*, *>, K, V>(
     }
 
     override fun closeInternal() {
-        // careful: we need to ensure that *both* inner cursors
-        // get an attempt at closing. Even if the first one throws
-        // an exception in its close() method, we should still try
-        // to close the second one before exiting with an exception.
-        val closeAException = try {
-            this.cursorA.close()
-            null
-        } catch (e: Exception) {
-            e
-        }
-        val closeBException = try {
-            this.cursorB.close()
-            null
-        } catch (e: Exception) {
-            e
-        }
-        if (closeAException != null) {
-            throw closeAException
-        }
-        if (closeBException != null) {
-            throw closeBException
-        }
+        CursorUtils.executeCloseHandlers(this.cursorA::close, this.cursorB::close)
     }
 
     override fun checkInvariants() {

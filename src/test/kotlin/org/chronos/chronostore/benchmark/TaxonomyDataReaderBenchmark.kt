@@ -10,12 +10,15 @@ import java.io.File
 object TaxonomyDataReaderBenchmark {
 
     val inputDir = File("/home/martin/Documents/chronostore-test")
-    val inputFileName = "taxonomy_zstd_apache.chronostore"
+    val inputFileName = "taxonomy_snappy.chronostore"
 
     val driverFactory = MemorySegmentFileDriver.Factory
 
     @JvmStatic
     fun main(args: Array<String>) {
+        println("Attach profiler now!")
+        Thread.sleep(10_000)
+
         val vfs = DiskBasedVirtualFileSystem(inputDir)
         val inputFile = vfs.file(inputFileName)
 

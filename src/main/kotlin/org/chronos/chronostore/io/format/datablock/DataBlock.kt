@@ -75,13 +75,29 @@ interface DataBlock {
 
             // decompress the data
             val decompressedData = compressionAlgorithm.decompress(compressedBytes)
-            val commands = TreeMap<KeyAndTimestamp, Command>()
+
+            // performance optimization:
+            // We want to construct a TreeMap from all our keys and values. The default
+            // way to do this is to create an empty TreeMap and call put(...) for each
+            // entry. However, this is inefficient, because put(...) does not assume
+            // that the entries arrive in-order and therefore performs a lot of
+            // processing to ensure the correct order. In this place, we can
+            // *guarantee* that the entries will arrive in order, because it is part of
+            // the file format specification. There is an optimized constructor for
+            // TreeMap which requires a SortedMap as input. We create a "fake" sorted
+            // map here from our input which ONLY implements the methods needed for the
+            // optimized tree map constructor (entrySet().iterator() and size()).
+
+            val fakeSortedMap = FakeSortedMap<KeyAndTimestamp, Command>()
+
             decompressedData.inputStream().use { byteIn ->
                 while (byteIn.available() > 0) {
                     val command = Command.readFromStream(byteIn)
-                    commands[command.keyAndTimestamp] = command
+                    fakeSortedMap[command.keyAndTimestamp] = command
                 }
             }
+
+            val commands = TreeMap(fakeSortedMap)
 
             return EagerDataBlock(
                 metaData = blockMetaData,
@@ -91,4 +107,150 @@ interface DataBlock {
 
     }
 
+
+    private class FakeSortedMap<K : Comparable<K>, V> : SortedMap<K, V> {
+
+        private val data = mutableListOf<MutableMap.MutableEntry<K, V>>()
+
+        override fun containsKey(key: K): Boolean {
+            return this.data.any { it.key == key }
+        }
+
+        override fun containsValue(value: V): Boolean {
+            return this.data.any { it.value == value }
+        }
+
+        override fun get(key: K): V? {
+            return this.entries.firstOrNull { it.key == key }?.value
+        }
+
+        override fun clear() {
+            return this.data.clear()
+        }
+
+        override fun remove(key: K): V? {
+            val iterator = this.data.iterator()
+            if (iterator.hasNext()) {
+                val entry = iterator.next()
+                if (entry.key == key) {
+                    iterator.remove()
+                    return entry.value
+                }
+            }
+            return null
+        }
+
+        override fun putAll(from: Map<out K, V>) {
+            for (entry in from) {
+                this[entry.key] = entry.value
+            }
+        }
+
+        override fun put(key: K, value: V): V? {
+            // DELIBERATELY no check for containment here!
+            this.data.add(ImmutableEntry(key, value))
+            // deliberate performance optimization
+            return null
+        }
+
+        override fun isEmpty(): Boolean {
+            return this.data.isEmpty()
+        }
+
+        override fun comparator(): Comparator<in K> {
+            return Comparator.naturalOrder()
+        }
+
+        override fun firstKey(): K {
+            return this.data.first().key
+        }
+
+        override fun lastKey(): K {
+            return this.data.last().key
+        }
+
+        override val entries: MutableSet<MutableMap.MutableEntry<K, V>>
+            get() = FakeEntrySet()
+
+        override val keys: MutableSet<K>
+            get() = throw UnsupportedOperationException("Operation 'keys' is not supported.")
+
+        override val values: MutableCollection<V>
+            get() = throw UnsupportedOperationException("Operation 'values' is not supported.")
+
+        override val size: Int
+            get() = this.data.size
+
+        override fun tailMap(fromKey: K): SortedMap<K, V> {
+            throw UnsupportedOperationException("Operation 'keys' is not supported.")
+        }
+
+        override fun headMap(toKey: K): SortedMap<K, V> {
+            throw UnsupportedOperationException("Operation 'keys' is not supported.")
+        }
+
+        override fun subMap(fromKey: K, toKey: K): SortedMap<K, V> {
+            throw UnsupportedOperationException("Operation 'keys' is not supported.")
+        }
+
+        private class ImmutableEntry<K, V>(
+            override val key: K,
+            override var value: V,
+        ) : MutableMap.MutableEntry<K, V> {
+
+            override fun setValue(newValue: V): V {
+                val oldValue = this.value
+                this.value = newValue
+                return oldValue
+            }
+
+        }
+
+        private inner class FakeEntrySet : MutableSet<MutableMap.MutableEntry<K, V>> {
+            override fun add(element: MutableMap.MutableEntry<K, V>): Boolean {
+                throw UnsupportedOperationException("Operation 'add' is not supported!")
+            }
+
+            override fun addAll(elements: Collection<MutableMap.MutableEntry<K, V>>): Boolean {
+                throw UnsupportedOperationException("Operation 'add' is not supported!")
+            }
+
+            override val size: Int
+                get() = this@FakeSortedMap.size
+
+            override fun clear() {
+                throw UnsupportedOperationException("Operation 'add' is not supported!")
+            }
+
+            override fun isEmpty(): Boolean {
+                return this.size <= 0
+            }
+
+            override fun containsAll(elements: Collection<MutableMap.MutableEntry<K, V>>): Boolean {
+                throw UnsupportedOperationException("Operation 'add' is not supported!")
+            }
+
+            override fun contains(element: MutableMap.MutableEntry<K, V>): Boolean {
+                throw UnsupportedOperationException("Operation 'add' is not supported!")
+            }
+
+            override fun iterator(): MutableIterator<MutableMap.MutableEntry<K, V>> {
+                return this@FakeSortedMap.data.iterator()
+            }
+
+            override fun retainAll(elements: Collection<MutableMap.MutableEntry<K, V>>): Boolean {
+                throw UnsupportedOperationException("Operation 'add' is not supported!")
+            }
+
+            override fun removeAll(elements: Collection<MutableMap.MutableEntry<K, V>>): Boolean {
+                throw UnsupportedOperationException("Operation 'add' is not supported!")
+            }
+
+            override fun remove(element: MutableMap.MutableEntry<K, V>): Boolean {
+                throw UnsupportedOperationException("Operation 'add' is not supported!")
+            }
+
+        }
+
+    }
 }

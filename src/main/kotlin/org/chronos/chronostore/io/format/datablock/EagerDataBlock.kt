@@ -15,10 +15,8 @@ class EagerDataBlock(
     private val data: NavigableMap<KeyAndTimestamp, Command>,
 ) : DataBlock {
 
-    private val dataList = this.data.toList()
-
     override fun isEmpty(): Boolean {
-        return this.dataList.isEmpty()
+        return this.data.isEmpty()
     }
 
     override fun get(key: KeyAndTimestamp, driver: RandomFileAccessDriver): Pair<Command, Boolean>? {
@@ -42,7 +40,7 @@ class EagerDataBlock(
     }
 
     override fun cursor(driver: RandomFileAccessDriver): Cursor<KeyAndTimestamp, Command> {
-        return if (this.dataList.isEmpty()) {
+        return if (this.data.isEmpty()) {
             EmptyCursor(
                 getCursorName = { "Data Block #${this.metaData.blockSequenceNumber}" }
             )

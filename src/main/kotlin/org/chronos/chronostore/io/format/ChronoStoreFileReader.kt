@@ -5,7 +5,9 @@ import org.chronos.chronostore.io.format.datablock.DataBlock
 import org.chronos.chronostore.lsm.cache.LocalBlockCache
 import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.model.command.KeyAndTimestamp
+import org.chronos.chronostore.util.cursor.CloseHandler
 import org.chronos.chronostore.util.cursor.Cursor
+import org.chronos.chronostore.util.cursor.CursorUtils
 import org.chronos.chronostore.util.statistics.ChronoStoreStatistics
 
 class ChronoStoreFileReader : AutoCloseable {
@@ -148,6 +150,8 @@ class ChronoStoreFileReader : AutoCloseable {
 
         private var currentBlock: DataBlock? = null
         private var currentCursor: Cursor<KeyAndTimestamp, Command>? = null
+
+        private val closeHandlers = mutableListOf<CloseHandler>()
 
         init {
             ChronoStoreStatistics.FILE_CURSORS.incrementAndGet()
@@ -304,12 +308,24 @@ class ChronoStoreFileReader : AutoCloseable {
                 return this.currentCursor?.valueOrNull
             }
 
+        override fun onClose(action: CloseHandler): Cursor<KeyAndTimestamp, Command> {
+            check(this.isOpen, this::getAlreadyClosedMessage)
+            this.closeHandlers += action
+            return this
+        }
+
         override fun close() {
             if (!this.isOpen) {
                 return
             }
             this.isOpen = false
-            this.currentCursor?.close()
+            val current = this.currentCursor
+            val currentCursorCloseHandler = if (current != null) {
+                current::close
+            } else {
+                null
+            }
+            CursorUtils.executeCloseHandlers(currentCursorCloseHandler, this.closeHandlers)
         }
 
         override fun seekExactlyOrNext(key: KeyAndTimestamp): Boolean {

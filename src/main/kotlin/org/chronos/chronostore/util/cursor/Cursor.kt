@@ -2,6 +2,7 @@ package org.chronos.chronostore.util.cursor
 
 import org.chronos.chronostore.util.Order
 
+typealias CloseHandler = () -> Unit
 
 /**
  * A [Cursor] is a movable pointer to a certain entry in a list of key-value pairs.
@@ -777,12 +778,27 @@ interface Cursor<K, V> : AutoCloseable {
     }
 
     /**
-     * Wraps this cursor into another one which performs the given action when it is [closed][close].
+     * Adds the given close handler to this cursor. The action is invoked when the cursor is [closed][close].
+     *
+     * The close actions will be called in the order they're registered.
      *
      * @param action The action to perform on close.
+     *
+     * @return `this` for method chaining.
      */
-    fun onClose(action: () -> Unit): Cursor<K, V> {
-        return CursorWithCloseHandler(this, action)
+    fun onClose(action: CloseHandler): Cursor<K, V>
+
+    /**
+     * Adds the given close handler to this cursor. The action is invoked when the cursor is [closed][close].
+     *
+     * The close actions will be called in the order they're registered.
+     *
+     * @param action The action to perform on close.
+     *
+     * @return `this` for method chaining.
+     */
+    fun onClose(action: Runnable): Cursor<K, V> {
+        return this.onClose(action::run)
     }
 
 }
