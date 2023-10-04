@@ -1,5 +1,6 @@
 package org.chronos.chronostore.util
 
+import org.chronos.chronostore.util.bytes.Bytes
 import java.nio.ByteBuffer
 import java.util.*
 
@@ -7,7 +8,7 @@ import java.util.*
 object UUIDExtensions {
 
     fun UUID.toBytes(): Bytes {
-        return Bytes(this.toByteArray())
+        return Bytes.wrap(this.toByteArray())
     }
 
     fun UUID.toByteArray(): ByteArray {

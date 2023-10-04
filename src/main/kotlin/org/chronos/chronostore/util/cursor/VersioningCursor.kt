@@ -2,7 +2,7 @@ package org.chronos.chronostore.util.cursor
 
 import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.model.command.KeyAndTimestamp
-import org.chronos.chronostore.util.Bytes
+import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.Order
 import org.chronos.chronostore.util.Timestamp
 import org.chronos.chronostore.util.statistics.ChronoStoreStatistics

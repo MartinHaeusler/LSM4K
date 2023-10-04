@@ -19,10 +19,10 @@ class ChronoStoreFileReader : AutoCloseable {
             ChronoStoreStatistics.FILE_HEADER_LOADS_FROM_DISK.incrementAndGet()
             // read and validate the magic bytes
             val magicBytesAndVersion = driver.readBytes(0, ChronoStoreFileFormat.FILE_MAGIC_BYTES.size + Int.SIZE_BYTES)
-            val magicBytes = magicBytesAndVersion.slice(0 until ChronoStoreFileFormat.FILE_MAGIC_BYTES.size)
+            val magicBytes = magicBytesAndVersion.slice(0, ChronoStoreFileFormat.FILE_MAGIC_BYTES.size)
 
             if (magicBytes != ChronoStoreFileFormat.FILE_MAGIC_BYTES) {
-                throw IllegalStateException("The file '${driver.filePath}' has an unknown file format.")
+                throw IllegalStateException("The file '${driver.filePath}' has an unknown file format. Expected ${ChronoStoreFileFormat.FILE_MAGIC_BYTES.hex()} but got ${magicBytes.hex()}!")
             }
             val versionInt = magicBytesAndVersion.readLittleEndianInt(ChronoStoreFileFormat.FILE_MAGIC_BYTES.size)
             val fileFormatVersion = ChronoStoreFileFormat.Version.fromInt(versionInt)
@@ -103,7 +103,7 @@ class ChronoStoreFileReader : AutoCloseable {
             )
         val blockBytes = this.driver.readBytes(startPosition, length)
         val compressionAlgorithm = this.fileHeader.metaData.settings.compression
-        return DataBlock.createEagerLoadingInMemoryBlock(blockBytes.createInputStream(), compressionAlgorithm)
+        return DataBlock.createEagerLoadingInMemoryBlock(blockBytes, compressionAlgorithm)
     }
 
     fun openCursor(): Cursor<KeyAndTimestamp, Command> {

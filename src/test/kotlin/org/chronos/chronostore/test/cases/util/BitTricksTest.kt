@@ -1,9 +1,10 @@
 package org.chronos.chronostore.test.cases.util
 
-import org.chronos.chronostore.util.Bytes
+import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.IOExtensions.withInputStream
 import org.chronos.chronostore.util.bits.BitTricks.readStableLong
 import org.chronos.chronostore.util.bits.BitTricks.writeStableLong
+import org.chronos.chronostore.util.bytes.BasicBytes
 import org.junit.jupiter.api.Test
 import strikt.api.expectThat
 import strikt.assertions.isEqualTo
@@ -21,8 +22,8 @@ class BitTricksTest {
             println("Lower: ${lower}, Upper: ${upper}")
             expectThat(lower).isLessThan(upper)
 
-            val lowerBytes = Bytes(lower.toStableBytes())
-            val upperBytes = Bytes(upper.toStableBytes())
+            val lowerBytes = BasicBytes(lower.toStableBytes())
+            val upperBytes = BasicBytes(upper.toStableBytes())
 
             expectThat(lowerBytes).isLessThan(upperBytes)
 

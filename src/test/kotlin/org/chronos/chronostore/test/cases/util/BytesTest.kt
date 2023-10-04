@@ -1,6 +1,6 @@
 package org.chronos.chronostore.test.cases.util
 
-import org.chronos.chronostore.util.Bytes
+import org.chronos.chronostore.util.bytes.BasicBytes
 import org.junit.jupiter.api.Test
 import strikt.api.expectThat
 import strikt.assertions.isEqualTo
@@ -10,9 +10,9 @@ class BytesTest {
 
     @Test
     fun canPerformHashCodeAndEquals(){
-        val bytesA = Bytes(byteArrayOf(12,13,34,56))
-        val bytesB = Bytes(byteArrayOf(16,32))
-        val bytesA1 = Bytes(byteArrayOf(12,13,34,56))
+        val bytesA = BasicBytes(byteArrayOf(12,13,34,56))
+        val bytesB = BasicBytes(byteArrayOf(16,32))
+        val bytesA1 = BasicBytes(byteArrayOf(12,13,34,56))
 
         expectThat(bytesA){
             isEqualTo(bytesA)

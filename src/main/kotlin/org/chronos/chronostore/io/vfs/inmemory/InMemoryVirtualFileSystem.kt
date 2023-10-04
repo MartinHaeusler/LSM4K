@@ -4,8 +4,8 @@ import org.chronos.chronostore.io.vfs.VirtualDirectory
 import org.chronos.chronostore.io.vfs.VirtualFileSystem
 import org.chronos.chronostore.io.vfs.VirtualFileSystemElement
 import org.chronos.chronostore.io.vfs.VirtualReadWriteFile
-import org.chronos.chronostore.util.Bytes
-import org.chronos.chronostore.util.Bytes.Companion.write
+import org.chronos.chronostore.util.bytes.Bytes
+import org.chronos.chronostore.util.bytes.Bytes.Companion.write
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.IOException
@@ -228,7 +228,7 @@ class InMemoryVirtualFileSystem : VirtualFileSystem {
         val existingContent = this.getFileContentOrNull(path) ?: Bytes.EMPTY
         outputStream.write(existingContent)
         return ObservableOutputStream(outputStream) {
-            this.overwrite(path, Bytes(outputStream.toByteArray()))
+            this.overwrite(path, Bytes.wrap(outputStream.toByteArray()))
         }
     }
 

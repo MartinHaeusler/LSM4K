@@ -1,6 +1,6 @@
 package org.chronos.chronostore.api
 
-import org.chronos.chronostore.util.Bytes
+import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.StoreId
 import org.chronos.chronostore.util.Timestamp
 import org.chronos.chronostore.util.TransactionId

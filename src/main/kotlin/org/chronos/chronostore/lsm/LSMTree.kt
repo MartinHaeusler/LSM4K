@@ -19,7 +19,7 @@ import org.chronos.chronostore.lsm.event.LsmCursorClosedEvent
 import org.chronos.chronostore.lsm.merge.strategy.MergeService
 import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.model.command.KeyAndTimestamp
-import org.chronos.chronostore.util.Bytes
+import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.Timestamp
 import org.chronos.chronostore.util.cursor.*
 import org.chronos.chronostore.util.iterator.IteratorExtensions.checkOrdered
@@ -27,7 +27,6 @@ import org.chronos.chronostore.util.iterator.IteratorExtensions.filter
 import org.chronos.chronostore.util.iterator.IteratorExtensions.latestVersionOnly
 import org.chronos.chronostore.util.iterator.IteratorExtensions.orderedDistinct
 import org.chronos.chronostore.util.log.LogMarkers
-import org.chronos.chronostore.util.statistics.ChronoStoreStatistics
 import org.chronos.chronostore.util.unit.BinarySize
 import org.chronos.chronostore.util.unit.Bytes
 import org.pcollections.TreePMap

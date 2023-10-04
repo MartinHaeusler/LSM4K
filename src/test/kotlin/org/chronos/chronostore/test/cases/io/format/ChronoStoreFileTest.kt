@@ -10,8 +10,9 @@ import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.model.command.KeyAndTimestamp
 import org.chronos.chronostore.test.util.VFSMode
 import org.chronos.chronostore.test.util.VirtualFileSystemTest
-import org.chronos.chronostore.util.Bytes
+import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.StoreId
+import org.chronos.chronostore.util.bytes.BasicBytes
 import org.chronos.chronostore.util.unit.KiB
 import org.chronos.chronostore.util.unit.MiB
 import strikt.api.expectThat
@@ -72,7 +73,7 @@ class ChronoStoreFileTest {
                                 get { this.beginOfIndexOfBlocks == this.beginOfMetadata }.isTrue()
                             }
                         }
-                        get { this.get(KeyAndTimestamp(Bytes("bullshit"), 1234)) }.isNull()
+                        get { this.get(KeyAndTimestamp(BasicBytes("bullshit"), 1234)) }.isNull()
                     }
                 }
             }
@@ -85,7 +86,7 @@ class ChronoStoreFileTest {
         mode.withVFS { vfs ->
             val file = vfs.file("test.chronostore")
 
-            val theKey = Bytes("theKey")
+            val theKey = BasicBytes("theKey")
             file.withOverWriter { overWriter ->
                 val writer = ChronoStoreFileWriter(
                     outputStream = overWriter.outputStream.buffered(),
@@ -185,7 +186,7 @@ class ChronoStoreFileTest {
         mode.withVFS { vfs ->
             val file = vfs.file("test.chronostore")
 
-            val theKey = Bytes("theKey")
+            val theKey = BasicBytes("theKey")
             file.withOverWriter { overWriter ->
                 val writer = ChronoStoreFileWriter(
                     outputStream = overWriter.outputStream.buffered(),

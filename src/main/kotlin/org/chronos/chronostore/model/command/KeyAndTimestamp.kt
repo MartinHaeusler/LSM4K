@@ -1,7 +1,7 @@
 package org.chronos.chronostore.model.command
 
-import org.chronos.chronostore.util.Bytes
-import org.chronos.chronostore.util.Bytes.Companion.write
+import org.chronos.chronostore.util.bytes.Bytes
+import org.chronos.chronostore.util.bytes.Bytes.Companion.write
 import org.chronos.chronostore.util.IOExtensions.withInputStream
 import org.chronos.chronostore.util.LittleEndianExtensions.readLittleEndianInt
 import org.chronos.chronostore.util.LittleEndianExtensions.readLittleEndianIntOrNull
@@ -36,7 +36,7 @@ data class KeyAndTimestamp(
                 throw IOException("Failed to read ${keyLength} bytes from input stream (got: ${readBytes})!")
             }
             val timestamp = inputStream.readLittleEndianLong()
-            return KeyAndTimestamp(Bytes(keyArray), timestamp)
+            return KeyAndTimestamp(Bytes.wrap(keyArray), timestamp)
         }
 
         fun readFromStream(inputStream: InputStream): KeyAndTimestamp {
@@ -47,7 +47,7 @@ data class KeyAndTimestamp(
                 throw IOException("Failed to read ${keyLength} bytes from input stream (got: ${readBytes})!")
             }
             val timestamp = inputStream.readLittleEndianLong()
-            return KeyAndTimestamp(Bytes(keyArray), timestamp)
+            return KeyAndTimestamp(Bytes.wrap(keyArray), timestamp)
         }
 
     }
@@ -63,7 +63,7 @@ data class KeyAndTimestamp(
     fun toBytes(): Bytes {
         val baos = ByteArrayOutputStream(this.byteSize)
         this.writeTo(baos)
-        return Bytes(baos.toByteArray())
+        return Bytes.wrap(baos.toByteArray())
     }
 
     fun writeTo(outputStream: OutputStream){

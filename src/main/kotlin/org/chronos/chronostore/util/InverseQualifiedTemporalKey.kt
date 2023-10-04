@@ -1,13 +1,12 @@
 package org.chronos.chronostore.util
 
-import org.chronos.chronostore.util.Bytes.Companion.writeBytes
 import org.chronos.chronostore.util.IOExtensions.withInputStream
-import org.chronos.chronostore.util.LittleEndianExtensions.readLittleEndianLong
-import org.chronos.chronostore.util.LittleEndianExtensions.writeLittleEndianLong
 import org.chronos.chronostore.util.UUIDExtensions.readUUIDFrom
 import org.chronos.chronostore.util.UUIDExtensions.toBytes
 import org.chronos.chronostore.util.bits.BitTricks.readStableLong
 import org.chronos.chronostore.util.bits.BitTricks.writeStableLong
+import org.chronos.chronostore.util.bytes.Bytes
+import org.chronos.chronostore.util.bytes.Bytes.Companion.write
 import java.io.ByteArrayOutputStream
 
 data class InverseQualifiedTemporalKey(
@@ -26,7 +25,7 @@ data class InverseQualifiedTemporalKey(
                 val storeIdBytes = input.readNBytes(16)
                 require(storeIdBytes.size == 16) { "Failed to read 16 bytes as StoreID from byte input!" }
                 val storeId = readUUIDFrom(storeIdBytes)
-                val userKey = Bytes(input.readAllBytes())
+                val userKey = Bytes.wrap(input.readAllBytes())
                 return InverseQualifiedTemporalKey(timestamp, storeId, userKey)
             }
         }
@@ -39,9 +38,9 @@ data class InverseQualifiedTemporalKey(
         // [timestamp bytes][storeId bytes][userKeyBytes]
         val output = ByteArrayOutputStream(Timestamp.SIZE_BYTES + 16 + userKey.size)
         output.writeStableLong(this.timestamp)
-        output.writeBytes(this.storeId.toBytes())
-        output.writeBytes(this.userKey)
-        return Bytes(output.toByteArray())
+        output.write(this.storeId.toBytes())
+        output.write(this.userKey)
+        return Bytes.wrap(output.toByteArray())
     }
 
     override fun compareTo(other: InverseQualifiedTemporalKey): Int {

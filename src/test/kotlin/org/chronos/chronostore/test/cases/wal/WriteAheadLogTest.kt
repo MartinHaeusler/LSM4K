@@ -4,7 +4,8 @@ import org.chronos.chronostore.io.vfs.VirtualReadWriteFile.Companion.withOverWri
 import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.test.util.VFSMode
 import org.chronos.chronostore.test.util.VirtualFileSystemTest
-import org.chronos.chronostore.util.Bytes
+import org.chronos.chronostore.util.bytes.BasicBytes
+import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.wal.WriteAheadLog
 import org.chronos.chronostore.wal.WriteAheadLogEntry
 import org.chronos.chronostore.wal.WriteAheadLogTransaction
@@ -31,26 +32,26 @@ class WriteAheadLogTest {
                 commitTimestamp = 1000,
                 storeIdToCommands = mapOf(
                     store1Id to listOf(
-                        Command.put(Bytes("hello"), 1000, Bytes("world")),
-                        Command.put(Bytes("foo"), 1000, Bytes("bar")),
+                        Command.put(BasicBytes("hello"), 1000, BasicBytes("world")),
+                        Command.put(BasicBytes("foo"), 1000, BasicBytes("bar")),
                     ),
                     store2Id to listOf(
-                        Command.put(Bytes("pi"), 1000, Bytes("3.1415")),
-                        Command.put(Bytes("e"), 1000, Bytes("2.71828"))
+                        Command.put(BasicBytes("pi"), 1000, BasicBytes("3.1415")),
+                        Command.put(BasicBytes("e"), 1000, BasicBytes("2.71828"))
                     ),
                     store3Id to listOf(
-                        Command.put(Bytes("john"), 1000, Bytes("doe")),
-                        Command.put(Bytes("jane"), 1000, Bytes("doe")),
+                        Command.put(BasicBytes("john"), 1000, BasicBytes("doe")),
+                        Command.put(BasicBytes("jane"), 1000, BasicBytes("doe")),
                     )
                 ),
-                commitMetadata = Bytes("John was here")
+                commitMetadata = BasicBytes("John was here")
             )
 
             val tx2 = WriteAheadLogTransaction(
                 transactionId = tx2Id,
                 commitTimestamp = 1234,
                 storeIdToCommands = emptyMap(),
-                commitMetadata = Bytes("Empty Commit")
+                commitMetadata = BasicBytes("Empty Commit")
             )
 
 
@@ -59,14 +60,14 @@ class WriteAheadLogTest {
                 commitTimestamp = 777777,
                 storeIdToCommands = mapOf(
                     store1Id to listOf(
-                        Command.del(Bytes("hello"), 777777),
-                        Command.put(Bytes("foo"), 777777, Bytes("baz")),
+                        Command.del(BasicBytes("hello"), 777777),
+                        Command.put(BasicBytes("foo"), 777777, BasicBytes("baz")),
                     ),
                     store3Id to listOf(
-                        Command.put(Bytes("sarah"), 777777, Bytes("doe")),
+                        Command.put(BasicBytes("sarah"), 777777, BasicBytes("doe")),
                     )
                 ),
-                commitMetadata = Bytes("Jane did this")
+                commitMetadata = BasicBytes("Jane did this")
             )
 
             wal.addCommittedTransaction(tx1)
@@ -80,39 +81,39 @@ class WriteAheadLogTest {
                 get(0).and {
                     get { this.transactionId }.isEqualTo(tx1Id)
                     get { this.commitTimestamp }.isEqualTo(1000)
-                    get { this.commitMetadata }.isEqualTo(Bytes("John was here"))
+                    get { this.commitMetadata }.isEqualTo(BasicBytes("John was here"))
                     get { this.storeIdToCommands }.hasSize(3).and {
                         get(store1Id).isNotNull().hasSize(2).and {
-                            get(0).isEqualTo(Command.put(Bytes("hello"), 1000, Bytes("world")))
-                            get(1).isEqualTo(Command.put(Bytes("foo"), 1000, Bytes("bar")))
+                            get(0).isEqualTo(Command.put(BasicBytes("hello"), 1000, BasicBytes("world")))
+                            get(1).isEqualTo(Command.put(BasicBytes("foo"), 1000, BasicBytes("bar")))
                         }
                         get(store2Id).isNotNull().hasSize(2).and {
-                            get(0).isEqualTo(Command.put(Bytes("pi"), 1000, Bytes("3.1415")))
-                            get(1).isEqualTo(Command.put(Bytes("e"), 1000, Bytes("2.71828")))
+                            get(0).isEqualTo(Command.put(BasicBytes("pi"), 1000, BasicBytes("3.1415")))
+                            get(1).isEqualTo(Command.put(BasicBytes("e"), 1000, BasicBytes("2.71828")))
                         }
                         get(store3Id).isNotNull().hasSize(2).and {
-                            get(0).isEqualTo(Command.put(Bytes("john"), 1000, Bytes("doe")))
-                            get(1).isEqualTo(Command.put(Bytes("jane"), 1000, Bytes("doe")))
+                            get(0).isEqualTo(Command.put(BasicBytes("john"), 1000, BasicBytes("doe")))
+                            get(1).isEqualTo(Command.put(BasicBytes("jane"), 1000, BasicBytes("doe")))
                         }
                     }
                 }
                 get(1).and {
                     get { this.transactionId }.isEqualTo(tx2Id)
                     get { this.commitTimestamp }.isEqualTo(1234)
-                    get { this.commitMetadata }.isEqualTo(Bytes("Empty Commit"))
+                    get { this.commitMetadata }.isEqualTo(BasicBytes("Empty Commit"))
                     get { this.storeIdToCommands }.isEmpty()
                 }
                 get(2).and {
                     get { this.transactionId }.isEqualTo(tx3Id)
                     get { this.commitTimestamp }.isEqualTo(777777)
-                    get { this.commitMetadata }.isEqualTo(Bytes("Jane did this"))
+                    get { this.commitMetadata }.isEqualTo(BasicBytes("Jane did this"))
                     get { this.storeIdToCommands }.hasSize(2).and {
                         get(store1Id).isNotNull().hasSize(2).and {
-                            get(0).isEqualTo(Command.del(Bytes("hello"), 777777))
-                            get(1).isEqualTo(Command.put(Bytes("foo"), 777777, Bytes("baz")))
+                            get(0).isEqualTo(Command.del(BasicBytes("hello"), 777777))
+                            get(1).isEqualTo(Command.put(BasicBytes("foo"), 777777, BasicBytes("baz")))
                         }
                         get(store3Id).isNotNull().hasSize(1).and {
-                            get(0).isEqualTo(Command.put(Bytes("sarah"), 777777, Bytes("doe")))
+                            get(0).isEqualTo(Command.put(BasicBytes("sarah"), 777777, BasicBytes("doe")))
                         }
                     }
                 }
@@ -133,12 +134,12 @@ class WriteAheadLogTest {
             walFile.withOverWriter { overWriter ->
                 val outputStream = overWriter.outputStream
                 WriteAheadLogEntry.beginTransaction(tx1Id).writeTo(outputStream)
-                WriteAheadLogEntry.put(tx1Id, storeId, Bytes("foo"), Bytes("bar")).writeTo(outputStream)
-                WriteAheadLogEntry.put(tx1Id, storeId, Bytes("hello"), Bytes("world")).writeTo(outputStream)
+                WriteAheadLogEntry.put(tx1Id, storeId, BasicBytes("foo"), BasicBytes("bar")).writeTo(outputStream)
+                WriteAheadLogEntry.put(tx1Id, storeId, BasicBytes("hello"), BasicBytes("world")).writeTo(outputStream)
                 WriteAheadLogEntry.commit(tx1Id, 123456, Bytes.EMPTY).writeTo(outputStream)
 
                 WriteAheadLogEntry.beginTransaction(tx2Id).writeTo(outputStream)
-                WriteAheadLogEntry.put(tx2Id, storeId, Bytes("foo"), Bytes("baz")).writeTo(outputStream)
+                WriteAheadLogEntry.put(tx2Id, storeId, BasicBytes("foo"), BasicBytes("baz")).writeTo(outputStream)
                 overWriter.commit()
             }
 
@@ -154,14 +155,14 @@ class WriteAheadLogTest {
                     get { this.key }.isEqualTo(storeId)
                     get { this.value }.hasSize(2).and {
                         one {
-                            get { this.key }.isEqualTo(Bytes("foo"))
-                            get { this.value }.isEqualTo(Bytes("bar"))
+                            get { this.key }.isEqualTo(BasicBytes("foo"))
+                            get { this.value }.isEqualTo(BasicBytes("bar"))
                             get { this.opCode }.isEqualTo(Command.OpCode.PUT)
                             get { this.timestamp }.isEqualTo(123456)
                         }
                         one {
-                            get { this.key }.isEqualTo(Bytes("hello"))
-                            get { this.value }.isEqualTo(Bytes("world"))
+                            get { this.key }.isEqualTo(BasicBytes("hello"))
+                            get { this.value }.isEqualTo(BasicBytes("world"))
                             get { this.opCode }.isEqualTo(Command.OpCode.PUT)
                             get { this.timestamp }.isEqualTo(123456)
                         }
@@ -185,15 +186,15 @@ class WriteAheadLogTest {
             walFile.withOverWriter { overWriter ->
                 val outputStream = overWriter.outputStream
                 WriteAheadLogEntry.beginTransaction(tx1Id).writeTo(outputStream)
-                WriteAheadLogEntry.put(tx1Id, storeId, Bytes("foo"), Bytes("bar")).writeTo(outputStream)
-                WriteAheadLogEntry.put(tx1Id, storeId, Bytes("hello"), Bytes("world")).writeTo(outputStream)
+                WriteAheadLogEntry.put(tx1Id, storeId, BasicBytes("foo"), BasicBytes("bar")).writeTo(outputStream)
+                WriteAheadLogEntry.put(tx1Id, storeId, BasicBytes("hello"), BasicBytes("world")).writeTo(outputStream)
                 WriteAheadLogEntry.commit(tx1Id, 123456, Bytes.EMPTY).writeTo(outputStream)
 
                 WriteAheadLogEntry.beginTransaction(tx2Id).writeTo(outputStream)
-                WriteAheadLogEntry.put(tx2Id, storeId, Bytes("foo"), Bytes("baz")).writeTo(outputStream)
+                WriteAheadLogEntry.put(tx2Id, storeId, BasicBytes("foo"), BasicBytes("baz")).writeTo(outputStream)
 
                 WriteAheadLogEntry.beginTransaction(tx3Id).writeTo(outputStream)
-                WriteAheadLogEntry.put(tx3Id, storeId, Bytes("lorem"), Bytes("ipsum")).writeTo(outputStream)
+                WriteAheadLogEntry.put(tx3Id, storeId, BasicBytes("lorem"), BasicBytes("ipsum")).writeTo(outputStream)
                 WriteAheadLogEntry.commit(tx3Id, 777777, Bytes.EMPTY).writeTo(outputStream)
 
                 overWriter.commit()
@@ -212,14 +213,14 @@ class WriteAheadLogTest {
                         get { this.key }.isEqualTo(storeId)
                         get { this.value }.hasSize(2).and {
                             one {
-                                get { this.key }.isEqualTo(Bytes("foo"))
-                                get { this.value }.isEqualTo(Bytes("bar"))
+                                get { this.key }.isEqualTo(BasicBytes("foo"))
+                                get { this.value }.isEqualTo(BasicBytes("bar"))
                                 get { this.opCode }.isEqualTo(Command.OpCode.PUT)
                                 get { this.timestamp }.isEqualTo(123456)
                             }
                             one {
-                                get { this.key }.isEqualTo(Bytes("hello"))
-                                get { this.value }.isEqualTo(Bytes("world"))
+                                get { this.key }.isEqualTo(BasicBytes("hello"))
+                                get { this.value }.isEqualTo(BasicBytes("world"))
                                 get { this.opCode }.isEqualTo(Command.OpCode.PUT)
                                 get { this.timestamp }.isEqualTo(123456)
                             }
@@ -232,8 +233,8 @@ class WriteAheadLogTest {
                     get { this.storeIdToCommands.entries }.single().and {
                         get { this.key }.isEqualTo(storeId)
                         get { this.value }.single().and {
-                            get { this.key }.isEqualTo(Bytes("lorem"))
-                            get { this.value }.isEqualTo(Bytes("ipsum"))
+                            get { this.key }.isEqualTo(BasicBytes("lorem"))
+                            get { this.value }.isEqualTo(BasicBytes("ipsum"))
                             get { this.opCode }.isEqualTo(Command.OpCode.PUT)
                             get { this.timestamp }.isEqualTo(777777)
                         }
@@ -257,17 +258,17 @@ class WriteAheadLogTest {
             walFile.withOverWriter { overWriter ->
                 val outputStream = overWriter.outputStream
                 WriteAheadLogEntry.beginTransaction(tx1Id).writeTo(outputStream)
-                WriteAheadLogEntry.put(tx1Id, storeId, Bytes("foo"), Bytes("bar")).writeTo(outputStream)
-                WriteAheadLogEntry.put(tx1Id, storeId, Bytes("hello"), Bytes("world")).writeTo(outputStream)
+                WriteAheadLogEntry.put(tx1Id, storeId, BasicBytes("foo"), BasicBytes("bar")).writeTo(outputStream)
+                WriteAheadLogEntry.put(tx1Id, storeId, BasicBytes("hello"), BasicBytes("world")).writeTo(outputStream)
 
                 WriteAheadLogEntry.beginTransaction(tx2Id).writeTo(outputStream)
                 WriteAheadLogEntry.commit(tx1Id, 123456, Bytes.EMPTY).writeTo(outputStream)
 
-                WriteAheadLogEntry.put(tx2Id, storeId, Bytes("foo"), Bytes("baz")).writeTo(outputStream)
+                WriteAheadLogEntry.put(tx2Id, storeId, BasicBytes("foo"), BasicBytes("baz")).writeTo(outputStream)
                 WriteAheadLogEntry.commit(tx2Id, 123456, Bytes.EMPTY).writeTo(outputStream)
 
                 WriteAheadLogEntry.beginTransaction(tx3Id).writeTo(outputStream)
-                WriteAheadLogEntry.put(tx3Id, storeId, Bytes("lorem"), Bytes("ipsum")).writeTo(outputStream)
+                WriteAheadLogEntry.put(tx3Id, storeId, BasicBytes("lorem"), BasicBytes("ipsum")).writeTo(outputStream)
                 WriteAheadLogEntry.commit(tx3Id, 777777, Bytes.EMPTY).writeTo(outputStream)
 
                 overWriter.commit()
@@ -285,8 +286,8 @@ class WriteAheadLogTest {
                     get { this.storeIdToCommands.entries }.single().and {
                         get { this.key }.isEqualTo(storeId)
                         get { this.value }.single().and {
-                            get { this.key }.isEqualTo(Bytes("foo"))
-                            get { this.value }.isEqualTo(Bytes("baz"))
+                            get { this.key }.isEqualTo(BasicBytes("foo"))
+                            get { this.value }.isEqualTo(BasicBytes("baz"))
                             get { this.opCode }.isEqualTo(Command.OpCode.PUT)
                             get { this.timestamp }.isEqualTo(123456)
                         }
@@ -298,8 +299,8 @@ class WriteAheadLogTest {
                     get { this.storeIdToCommands.entries }.single().and {
                         get { this.key }.isEqualTo(storeId)
                         get { this.value }.single().and {
-                            get { this.key }.isEqualTo(Bytes("lorem"))
-                            get { this.value }.isEqualTo(Bytes("ipsum"))
+                            get { this.key }.isEqualTo(BasicBytes("lorem"))
+                            get { this.value }.isEqualTo(BasicBytes("ipsum"))
                             get { this.opCode }.isEqualTo(Command.OpCode.PUT)
                             get { this.timestamp }.isEqualTo(777777)
                         }
@@ -323,16 +324,16 @@ class WriteAheadLogTest {
             walFile.withOverWriter { overWriter ->
                 val outputStream = overWriter.outputStream
                 WriteAheadLogEntry.beginTransaction(tx1Id).writeTo(outputStream)
-                WriteAheadLogEntry.put(tx1Id, storeId, Bytes("foo"), Bytes("bar")).writeTo(outputStream)
-                WriteAheadLogEntry.put(tx1Id, storeId, Bytes("hello"), Bytes("world")).writeTo(outputStream)
+                WriteAheadLogEntry.put(tx1Id, storeId, BasicBytes("foo"), BasicBytes("bar")).writeTo(outputStream)
+                WriteAheadLogEntry.put(tx1Id, storeId, BasicBytes("hello"), BasicBytes("world")).writeTo(outputStream)
                 WriteAheadLogEntry.commit(tx1Id, 123456, Bytes.EMPTY).writeTo(outputStream)
 
                 WriteAheadLogEntry.beginTransaction(tx2Id).writeTo(outputStream)
-                WriteAheadLogEntry.put(tx2Id, storeId, Bytes("foo"), Bytes("baz")).writeTo(outputStream)
+                WriteAheadLogEntry.put(tx2Id, storeId, BasicBytes("foo"), BasicBytes("baz")).writeTo(outputStream)
                 WriteAheadLogEntry.commit(tx2Id, 555555, Bytes.EMPTY).writeTo(outputStream)
 
                 WriteAheadLogEntry.beginTransaction(tx3Id).writeTo(outputStream)
-                WriteAheadLogEntry.put(tx3Id, storeId, Bytes("lorem"), Bytes("ipsum")).writeTo(outputStream)
+                WriteAheadLogEntry.put(tx3Id, storeId, BasicBytes("lorem"), BasicBytes("ipsum")).writeTo(outputStream)
                 WriteAheadLogEntry.commit(tx3Id, 777777, Bytes.EMPTY).writeTo(outputStream)
                 overWriter.commit()
             }
@@ -351,8 +352,8 @@ class WriteAheadLogTest {
                 get { this.storeIdToCommands.entries }.single().and {
                     get { this.key }.isEqualTo(storeId)
                     get { this.value }.single().and {
-                        get { this.key }.isEqualTo(Bytes("foo"))
-                        get { this.value }.isEqualTo(Bytes("baz"))
+                        get { this.key }.isEqualTo(BasicBytes("foo"))
+                        get { this.value }.isEqualTo(BasicBytes("baz"))
                         get { this.opCode }.isEqualTo(Command.OpCode.PUT)
                         get { this.timestamp }.isEqualTo(555555)
                     }

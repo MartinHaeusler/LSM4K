@@ -6,7 +6,7 @@ import org.chronos.chronostore.io.format.CompressionAlgorithm
 import org.chronos.chronostore.io.vfs.VirtualReadWriteFile.Companion.withOverWriter
 import org.chronos.chronostore.io.vfs.disk.DiskBasedVirtualFileSystem
 import org.chronos.chronostore.model.command.Command
-import org.chronos.chronostore.util.Bytes
+import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.unit.Bytes
 import org.chronos.chronostore.util.unit.MiB
 import java.io.File

@@ -1,12 +1,13 @@
 package org.chronos.chronostore.model.command
 
-import org.chronos.chronostore.util.Bytes
+import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.IOExtensions.withInputStream
 import org.chronos.chronostore.util.LittleEndianExtensions.readLittleEndianLong
 import org.chronos.chronostore.util.LittleEndianExtensions.writeLittleEndianLong
 import org.chronos.chronostore.util.PrefixIO
 import org.chronos.chronostore.util.StringExtensions.ellipsis
 import org.chronos.chronostore.util.Timestamp
+import org.chronos.chronostore.util.bytes.BytesBuffer
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.io.OutputStream
@@ -25,15 +26,15 @@ class Command(
         }
 
         fun put(key: String, timestamp: Timestamp, value: Bytes): Command {
-            return put(Bytes(key.toByteArray()), timestamp, value)
+            return put(Bytes.wrap(key.toByteArray()), timestamp, value)
         }
 
         fun put(key: Bytes, timestamp: Timestamp, value: String): Command {
-            return put(key, timestamp, Bytes(value.toByteArray()))
+            return put(key, timestamp, Bytes.wrap(value.toByteArray()))
         }
 
         fun put(key: String, timestamp: Timestamp, value: String): Command {
-            return put(Bytes(key.toByteArray()), timestamp, Bytes(value.toByteArray()))
+            return put(Bytes.wrap(key.toByteArray()), timestamp, Bytes.wrap(value.toByteArray()))
         }
 
         fun del(key: Bytes, timestamp: Timestamp): Command {
@@ -41,7 +42,28 @@ class Command(
         }
 
         fun del(key: String, timestamp: Timestamp): Command {
-            return del(Bytes(key.toByteArray()), timestamp)
+            return del(Bytes.wrap(key.toByteArray()), timestamp)
+        }
+
+        fun readFromBytesBuffer(buffer: BytesBuffer): Command? {
+            val firstByte = buffer.takeByte()
+            if(firstByte < 0){
+                // end of input
+                return null
+            }
+            val opCode = OpCode.fromByte(firstByte)
+            val key = PrefixIO.readBytes(buffer)
+            val timestamp = buffer.takeLittleEndianLong()
+            val value = when (opCode) {
+                OpCode.PUT -> PrefixIO.readBytes(buffer)
+                OpCode.DEL -> Bytes.EMPTY
+            }
+            return Command(
+                opCode = opCode,
+                key = key,
+                timestamp = timestamp,
+                value = value
+            )
         }
 
         fun readFromBytes(bytes: Bytes): Command {
@@ -125,7 +147,7 @@ class Command(
     fun toBytes(): Bytes {
         val outputStream = ByteArrayOutputStream(1 + 8 + key.size + value.size)
         writeToStream(outputStream)
-        return Bytes(outputStream.toByteArray())
+        return Bytes.wrap(outputStream.toByteArray())
     }
 
     val byteSize: Int

@@ -3,7 +3,7 @@ package org.chronos.chronostore.io.fileaccess
 import org.chronos.chronostore.io.vfs.VirtualFile
 import org.chronos.chronostore.io.vfs.disk.DiskBasedVirtualFile
 import org.chronos.chronostore.io.vfs.inmemory.InMemoryVirtualFile
-import org.chronos.chronostore.util.Bytes
+import org.chronos.chronostore.util.bytes.Bytes
 import java.io.File
 import java.io.RandomAccessFile
 
@@ -61,7 +61,7 @@ class MemoryMappedFileDriver(
             }
             n += count
         } while (n < bytesToRead)
-        return Bytes(buffer)
+        return Bytes.wrap(buffer)
     }
 
     override fun copy(): MemoryMappedFileDriver {

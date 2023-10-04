@@ -1,8 +1,9 @@
 package org.chronos.chronostore.test.cases.util
 
-import org.chronos.chronostore.util.Bytes
+import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.InverseQualifiedTemporalKey
 import org.chronos.chronostore.util.StoreId
+import org.chronos.chronostore.util.bytes.BasicBytes
 import org.junit.jupiter.api.Test
 import strikt.api.expectThat
 import strikt.assertions.isEqualTo
@@ -28,8 +29,8 @@ class InverseQualifiedTemporalKeyTest {
         val storeId1 = StoreId.fromString("00000000-0000-0000-0000-000000000001")
         val storeId2 = StoreId.fromString("00000000-0000-0000-0000-000000000002")
 
-        val userKey1 = Bytes("hello")
-        val userKey2 = Bytes("world")
+        val userKey1 = BasicBytes("hello")
+        val userKey2 = BasicBytes("world")
 
         val timestamp1 = 1234L
         val timestamp2 = 5678L

@@ -7,9 +7,9 @@ import com.google.common.hash.Funnels
 import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.model.command.KeyAndTimestamp
 import org.chronos.chronostore.util.BloomFilterExtensions.toBytes
-import org.chronos.chronostore.util.Bytes
-import org.chronos.chronostore.util.Bytes.Companion.put
-import org.chronos.chronostore.util.Bytes.Companion.write
+import org.chronos.chronostore.util.bytes.Bytes
+import org.chronos.chronostore.util.bytes.Bytes.Companion.put
+import org.chronos.chronostore.util.bytes.Bytes.Companion.write
 import org.chronos.chronostore.util.LittleEndianExtensions.writeLittleEndianInt
 import org.chronos.chronostore.util.LittleEndianExtensions.writeLittleEndianLong
 import org.chronos.chronostore.util.PositionTrackingStream

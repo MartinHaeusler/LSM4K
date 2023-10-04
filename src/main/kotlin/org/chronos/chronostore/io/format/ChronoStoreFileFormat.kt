@@ -2,14 +2,14 @@ package org.chronos.chronostore.io.format
 
 import org.chronos.chronostore.model.command.KeyAndTimestamp
 import org.chronos.chronostore.io.fileaccess.RandomFileAccessDriver
-import org.chronos.chronostore.util.Bytes
+import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.IOExtensions.withInputStream
 import org.chronos.chronostore.util.LittleEndianExtensions.readLittleEndianIntOrNull
 import org.chronos.chronostore.util.LittleEndianExtensions.readLittleEndianLong
 
 object ChronoStoreFileFormat {
 
-    val FILE_MAGIC_BYTES = Bytes(
+    val FILE_MAGIC_BYTES = Bytes.wrap(
         byteArrayOf(
             0b01100011, // c
             0b01101000, // h
@@ -22,7 +22,7 @@ object ChronoStoreFileFormat {
         )
     )
 
-    val BLOCK_MAGIC_BYTES = Bytes(
+    val BLOCK_MAGIC_BYTES = Bytes.wrap(
         byteArrayOf(
             0b01100010, // b
             0b01101100, // l

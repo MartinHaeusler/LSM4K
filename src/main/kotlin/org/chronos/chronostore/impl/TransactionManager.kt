@@ -8,7 +8,7 @@ import org.chronos.chronostore.util.InverseQualifiedTemporalKey
 import org.chronos.chronostore.impl.store.StoreImpl
 import org.chronos.chronostore.impl.transaction.ChronoStoreTransactionImpl
 import org.chronos.chronostore.model.command.Command
-import org.chronos.chronostore.util.Bytes
+import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.StoreId
 import org.chronos.chronostore.util.Timestamp
 import org.chronos.chronostore.util.TransactionId

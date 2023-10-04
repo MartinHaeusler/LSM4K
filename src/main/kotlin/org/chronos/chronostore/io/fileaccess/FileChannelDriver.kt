@@ -3,7 +3,7 @@ package org.chronos.chronostore.io.fileaccess
 import org.chronos.chronostore.io.vfs.VirtualFile
 import org.chronos.chronostore.io.vfs.disk.DiskBasedVirtualFile
 import org.chronos.chronostore.io.vfs.inmemory.InMemoryVirtualFile
-import org.chronos.chronostore.util.Bytes
+import org.chronos.chronostore.util.bytes.Bytes
 import java.io.File
 import java.nio.ByteBuffer
 import java.nio.channels.FileChannel
@@ -27,14 +27,13 @@ class FileChannelDriver(
         require(offset >= 0) { "Argument 'offset' must not be negative, but got: ${offset}" }
         require(bytesToRead >= 0) { "Argument 'bytesToRead' must not be negative, but got: ${bytesToRead}" }
         channel.position(offset)
-        // TODO[Performance]: we might also try "ByteBuffer.allocateDirect(...)" here
         val buffer = ByteBuffer.allocate(bytesToRead)
         val bytesRead = this.channel.read(buffer)
         if (bytesRead < bytesToRead) {
             // file doesn't contain enough bytes.
             return null
         }
-        return Bytes(buffer.array())
+        return Bytes.wrap(buffer.array())
     }
 
     override fun copy(): FileChannelDriver {

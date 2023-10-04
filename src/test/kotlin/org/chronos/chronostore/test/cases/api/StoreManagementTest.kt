@@ -12,8 +12,8 @@ import org.chronos.chronostore.test.extensions.transaction.ChronoStoreTransactio
 import org.chronos.chronostore.test.extensions.transaction.ChronoStoreTransactionTestExtensions.put
 import org.chronos.chronostore.test.util.ChronoStoreMode
 import org.chronos.chronostore.test.util.ChronoStoreTest
-import org.chronos.chronostore.util.Bytes
-import org.chronos.chronostore.util.unit.Bytes
+import org.chronos.chronostore.util.bytes.BasicBytes
+import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.unit.GiB
 import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.fail
@@ -47,13 +47,13 @@ class StoreManagementTest {
                     get { allStores }.hasSize(2).and {
                         any {
                             get { this.store.name }.isEqualTo("test")
-                            get { this.getLatest("foo") }.isEqualTo(Bytes("bar"))
+                            get { this.getLatest("foo") }.isEqualTo(BasicBytes("bar"))
                             get { this.getLatest("bullshit") }.isNull()
                         }
                         any {
                             get { this.store.name }.isEqualTo("math")
-                            get { this.getLatest("pi") }.isEqualTo(Bytes("3.1415"))
-                            get { this.getLatest("e") }.isEqualTo(Bytes("2.718"))
+                            get { this.getLatest("pi") }.isEqualTo(BasicBytes("3.1415"))
+                            get { this.getLatest("e") }.isEqualTo(BasicBytes("2.718"))
                         }
                     }
 
@@ -70,13 +70,13 @@ class StoreManagementTest {
                 get { allStores }.hasSize(2).and {
                     any {
                         get { this.store.name }.isEqualTo("test")
-                        get { this.getLatest("foo") }.isEqualTo(Bytes("bar"))
+                        get { this.getLatest("foo") }.isEqualTo(BasicBytes("bar"))
                         get { this.getLatest("bullshit") }.isNull()
                     }
                     any {
                         get { this.store.name }.isEqualTo("math")
-                        get { this.getLatest("pi") }.isEqualTo(Bytes("3.1415"))
-                        get { this.getLatest("e") }.isEqualTo(Bytes("2.718"))
+                        get { this.getLatest("pi") }.isEqualTo(BasicBytes("3.1415"))
+                        get { this.getLatest("e") }.isEqualTo(BasicBytes("2.718"))
                     }
                 }
             }
@@ -108,13 +108,13 @@ class StoreManagementTest {
                 get { allStores }.hasSize(2).and {
                     any {
                         get { this.store.name }.isEqualTo("test")
-                        get { this.allEntriesOnLatest }.containsExactly(Bytes("foo") to Bytes("bar"))
+                        get { this.allEntriesOnLatest }.containsExactly(BasicBytes("foo") to BasicBytes("bar"))
                     }
                     any {
                         get { this.store.name }.isEqualTo("math")
                         get { this.allEntriesOnLatest }.containsExactly(
-                            Bytes("e") to Bytes("2.718"),
-                            Bytes("pi") to Bytes("3.1415")
+                            BasicBytes("e") to BasicBytes("2.718"),
+                            BasicBytes("pi") to BasicBytes("3.1415")
                         )
                     }
                 }

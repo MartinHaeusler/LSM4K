@@ -6,7 +6,7 @@ import mu.KotlinLogging
 import org.chronos.chronostore.io.vfs.VirtualFile
 import org.chronos.chronostore.io.vfs.disk.DiskBasedVirtualFile
 import org.chronos.chronostore.io.vfs.inmemory.InMemoryVirtualFile
-import org.chronos.chronostore.util.Bytes
+import org.chronos.chronostore.util.bytes.Bytes
 import java.io.File
 import java.nio.channels.FileChannel
 
@@ -42,7 +42,7 @@ class MemorySegmentFileDriver(
             // there are not enough bytes in the segment to fulfill the request
             return null
         }
-        return Bytes(slice.toByteArray())
+        return Bytes.wrap(slice.toByteArray())
     }
 
     override fun copy(): MemorySegmentFileDriver {

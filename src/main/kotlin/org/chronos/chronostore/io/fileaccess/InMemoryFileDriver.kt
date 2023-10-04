@@ -3,7 +3,7 @@ package org.chronos.chronostore.io.fileaccess
 import org.chronos.chronostore.io.vfs.VirtualFile
 import org.chronos.chronostore.io.vfs.disk.DiskBasedVirtualFile
 import org.chronos.chronostore.io.vfs.inmemory.InMemoryVirtualFile
-import org.chronos.chronostore.util.Bytes
+import org.chronos.chronostore.util.bytes.Bytes
 
 class InMemoryFileDriver(
     val inMemoryVirtualFile: InMemoryVirtualFile

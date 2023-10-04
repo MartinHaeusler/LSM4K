@@ -2,7 +2,8 @@ package org.chronos.chronostore.benchmark
 
 import org.chronos.chronostore.api.ChronoStoreConfiguration
 import org.chronos.chronostore.test.util.ChronoStoreMode
-import org.chronos.chronostore.util.Bytes
+import org.chronos.chronostore.util.bytes.BasicBytes
+import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.statistics.ChronoStoreStatistics
 import org.chronos.chronostore.util.unit.GiB
 import kotlin.random.Random
@@ -45,7 +46,7 @@ object SerialReadWriteBenchmark {
                     chronoStore.transaction { tx ->
                         val store = tx.store("test")
                         repeat(WRITES_PER_COMMIT) { i ->
-                            val keyBytes = Bytes(uniqueKeys.random())
+                            val keyBytes = BasicBytes(uniqueKeys.random())
                             if ((c + i % 7) == 0) {
                                 store.delete(keyBytes)
                             } else {
@@ -81,7 +82,7 @@ object SerialReadWriteBenchmark {
                 repeat(NUMBER_OF_READS) { r ->
                     totalSize += chronoStore.transaction { tx ->
                         val store = tx.store("test")
-                        val keyBytes = Bytes(uniqueKeys.random())
+                        val keyBytes = BasicBytes(uniqueKeys.random())
                         store.openCursorOnLatest().use { cursor ->
                             val sum = if (cursor.seekExactlyOrNext(keyBytes)) {
                                 var i = 0

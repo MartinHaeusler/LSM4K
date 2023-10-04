@@ -1,7 +1,7 @@
 package org.chronos.chronostore.io.vfs.inmemory
 
 import org.chronos.chronostore.io.vfs.VirtualFile
-import org.chronos.chronostore.util.Bytes
+import org.chronos.chronostore.util.bytes.Bytes
 import java.io.File
 import java.io.InputStream
 
@@ -36,7 +36,7 @@ open class InMemoryVirtualFile(
         require(offset >= 0) { "Argument 'offset' must not be negative, but got: ${offset}" }
         require(bytesToRead >= 0) { "Argument 'bytesToRead' mut not be negative, but got: ${bytesToRead}" }
         val content = this.fileSystem.getFileContent(this.path)
-        return content.readAtOffsetOrNull(offset, bytesToRead)
+        return content.slice(offset, bytesToRead)
     }
 
     override fun toString(): String {

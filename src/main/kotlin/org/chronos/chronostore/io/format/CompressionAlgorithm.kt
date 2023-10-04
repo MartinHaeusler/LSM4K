@@ -3,9 +3,9 @@ package org.chronos.chronostore.io.format
 import com.github.luben.zstd.Zstd
 import net.jpountz.lz4.LZ4FrameInputStream
 import net.jpountz.lz4.LZ4FrameOutputStream
-import org.chronos.chronostore.util.Bytes
-import org.chronos.chronostore.util.Bytes.Companion.compressWith
-import org.chronos.chronostore.util.Bytes.Companion.decompressWith
+import org.chronos.chronostore.util.bytes.Bytes
+import org.chronos.chronostore.util.bytes.Bytes.Companion.compressWith
+import org.chronos.chronostore.util.bytes.Bytes.Companion.decompressWith
 import org.xerial.snappy.Snappy
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream

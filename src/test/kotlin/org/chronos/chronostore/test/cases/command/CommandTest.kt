@@ -3,10 +3,11 @@ package org.chronos.chronostore.test.cases.command
 import com.google.common.hash.BloomFilter
 import com.google.common.hash.Funnels
 import org.chronos.chronostore.model.command.Command
-import org.chronos.chronostore.util.Bytes
-import org.chronos.chronostore.util.Bytes.Companion.mightContain
-import org.chronos.chronostore.util.Bytes.Companion.put
-import org.chronos.chronostore.util.Bytes.Companion.write
+import org.chronos.chronostore.util.bytes.BasicBytes
+import org.chronos.chronostore.util.bytes.Bytes
+import org.chronos.chronostore.util.bytes.Bytes.Companion.mightContain
+import org.chronos.chronostore.util.bytes.Bytes.Companion.put
+import org.chronos.chronostore.util.bytes.Bytes.Companion.write
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import strikt.api.expectThat
@@ -124,12 +125,12 @@ class CommandTest {
         val deserializedBloom = BloomFilter.readFrom(ByteArrayInputStream(bloomBytes), Funnels.byteArrayFunnel())
 
         expectThat(deserializedBloom){
-            get { mightContain(Bytes("foo")) }.isTrue()
-            get { mightContain(Bytes("foo1")) }.isTrue()
-            get { mightContain(Bytes("fo")) }.isTrue()
-            get { mightContain(Bytes("bar")) }.isTrue()
-            get { mightContain(Bytes("apple")) }.isFalse()
-            get { mightContain(Bytes("bullshit")) }.isFalse()
+            get { mightContain(BasicBytes("foo")) }.isTrue()
+            get { mightContain(BasicBytes("foo1")) }.isTrue()
+            get { mightContain(BasicBytes("fo")) }.isTrue()
+            get { mightContain(BasicBytes("bar")) }.isTrue()
+            get { mightContain(BasicBytes("apple")) }.isFalse()
+            get { mightContain(BasicBytes("bullshit")) }.isFalse()
         }
     }
 

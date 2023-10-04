@@ -1,6 +1,6 @@
 package org.chronos.chronostore.io.format
 
-import org.chronos.chronostore.util.Bytes
+import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.IOExtensions.withInputStream
 import org.chronos.chronostore.util.LittleEndianExtensions.readLittleEndianLong
 import org.chronos.chronostore.util.LittleEndianExtensions.writeLittleEndianLong
@@ -31,7 +31,7 @@ class FileTrailer(
     fun asBytes(): Bytes {
         val baos = ByteArrayOutputStream()
         this.writeTo(baos)
-        return Bytes(baos.toByteArray())
+        return Bytes.wrap(baos.toByteArray())
     }
 
 

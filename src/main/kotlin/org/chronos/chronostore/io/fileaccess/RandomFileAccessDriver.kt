@@ -1,6 +1,6 @@
 package org.chronos.chronostore.io.fileaccess
 
-import org.chronos.chronostore.util.Bytes
+import org.chronos.chronostore.util.bytes.Bytes
 import java.io.EOFException
 
 interface RandomFileAccessDriver : AutoCloseable {

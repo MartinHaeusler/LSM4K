@@ -6,15 +6,13 @@ import org.chronos.chronostore.io.format.ChronoStoreFileFormat
 import org.chronos.chronostore.io.format.CompressionAlgorithm
 import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.model.command.KeyAndTimestamp
-import org.chronos.chronostore.util.Bytes
+import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.LittleEndianExtensions.readLittleEndianInt
 import org.chronos.chronostore.util.TreeMapUtils
+import org.chronos.chronostore.util.bytes.BytesBuffer
 import org.chronos.chronostore.util.cursor.Cursor
 import java.io.ByteArrayInputStream
 import java.io.InputStream
-import java.util.*
-import kotlin.collections.ArrayList
-import kotlin.collections.HashMap
 
 
 interface DataBlock {
@@ -50,11 +48,70 @@ interface DataBlock {
     companion object {
 
         @JvmStatic
+        @Suppress("UNCHECKED_CAST")
+        fun createEagerLoadingInMemoryBlock(
+            input: Bytes,
+            compressionAlgorithm: CompressionAlgorithm
+        ): DataBlock {
+            val buffer = BytesBuffer(input)
+
+            val magicBytes = buffer.takeBytes(ChronoStoreFileFormat.BLOCK_MAGIC_BYTES.size)
+            if (magicBytes != ChronoStoreFileFormat.BLOCK_MAGIC_BYTES) {
+                throw IllegalArgumentException(
+                    "Cannot read block from input: the magic bytes do not match!" +
+                        " Expected ${ChronoStoreFileFormat.BLOCK_MAGIC_BYTES.hex()}, found ${magicBytes.hex()}!"
+                )
+            }
+            // read the individual parts of the binary format
+            buffer.takeLittleEndianInt() // block size; not needed here
+            val blockMetadataSize = buffer.takeLittleEndianInt()
+            val blockMetadataBytes = buffer.takeBytes(blockMetadataSize)
+
+            val bloomFilterSize = buffer.takeLittleEndianInt()
+            // skip the bloom filter, we don't need it for eager-loaded blocks
+            buffer.skipBytes(bloomFilterSize)
+
+            val compressedSize = buffer.takeLittleEndianInt()
+            val compressedBytes = buffer.takeBytes(compressedSize)
+
+            // deserialize the binary representations
+            val blockMetaData = blockMetadataBytes.createInputStream().use(BlockMetaData::readFrom)
+
+            // decompress the data
+            val decompressedData = compressionAlgorithm.decompress(compressedBytes)
+
+            // we use "ArrayList" instead of "mutableListOf(...)" here because we can provide an initial size
+
+            val commandsArray = arrayOfNulls<Map.Entry<KeyAndTimestamp, Command>>(blockMetaData.commandCount)
+            val decompressedBuffer = BytesBuffer(decompressedData)
+
+            for (i in 0..commandsArray.lastIndex) {
+                val command = Command.readFromBytesBuffer(decompressedBuffer)
+                    ?: throw IllegalStateException(
+                        "Could not read command at index ${i} from the decompressed buffer -" +
+                            " expected ${blockMetaData.commandCount} commands to be in the buffer!"
+                    )
+                commandsArray[i] = ImmutableEntry(command.keyAndTimestamp, command)
+            }
+
+            // this cast is 100% safe!
+            // We collect the data in an array of commands which gets initialized with NULL values. Once we've extracted
+            // all commands from the block, we will have filled every spot in the array with a non-NULL command.
+            val commands = TreeMapUtils.treeMapFromSortedList(commandsArray.asList() as List<Map.Entry<KeyAndTimestamp, Command>>)
+
+            return EagerDataBlock(
+                metaData = blockMetaData,
+                data = commands
+            )
+
+        }
+
+        @JvmStatic
         fun createEagerLoadingInMemoryBlock(
             inputStream: InputStream,
             compressionAlgorithm: CompressionAlgorithm
         ): DataBlock {
-            val magicBytes = Bytes(inputStream.readNBytes(ChronoStoreFileFormat.BLOCK_MAGIC_BYTES.size))
+            val magicBytes = Bytes.wrap(inputStream.readNBytes(ChronoStoreFileFormat.BLOCK_MAGIC_BYTES.size))
             if (magicBytes != ChronoStoreFileFormat.BLOCK_MAGIC_BYTES) {
                 throw IllegalArgumentException(
                     "Cannot read block from input: the magic bytes do not match!" +

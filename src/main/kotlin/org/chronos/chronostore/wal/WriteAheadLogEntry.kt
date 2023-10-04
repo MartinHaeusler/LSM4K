@@ -2,11 +2,12 @@ package org.chronos.chronostore.wal
 
 import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.util.*
-import org.chronos.chronostore.util.Bytes.Companion.write
+import org.chronos.chronostore.util.bytes.Bytes.Companion.write
 import org.chronos.chronostore.util.LittleEndianExtensions.readLittleEndianLong
 import org.chronos.chronostore.util.LittleEndianExtensions.writeLittleEndianLong
 import org.chronos.chronostore.util.UUIDExtensions.readUUIDFrom
 import org.chronos.chronostore.util.UUIDExtensions.toBytes
+import org.chronos.chronostore.util.bytes.Bytes
 import java.io.InputStream
 import java.io.OutputStream
 import java.util.*

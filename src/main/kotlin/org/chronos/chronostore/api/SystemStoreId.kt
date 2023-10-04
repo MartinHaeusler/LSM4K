@@ -2,7 +2,7 @@ package org.chronos.chronostore.api
 
 import org.chronos.chronostore.util.InverseQualifiedTemporalKey
 import org.chronos.chronostore.model.command.Command
-import org.chronos.chronostore.util.Bytes
+import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.StoreId
 import java.util.*
 

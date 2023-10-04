@@ -2,7 +2,7 @@ package org.chronos.chronostore.impl.transaction
 
 import org.chronos.chronostore.api.Store
 import org.chronos.chronostore.model.command.Command
-import org.chronos.chronostore.util.Bytes
+import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.Timestamp
 import org.chronos.chronostore.util.cursor.Cursor
 import java.util.*

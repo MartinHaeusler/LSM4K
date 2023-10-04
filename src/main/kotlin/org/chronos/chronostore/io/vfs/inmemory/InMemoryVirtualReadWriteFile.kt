@@ -1,11 +1,10 @@
 package org.chronos.chronostore.io.vfs.inmemory
 
 import org.chronos.chronostore.io.vfs.VirtualReadWriteFile
-import org.chronos.chronostore.util.Bytes
+import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.stream.UnclosableOutputStream.Companion.unclosable
 import java.io.ByteArrayOutputStream
 import java.io.OutputStream
-import kotlin.reflect.jvm.internal.impl.protobuf.ByteString.Output
 
 class InMemoryVirtualReadWriteFile(
     parent: InMemoryVirtualDirectory?,
@@ -15,7 +14,7 @@ class InMemoryVirtualReadWriteFile(
 
 
     override fun <T> append(action: (OutputStream) -> T): T {
-        if(!this.fileSystem.isExistingPath(this.path)){
+        if (!this.fileSystem.isExistingPath(this.path)) {
             this.fileSystem.createNewFile(this.path)
         }
         return this.fileSystem.openAppendOutputStream(this.path).use(action)
@@ -70,7 +69,7 @@ class InMemoryVirtualReadWriteFile(
                 file.parent?.mkdirs()
                 file.create()
             }
-            file.fileSystem.overwrite(file.path, Bytes(this.stream.toByteArray()))
+            file.fileSystem.overwrite(file.path, Bytes.wrap(this.stream.toByteArray()))
             this.stream.close()
             this.isOpen = false
         }

@@ -1,5 +1,6 @@
 package org.chronos.chronostore.benchmark
 
+import org.chronos.chronostore.io.fileaccess.FileChannelDriver
 import org.chronos.chronostore.io.fileaccess.MemorySegmentFileDriver
 import org.chronos.chronostore.io.format.ChronoStoreFileReader
 import org.chronos.chronostore.io.vfs.disk.DiskBasedVirtualFileSystem
@@ -12,7 +13,7 @@ object TaxonomyDataReaderBenchmark {
     val inputDir = File("/home/martin/Documents/chronostore-test")
     val inputFileName = "taxonomy_snappy.chronostore"
 
-    val driverFactory = MemorySegmentFileDriver.Factory
+    val driverFactory = FileChannelDriver.Factory
 
     @JvmStatic
     fun main(args: Array<String>) {
