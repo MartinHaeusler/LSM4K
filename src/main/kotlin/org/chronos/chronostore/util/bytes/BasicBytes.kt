@@ -69,7 +69,7 @@ class BasicBytes(
 
     override fun toString(): String {
         return if (this.size <= 16) {
-            "Bytes[${this.array.hex()})]"
+            "Bytes[${this.array.hex()}]"
         } else {
             "Bytes[${this.array.hex(16)}... (${this.size.Bytes.toHumanReadableString()})]"
         }

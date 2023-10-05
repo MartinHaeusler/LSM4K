@@ -59,7 +59,7 @@ interface DataBlock {
             if (magicBytes != ChronoStoreFileFormat.BLOCK_MAGIC_BYTES) {
                 throw IllegalArgumentException(
                     "Cannot read block from input: the magic bytes do not match!" +
-                        " Expected ${ChronoStoreFileFormat.BLOCK_MAGIC_BYTES.hex()}, found ${magicBytes.hex()}!"
+                        " Expected ${ChronoStoreFileFormat.BLOCK_MAGIC_BYTES.hex()}, found ${magicBytes}!"
                 )
             }
             // read the individual parts of the binary format

@@ -10,7 +10,11 @@ class BytesInputStream(
         if (!this.iterator.hasNext()) {
             return -1
         }
-        return this.iterator.next().toInt()
+        // to convert negative byte values to positive
+        // integers, we perform the "and 0xff". If we
+        // don't do this, we get negative integers, which
+        // is not what we want.
+        return this.iterator.next().toInt() and 0xff
     }
 
 

@@ -80,6 +80,59 @@ class ChronoStoreFileTest {
         }
     }
 
+    @VirtualFileSystemTest
+    fun canCreateAndReadFileWith1Key(mode: VFSMode) {
+        mode.withVFS { vfs ->
+
+            val file = vfs.file("test.chronostore")
+
+            val theKey = BasicBytes("theKey")
+            file.withOverWriter { overWriter ->
+                val writer = ChronoStoreFileWriter(
+                    outputStream = overWriter.outputStream.buffered(),
+                    settings = ChronoStoreFileSettings(CompressionAlgorithm.NONE, 16.KiB),
+                    metadata = emptyMap()
+                )
+                val commands = listOf(Command.put(theKey, 1000L, BasicBytes("hello")))
+                writer.writeFile(0, orderedCommands = commands.iterator())
+                overWriter.commit()
+            }
+
+            expectThat(file) {
+                get { exists() }.isTrue()
+                get { length }.isGreaterThan(0L)
+            }
+
+            val blockCache = BlockCacheManagerImpl(250.MiB)
+
+            val factory = FileChannelDriver.Factory
+            factory.createDriver(file).use { driver ->
+                ChronoStoreFileReader(driver, blockCache.getBlockCache(UUID.randomUUID())).use { reader ->
+                    val min = reader.fileHeader.metaData.minTimestamp!!
+                    val max = reader.fileHeader.metaData.maxTimestamp!!
+
+                    expectThat(reader) {
+                        get { fileHeader.indexOfBlocks.size }.isEqualTo(1)
+
+                        get { get(KeyAndTimestamp(theKey, max + 1)) }.isNotNull().and {
+                            get { key }.isEqualTo(theKey)
+                            get { timestamp }.isEqualTo(max)
+                            get { opCode }.isEqualTo(Command.OpCode.PUT)
+                            get { value.asString() }.isEqualTo("hello")
+                        }
+
+                        get { get(KeyAndTimestamp(theKey, min - 1)) }.isNull()
+
+                        get { get(KeyAndTimestamp(theKey, 1000)) }.isNotNull().and {
+                            get { opCode }.isEqualTo(Command.OpCode.PUT)
+                            get { timestamp }.isEqualTo(1000)
+                            get { value.asString() }.isEqualTo("hello")
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     @VirtualFileSystemTest
     fun canCreateAndReadFileWith1000VersionsOfSameKey(mode: VFSMode) {
@@ -114,7 +167,7 @@ class ChronoStoreFileTest {
 
             val factory = FileChannelDriver.Factory
             factory.createDriver(file).use { driver ->
-                ChronoStoreFileReader(driver, blockCache.getBlockCache(UUID.randomUUID()) ).use { reader ->
+                ChronoStoreFileReader(driver, blockCache.getBlockCache(UUID.randomUUID())).use { reader ->
                     val min = reader.fileHeader.metaData.minTimestamp!!
                     val max = reader.fileHeader.metaData.maxTimestamp!!
 

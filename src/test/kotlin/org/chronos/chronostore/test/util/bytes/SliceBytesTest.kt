@@ -1,12 +1,16 @@
 package org.chronos.chronostore.test.util.bytes
 
+import org.chronos.chronostore.util.IOExtensions.readByte
+import org.chronos.chronostore.util.IOExtensions.withInputStream
 import org.chronos.chronostore.util.bytes.BasicBytes
 import org.chronos.chronostore.util.bytes.Bytes
+import org.chronos.chronostore.util.bytes.SliceBytes
 import org.junit.jupiter.api.Test
 import strikt.api.expect
 import strikt.api.expectThat
 import strikt.assertions.containsExactly
 import strikt.assertions.isEqualTo
+import java.util.*
 
 class SliceBytesTest {
 
@@ -57,24 +61,72 @@ class SliceBytesTest {
             get { this.lastIndex }.isEqualTo(1)
             get { this.asString() }.isEqualTo("ll")
         }
+
+        val woSlice = bytes.slice(1, 10).slice(5, 2)
+        expectThat(woSlice){
+            get { this.size }.isEqualTo(2)
+            get { this.lastIndex }.isEqualTo(1)
+            get { this.asString() }.isEqualTo("wo")
+        }
     }
 
     @Test
-    fun hashCodeAndEqualsWorks(){
+    fun hashCodeAndEqualsWorks() {
         val bytes = BasicBytes("hello world!")
 
         val helloSlice = bytes.slice(0, 5)
         val helloBytes = BasicBytes("hello")
 
-        expect{
+        expect {
             that(helloSlice.hashCode()).isEqualTo(helloBytes.hashCode())
             that(helloSlice).isEqualTo(helloBytes)
             that(helloBytes as Bytes).isEqualTo(helloSlice)
         }
     }
 
+    @Test
+    fun canIterateOverSliceOfBytes() {
+        val rawArray = HexFormat.of().parseHex(
+            "00000000000000014dc703ec94c74825b2645d0732435897" +
+                "00000000000000000000000000000000000000000000" +
+                "00000000000000000000000000000000000000000000" +
+                "000000000000000000937e018b01000000000000"
+        )
+        val bytes = BasicBytes(rawArray)
+        val slice = SliceBytes(rawArray, 0, rawArray.lastIndex)
+
+        val bytesIterator = bytes.iterator()
+        val sliceIterator = slice.iterator()
+
+        repeat(rawArray.size) {
+            val nextByte = bytesIterator.nextOrNull()
+            val nextSlice = sliceIterator.nextOrNull()
+            expectThat(nextSlice).isEqualTo(nextByte)
+        }
+
+        bytes.withInputStream { bytesInput ->
+            slice.withInputStream { sliceInput ->
+                repeat(rawArray.size) {
+                    val bytesRead = bytesInput.readByte()
+                    val sliceRead = sliceInput.readByte()
+                    expectThat(sliceRead).isEqualTo(bytesRead)
+                }
+            }
+        }
+
+
+    }
+
     private fun Byte.toCharacter(): Char {
         return Bytes.wrap(byteArrayOf(this)).asString()[0]
+    }
+
+    private fun <T> Iterator<T>.nextOrNull(): T? {
+        return if (!this.hasNext()) {
+            null
+        } else {
+            this.next()
+        }
     }
 
 }

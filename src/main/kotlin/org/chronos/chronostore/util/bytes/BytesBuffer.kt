@@ -7,7 +7,7 @@ class BytesBuffer(
     private var position = 0
 
     val remaining: Int
-        get() = bytes.lastIndex - position
+        get() = bytes.size - position
 
     fun takeByte(): Byte {
         require(remaining > 0){ "Cannot take 1 Byte from BytesBuffer - no bytes remain!" }

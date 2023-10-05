@@ -7,4 +7,10 @@ class ChronoStoreFileSettings(
     val compression: CompressionAlgorithm,
     /** The maximum size of a single block. */
     val maxBlockSize: BinarySize,
-)
+) {
+
+
+    override fun toString(): String {
+        return "ChronoStoreFileSettings(compression=$compression, maxBlockSize=$maxBlockSize)"
+    }
+}

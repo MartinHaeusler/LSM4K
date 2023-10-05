@@ -95,6 +95,12 @@ class ChronoStoreFileWriter : AutoCloseable {
             infoMap = this.metadata,
         )
 
+        println("beginOfBlocks: ${beginOfBlocks}")
+        println("beginOfIndexOfBlocks: ${beginOfIndexOfBlocks}")
+        println("beginOfMetadata: ${beginOfMetadata}")
+
+        println(metadata)
+
         metadata.writeTo(this.outputStream)
 
         val trailer = FileTrailer(

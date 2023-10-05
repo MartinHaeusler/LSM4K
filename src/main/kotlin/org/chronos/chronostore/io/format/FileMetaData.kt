@@ -141,4 +141,9 @@ class FileMetaData(
             return this.headEntries.toDouble() / this.totalEntries
         }
 
+    override fun toString(): String {
+        return "FileMetaData(settings=$settings, fileUUID=$fileUUID, minKey=$minKey, maxKey=$maxKey, minTimestamp=$minTimestamp, maxTimestamp=$maxTimestamp, headEntries=$headEntries, totalEntries=$totalEntries, numberOfBlocks=$numberOfBlocks, numberOfMerges=$numberOfMerges, createdAt=$createdAt, infoMap=$infoMap, historyEntries=$historyEntries, headHistoryRatio=$headHistoryRatio)"
+    }
+
+
 }

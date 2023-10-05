@@ -1,6 +1,8 @@
 package org.chronos.chronostore.util.bytes
 
 import com.google.common.collect.Iterators
+import org.chronos.chronostore.util.ByteArrayExtensions.hex
+import org.chronos.chronostore.util.unit.Bytes
 import kotlin.math.min
 
 class SliceBytes(
@@ -50,10 +52,10 @@ class SliceBytes(
         // it shares the same underlying array.
         val actualStart = this.startInclusive + start
         // avoid integer overflow by converting to long
-        val end = min((actualStart.toLong() + size.toLong() - 1), this.endInclusive.toLong()).toInt()
+        val end = min(actualStart.toLong() + size.toLong()-1, this.endInclusive.toLong()).toInt()
 
 
-        return SliceBytes(this.array, start, end)
+        return SliceBytes(this.array, actualStart, end)
     }
 
     override fun contains(element: Byte): Boolean {
@@ -85,6 +87,14 @@ class SliceBytes(
         }
 
         return Iterators.elementsEqual(this.iterator(), other.iterator())
+    }
+
+    override fun toString(): String {
+        return if (this.size <= 16) {
+            "Bytes[${this.sharedArray.hex()})]"
+        } else {
+            "Bytes[${this.sharedArray.hex(16)}... (${this.size.Bytes.toHumanReadableString()})]"
+        }
     }
 
     override fun iterator(): Iterator<Byte> {

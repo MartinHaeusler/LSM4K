@@ -4,6 +4,7 @@ import org.chronos.chronostore.io.vfs.VirtualDirectory
 import org.chronos.chronostore.io.vfs.VirtualFileSystem
 import org.chronos.chronostore.io.vfs.VirtualFileSystemElement
 import org.chronos.chronostore.io.vfs.VirtualReadWriteFile
+import org.chronos.chronostore.util.bytes.BasicBytes
 import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.bytes.Bytes.Companion.write
 import java.io.ByteArrayOutputStream
@@ -216,7 +217,8 @@ class InMemoryVirtualFileSystem : VirtualFileSystem {
             if (!this.isFile(path)) {
                 throw IOException("Cannot overwrite file '${path}' - the path does not refer to an existing file!")
             }
-            this.fileContents[path] = bytes
+            // ensure that each file has its own array
+            this.fileContents[path] = BasicBytes(bytes.toOwnedArray())
         }
     }
 

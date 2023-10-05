@@ -6,6 +6,7 @@ import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.IOExtensions.withInputStream
 import org.chronos.chronostore.util.LittleEndianExtensions.readLittleEndianIntOrNull
 import org.chronos.chronostore.util.LittleEndianExtensions.readLittleEndianLong
+import org.chronos.chronostore.util.bytes.BasicBytes
 
 object ChronoStoreFileFormat {
 
