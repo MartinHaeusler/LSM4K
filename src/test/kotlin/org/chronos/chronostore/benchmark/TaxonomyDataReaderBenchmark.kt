@@ -6,6 +6,7 @@ import org.chronos.chronostore.io.format.ChronoStoreFileReader
 import org.chronos.chronostore.io.vfs.disk.DiskBasedVirtualFileSystem
 import org.chronos.chronostore.lsm.cache.LocalBlockCache
 import org.chronos.chronostore.util.statistics.ChronoStoreStatistics
+import org.xerial.snappy.Snappy
 import java.io.File
 
 object TaxonomyDataReaderBenchmark {
@@ -17,29 +18,41 @@ object TaxonomyDataReaderBenchmark {
 
     @JvmStatic
     fun main(args: Array<String>) {
-        println("Attach profiler now!")
-        Thread.sleep(10_000)
+        // access snappy to get native initialization out of the way.
+        // This only happens once per JVM restart and we don't want to include it in the benchmark.
+        Snappy.getNativeLibraryVersion()
+
+        println("Attach profiler now! Press any key to continue")
+        System.`in`.read()
+
+        println("STARTING BENCHMARK")
 
         val vfs = DiskBasedVirtualFileSystem(inputDir)
         val inputFile = vfs.file(inputFileName)
 
-        var commands = 0L
+
         ChronoStoreFileReader(driverFactory.createDriver(inputFile), LocalBlockCache.NONE).use { reader ->
             val timeBeforeRead = System.currentTimeMillis()
-            reader.openCursor().use { cursor ->
-                cursor.first()
-                val iterator = cursor.ascendingEntrySequenceFromHere().iterator()
-                while(iterator.hasNext()){
-                    iterator.next()
-                    // we ignore the actual data here
-                    commands++
-                }
-            }
+            val commands = countCommands(reader)
             val timeAfterRead = System.currentTimeMillis()
             println("Read all ${commands} in file '${inputFile.path}' in ${timeAfterRead - timeBeforeRead}ms.")
             val statistics = ChronoStoreStatistics.snapshot()
             println(statistics.prettyPrint())
         }
+    }
+
+    private fun countCommands(reader: ChronoStoreFileReader): Long {
+        var commands = 0L
+        reader.openCursor().use { cursor ->
+            cursor.first()
+            val iterator = cursor.ascendingEntrySequenceFromHere().iterator()
+            while (iterator.hasNext()) {
+                iterator.next()
+                // we ignore the actual data here
+                commands++
+            }
+        }
+        return commands
     }
 
 }
