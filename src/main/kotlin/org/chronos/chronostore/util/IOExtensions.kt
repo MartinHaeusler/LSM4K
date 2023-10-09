@@ -11,7 +11,7 @@ object IOExtensions {
 
     fun FileOutputStream.sync(file: File) {
         try {
-            if(!this.channel.isOpen){
+            if (!this.channel.isOpen) {
                 throw IOException("Cannot call sync() on '${file.path}': The FileOutputStream has already been closed!")
             }
             return this.fd.sync()
@@ -30,4 +30,16 @@ object IOExtensions {
         }
     }
 
+    val File.size: Long
+        get() {
+            return when {
+                this.isFile -> this.length()
+                this.isDirectory -> this.computeDirectorySizeRecursively()
+                else -> 0
+            }
+        }
+
+    private fun File.computeDirectorySizeRecursively(): Long {
+        return this.walkBottomUp().filter { it.isFile }.sumOf { it.length() }
+    }
 }
