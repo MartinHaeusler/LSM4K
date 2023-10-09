@@ -1,5 +1,5 @@
 plugins {
-    kotlin("jvm") version "1.8.0"
+    kotlin("jvm") version libs.versions.kotlin
     application
 }
 
@@ -11,26 +11,25 @@ repositories {
 }
 
 dependencies {
-    implementation("org.slf4j:slf4j-api:2.0.5")
-    implementation("io.github.microutils:kotlin-logging:2.1.23")
-    implementation("com.google.guava:guava:31.1-jre")
+    implementation(libs.bundles.loggingApi)
 
-    implementation("com.fasterxml.jackson.core:jackson-core:${BuildVersions.jackson}")
-    implementation("com.fasterxml.jackson.core:jackson-databind:${BuildVersions.jackson}")
-    implementation("com.fasterxml.jackson.module:jackson-module-kotlin:${BuildVersions.jackson}")
+    implementation(libs.guava)
+
+    implementation(libs.bundles.jackson)
 
     // compression
-    implementation("org.xerial.snappy:snappy-java:1.1.9.1")
-    implementation("com.github.luben:zstd-jni:1.5.5-5")
-    implementation("org.lz4:lz4-java:1.8.0")
+    implementation(libs.snappy)
+    implementation(libs.lz4J)
+    implementation(libs.zstdJni)
 
-    implementation("org.pcollections:pcollections:4.0.1")
+    implementation(libs.pcollections)
 
-    testImplementation(platform("org.junit:junit-bom:${BuildVersions.jUnit5}"))
-    testImplementation("org.junit.jupiter", "junit-jupiter")
-    testImplementation("org.junit.jupiter:junit-jupiter-engine")
-    testImplementation("io.strikt","strikt-core", BuildVersions.strikt)
-    testImplementation("ch.qos.logback", "logback-classic", BuildVersions.logback)
+    testImplementation(libs.bundles.jUnit5)
+    testImplementation(libs.logback)
+    testImplementation(libs.strikt)
+
+    // for benchmarking purposes, include some other key-value stores
+    testImplementation(libs.bundles.xodus)
 
     testImplementation(kotlin("reflect"))
 }

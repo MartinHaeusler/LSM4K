@@ -32,11 +32,12 @@ class FileChannelDriver(
         channel.position(offset)
         val buffer = ByteBuffer.allocate(bytesToRead)
         val bytesRead = this.channel.read(buffer)
-        if (bytesRead < bytesToRead) {
+        return if (bytesRead < bytesToRead) {
             // file doesn't contain enough bytes.
-            return null
+            null
+        } else {
+            Bytes.wrap(buffer.array())
         }
-        return Bytes.wrap(buffer.array())
     }
 
     override fun copy(): FileChannelDriver {

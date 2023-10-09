@@ -1,0 +1,44 @@
+[versions]
+kotlin = "1.9.10"
+jackson = "2.15.2"
+junit5 = "5.10.0"
+xodus = "2.0.1"
+
+[libraries]
+# General Utilities
+guava = { group = "com.google.guava", name = "guava", version = "32.1.2-jre" }
+
+# JSON processing
+jackson-core = { group = "com.fasterxml.jackson.core", name = "jackson-core", version.ref = "jackson" }
+jackson-databind = { group = "com.fasterxml.jackson.core", name = "jackson-databind", version.ref = "jackson" }
+jackson-module-kotlin = { group = "com.fasterxml.jackson.module", name = "jackson-module-kotlin", version.ref = "jackson" }
+
+# Compression
+snappy = { group = "org.xerial.snappy", name = "snappy-java", version = "1.1.10.5" }
+zstdJni = { group = "com.github.luben", name = "zstd-jni", version = "1.5.5-6" }
+lz4J = { group = "org.lz4", name = "lz4-java", version = "1.8.0" }
+
+pcollections = { group = "org.pcollections", name = "pcollections", version = "4.0.1" }
+
+# Testing
+junit-jupiter = { group = "org.junit.jupiter", name = "junit-jupiter", version.ref = "junit5" }
+junit-engine = { group = "org.junit.jupiter", name = "junit-jupiter-engine", version.ref = "junit5" }
+strikt = { group = "io.strikt", name = "strikt-core", version = "0.34.1" }
+
+# Logging
+slf4j = { group = "org.slf4j", name = "slf4j-api", version = "2.0.9" }
+kotlinLogging = { group = "io.github.microutils", name = "kotlin-logging", version = "2.1.23" }
+logback = { group = "ch.qos.logback", name = "logback-classic", version = "1.4.11" }
+
+# Key-Value-Stores for benchmarking
+xodus-openAPI = { group = "org.jetbrains.xodus", name = "xodus-openAPI", version = "2.0.1" }
+xodus-environment = { group = "org.jetbrains.xodus", name = "xodus-environment", version = "2.0.1" }
+
+[bundles]
+jackson = ["jackson-core", "jackson-databind", "jackson-module-kotlin"]
+loggingApi = ["slf4j", "kotlinLogging"]
+jUnit5 = ["junit-jupiter", "junit-engine"]
+xodus = ["xodus-openAPI", "xodus-environment"]
+
+[plugins]
+versions = { id = "com.github.ben-manes.versions", version = "0.45.0" }
