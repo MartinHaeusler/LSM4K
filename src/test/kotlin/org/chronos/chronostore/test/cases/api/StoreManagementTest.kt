@@ -33,10 +33,10 @@ class StoreManagementTest {
                 tx.commit()
             }
             chronoStore.transaction { tx ->
-                val test = tx.store("test")
+                val test = tx.getStore("test")
                 test.put("foo", "bar")
 
-                val math = tx.store("math")
+                val math = tx.getStore("math")
                 math.put("pi", "3.1415")
                 math.put("e", "2.718")
 
@@ -169,7 +169,7 @@ class StoreManagementTest {
 
             // start iterating in a new transaction
             val tx1 = chronoStore.beginTransaction()
-            val c1 = tx1.store("data").openCursorOnLatest()
+            val c1 = tx1.getStore("data").openCursorOnLatest()
             c1.firstOrThrow()
             val c1Sequence1 = c1.ascendingEntrySequenceFromHere()
 
@@ -182,13 +182,13 @@ class StoreManagementTest {
             c1.firstOrThrow()
 
             val tx2 = chronoStore.beginTransaction()
-            val c2 = tx2.store("data").openCursorOnLatest()
+            val c2 = tx2.getStore("data").openCursorOnLatest()
 
             c2.firstOrThrow()
             val c2Sequence1 = c2.ascendingEntrySequenceFromHere()
             val c1Sequence2 = c1.ascendingEntrySequenceFromHere()
 
-            chronoStore.mergeService.mergeNow(major = true)
+            chronoStore.mergeService.performMajorCompaction()
 
             assertListEntries(c1Sequence2.toList())
 
@@ -244,7 +244,7 @@ class StoreManagementTest {
                 tx.commit()
             }
             val commitTimestamp2 = chronoStore.transaction { tx ->
-                val data = tx.store("data")
+                val data = tx.getStore("data")
                 for (i in (0 until numberOfEntries step 3)) {
                     data.put(createKey(i), "b")
                 }
@@ -255,7 +255,7 @@ class StoreManagementTest {
             chronoStore.forest.flushAllInMemoryStoresToDisk()
 
             val commitTimestamp3 = chronoStore.transaction { tx ->
-                val data = tx.store("data")
+                val data = tx.getStore("data")
                 for (i in (0 until numberOfEntries step 5)) {
                     data.delete(createKey(i))
                 }
@@ -266,7 +266,7 @@ class StoreManagementTest {
             chronoStore.forest.flushAllInMemoryStoresToDisk()
 
             val commitTimestamp4 = chronoStore.transaction { tx ->
-                val data = tx.store("data")
+                val data = tx.getStore("data")
                 for (i in (0 until numberOfEntries step 7)) {
                     data.put(createKey(i), "c")
                 }
@@ -290,7 +290,7 @@ class StoreManagementTest {
 
             // iterate over the data.
             chronoStore.transaction { tx ->
-                tx.store("data").openCursorOnLatest().use { cursor ->
+                tx.getStore("data").openCursorOnLatest().use { cursor ->
                     cursor.firstOrThrow()
                     val entries = cursor.ascendingEntrySequenceFromHere().toList()
                     expectThat(entries).map { it.first.asString() to it.second.asString() }.containsExactly(
@@ -314,15 +314,15 @@ class StoreManagementTest {
                     )
                 }
 
-                tx.store("data").openCursorAtTimestamp(0).use { cursor ->
+                tx.getStore("data").openCursorAtTimestamp(0).use { cursor ->
                     expectThat(cursor.first()).isFalse() // should be empty at timestamp 0
                 }
 
-                tx.store("data").openCursorAtTimestamp(commitTimestamp1 - 1).use { cursor ->
+                tx.getStore("data").openCursorAtTimestamp(commitTimestamp1 - 1).use { cursor ->
                     expectThat(cursor.first()).isFalse() // should be empty prior to first insertion
                 }
 
-                tx.store("data").openCursorAtTimestamp(commitTimestamp1).use { cursor ->
+                tx.getStore("data").openCursorAtTimestamp(commitTimestamp1).use { cursor ->
                     cursor.firstOrThrow()
                     val entries = cursor.ascendingEntrySequenceFromHere().toList()
                     expectThat(entries).map { it.first.asString() to it.second.asString() }.containsExactly(
@@ -349,7 +349,7 @@ class StoreManagementTest {
                     )
                 }
 
-                tx.store("data").openCursorAtTimestamp(commitTimestamp2).use { cursor ->
+                tx.getStore("data").openCursorAtTimestamp(commitTimestamp2).use { cursor ->
                     cursor.firstOrThrow()
                     val entries = cursor.ascendingEntrySequenceFromHere().toList()
                     expectThat(entries).map { it.first.asString() to it.second.asString() }.containsExactly(
@@ -376,7 +376,7 @@ class StoreManagementTest {
                     )
                 }
 
-                tx.store("data").openCursorAtTimestamp(commitTimestamp3).use { cursor ->
+                tx.getStore("data").openCursorAtTimestamp(commitTimestamp3).use { cursor ->
                     cursor.firstOrThrow()
                     val entries = cursor.ascendingEntrySequenceFromHere().toList()
                     expectThat(entries).map { it.first.asString() to it.second.asString() }.containsExactly(
@@ -399,7 +399,7 @@ class StoreManagementTest {
                     )
                 }
 
-                tx.store("data").openCursorAtTimestamp(commitTimestamp4).use { cursor ->
+                tx.getStore("data").openCursorAtTimestamp(commitTimestamp4).use { cursor ->
                     cursor.firstOrThrow()
                     val entries = cursor.ascendingEntrySequenceFromHere().toList()
                     expectThat(entries).map { it.first.asString() to it.second.asString() }.containsExactly(
@@ -442,21 +442,21 @@ class StoreManagementTest {
             chronoStore.transaction { tx1 ->
                 chronoStore.transaction { tx2 ->
 
-                    tx1.store("data").put("foo", "bar")
-                    tx1.store("data").delete("john")
-                    tx1.store("math").put("zero", "0")
-                    tx1.store("math").delete("pi")
+                    tx1.getStore("data").put("foo", "bar")
+                    tx1.getStore("data").delete("john")
+                    tx1.getStore("math").put("zero", "0")
+                    tx1.getStore("math").delete("pi")
 
                     tx1.commit()
 
                     // tx2 should not see the changes performed by tx1
                     expectThat(tx2) {
-                        get { this.store("data").getEntriesOnLatestAscending().asStrings() }.containsExactly(
+                        get { this.getStore("data").getEntriesOnLatestAscending().asStrings() }.containsExactly(
                             "hello" to "world",
                             "john" to "doe"
                         )
 
-                        get { this.store("math").getEntriesOnLatestAscending().asStrings() }.containsExactly(
+                        get { this.getStore("math").getEntriesOnLatestAscending().asStrings() }.containsExactly(
                             "e" to "2.7182",
                             "pi" to "3.1415"
                         )

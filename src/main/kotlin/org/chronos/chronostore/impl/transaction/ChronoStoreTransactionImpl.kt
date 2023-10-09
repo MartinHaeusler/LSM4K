@@ -41,7 +41,7 @@ class ChronoStoreTransactionImpl(
         log.trace { "Started transaction ${this.id} at timestamp ${lastVisibleTimestamp}." }
     }
 
-    override fun storeOrNull(name: String): TransactionBoundStore? {
+    override fun getStoreOrNull(name: String): TransactionBoundStore? {
         check(this.isOpen) { TX_ALREADY_CLOSED }
         val cachedStore = this.openStoresByName[name]
         if (cachedStore != null) {
@@ -53,7 +53,7 @@ class ChronoStoreTransactionImpl(
         return this.bindStore(store)
     }
 
-    override fun storeOrNull(storeId: StoreId): TransactionBoundStore? {
+    override fun getStoreOrNull(storeId: StoreId): TransactionBoundStore? {
         check(this.isOpen) { TX_ALREADY_CLOSED }
         val cachedStore = this.openStoresById[storeId]
         if (cachedStore != null) {

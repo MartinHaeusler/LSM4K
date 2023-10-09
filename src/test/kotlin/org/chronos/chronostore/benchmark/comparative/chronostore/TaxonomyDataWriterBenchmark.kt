@@ -1,4 +1,4 @@
-package org.chronos.chronostore.benchmark
+package org.chronos.chronostore.benchmark.comparative.chronostore
 
 import org.chronos.chronostore.io.format.ChronoStoreFileSettings
 import org.chronos.chronostore.io.format.ChronoStoreFileWriter

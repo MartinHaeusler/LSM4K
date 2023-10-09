@@ -23,7 +23,7 @@ class ChronoStoreConfiguration {
 
     var mergeStrategy: MergeStrategy = MergeStrategy.DEFAULT
 
-    var mergeInterval: Duration = 10.minutes
+    var mergeInterval: Duration? = 10.minutes
 
     /** The maximum size of the in-memory trees. If this value is exceeded by an insert, the insert is blocked (stalled) until flush tasks have freed memory. */
     var maxForestSize: BinarySize = 250.MiB
@@ -59,7 +59,9 @@ class ChronoStoreConfiguration {
      * The maximum size of the block cache to use, in bytes.
      *
      * By default, 25% of the JVM heap space is used.
+     *
+     * Use `null` to disable the cache.
      */
-    var blockCacheSize: BinarySize = (Runtime.getRuntime().maxMemory() / 4).toInt().Bytes
+    var blockCacheSize: BinarySize? = (Runtime.getRuntime().maxMemory() / 4).toInt().Bytes
 
 }

@@ -236,14 +236,9 @@ class LSMTree(
             val commands = monitor.subTask(0.1, "Collecting Entries to flush") {
                 this.inMemoryTree
             }
-            val lastFileIndex = this.fileList.lastOrNull()?.index
-            val newFileIndex = if (lastFileIndex == null) {
-                0
-            } else {
-                lastFileIndex + 1
-            }
+            val newFileIndex = this.nextFreeFileIndex.getAndIncrement()
             log.trace(LogMarkers.PERF) { "Target file index ${newFileIndex} will be used for flush of tree ${this.path}" }
-            val file = this.directory.file("${newFileIndex}${FILE_EXTENSION}")
+            val file = this.directory.file(this.createFileNameForIndex(newFileIndex))
             val flushTime = measureTimeMillis {
                 monitor.subTask(0.8, "Writing File") {
                     file.deleteOverWriterFileIfExists()
@@ -328,13 +323,14 @@ class LSMTree(
             val targetFile = this.directory.file(this.createFileNameForIndex(targetFileIndex))
             val maxMerge = filesToMerge.maxOfOrNull { it.header.metaData.numberOfMerges } ?: 0
 
+            println("merge target file: ${targetFile.name}")
 
             targetFile.deleteOverWriterFileIfExists()
             targetFile.createOverWriter().use { overWriter ->
                 val cursors = filesToMerge.map { it.cursor() }
                 try {
                     val iterators = cursors.mapNotNull {
-                        if (!it.first()) {
+                        if (it.first()) {
                             it.ascendingValueSequenceFromHere().iterator()
                         } else {
                             null
@@ -370,6 +366,7 @@ class LSMTree(
                     overWriter.commit()
                     this.garbageFileManager.addAll(filesToMerge.map { it.virtualFile.name })
                     this.fileList.removeAll(filesToMerge.toSet())
+                    this.fileList.add(LSMTreeFile(targetFile, targetFileIndex, this.driverFactory, this.blockCache))
                 }
             }
         }

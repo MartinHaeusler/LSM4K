@@ -51,8 +51,10 @@ class CompactionTask(
         monitor.reportStarted("Compacting Store '${store.name}' ${compactionNote}")
         val lsmTree = (store as StoreImpl).tree
         val files = lsmTree.allFiles
-        val filesToMerge = selectFiles(major, files).takeIf { it.size > 1 }
-            ?: return // no files need merging in this store
+        val filesToMerge = selectFiles(major, files)
+        if(filesToMerge.size <= 1){
+            return // no files need merging in this store
+        }
 
         monitor.reportProgress(0.2)
         val fileIndices = filesToMerge.asSequence().map { files.indexOf(it) }.toSet()

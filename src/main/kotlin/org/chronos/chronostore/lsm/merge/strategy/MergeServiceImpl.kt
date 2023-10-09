@@ -42,10 +42,13 @@ class MergeServiceImpl(
         this.writeAheadLog = writeAheadLog
         this.compactionTask = CompactionTask(storeManager, this.storeConfig.mergeStrategy)
         val timeBetweenExecutions = this.storeConfig.mergeInterval
-        if (timeBetweenExecutions.isPositive()) {
+        if (timeBetweenExecutions != null && timeBetweenExecutions.isPositive()) {
             this.taskManager.scheduleRecurringWithTimeBetweenExecutions(compactionTask, timeBetweenExecutions)
         } else {
-            log.warn { "Compaction is disabled, because the merge interval is <= 0!" }
+            log.warn {
+                "Compaction is disabled, because the merge interval is NULL or negative!" +
+                    " You need to compact the store explicitly to prevent performance degradation."
+            }
         }
 
         this.walCompactionTask = WALCompactionTask(this.writeAheadLog, storeManager)
@@ -67,13 +70,14 @@ class MergeServiceImpl(
         this.initialized = true
     }
 
-    override fun mergeNow(major: Boolean, taskMonitor: TaskMonitor) {
+    override fun performMajorCompaction(taskMonitor: TaskMonitor) {
         check(this.initialized) { "MergeService has not yet been initialized!" }
-        if (major) {
-            this.compactionTask.runMajor(taskMonitor)
-        } else {
-            this.compactionTask.run(taskMonitor)
-        }
+        this.compactionTask.runMajor(taskMonitor)
+    }
+
+    override fun performMinorCompaction(taskMonitor: TaskMonitor) {
+        check(this.initialized) { "MergeService has not yet been initialized!" }
+        this.compactionTask.run(taskMonitor)
     }
 
     override fun handleInMemoryInsertEvent(event: InMemoryLsmInsertEvent) {

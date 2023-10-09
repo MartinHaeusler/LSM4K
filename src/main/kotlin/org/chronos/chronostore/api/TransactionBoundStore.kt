@@ -12,9 +12,11 @@ import org.chronos.chronostore.util.cursor.Cursor
  */
 interface TransactionBoundStore {
 
+    // TODO: hide this from the public API.
     /** The [Store] to which this object refers.*/
     val store: Store
 
+    // TODO: hide this from the public API.
     /** The [ChronoStoreTransaction] to which this object is bound.*/
     val transaction: ChronoStoreTransaction
 
@@ -209,4 +211,37 @@ interface TransactionBoundStore {
     val isOpen: Boolean
         get() = this.transaction.isOpen
 
+    companion object {
+
+        /**
+         * Opens a new [Cursor] on the latest visible version of the [store], executes the [action] on it, and closes the cursor again.
+         *
+         * The returned cursor **will** contain the (uncommitted) modifications of the current transaction. Modifications applied after opening the cursor will be ignored.
+         *
+         * This method automatically closes the cursor after the [action] has been performed.
+         *
+         * @return The result of calling the given [action].
+         */
+        inline fun <T> TransactionBoundStore.withCursorOnLatest(action: (Cursor<Bytes, Bytes>) -> T): T {
+            return this.openCursorOnLatest().use(action)
+        }
+
+
+        /**
+         * Opens a new [Cursor] on the [store], reading the data at the given [timestamp]. The given [action] is executed, then the cursor is closed again.
+         *
+         * Important notes:
+         *
+         * - The returned cursor will **not** contain the (uncommitted) modifications of the current transaction.
+         *
+         * - The position of the cursor will **not** be affected by modifications performed by the
+         *   current transaction.
+         *
+         * @return The result of calling the [action] on the cursor.
+         */
+        inline fun <T> TransactionBoundStore.withCursorAtTimestamp(timestamp: Timestamp, action: (Cursor<Bytes, Bytes>)->T): T {
+            return this.openCursorAtTimestamp(timestamp).use(action)
+        }
+
+    }
 }

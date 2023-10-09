@@ -41,10 +41,10 @@ interface ChronoStoreTransaction : AutoCloseable {
      *
      * @throws IllegalArgumentException if there is no store with the given [name].
      *
-     * @see storeOrNull
+     * @see getStoreOrNull
      */
-    fun store(name: String): TransactionBoundStore {
-        return storeOrNull(name)
+    fun getStore(name: String): TransactionBoundStore {
+        return getStoreOrNull(name)
             ?: throw IllegalArgumentException("There is no store with name '${name}'!")
     }
 
@@ -55,9 +55,9 @@ interface ChronoStoreTransaction : AutoCloseable {
      *
      * @return The store with the given name, or `null` if it doesn't exist.
      *
-     * @see store
+     * @see getStore
      */
-    fun storeOrNull(name: String): TransactionBoundStore?
+    fun getStoreOrNull(name: String): TransactionBoundStore?
 
     /**
      * Gets a store by its [storeId].
@@ -70,10 +70,10 @@ interface ChronoStoreTransaction : AutoCloseable {
      *
      * @throws IllegalArgumentException if three is no store with the given [storeId].
      *
-     * @see storeOrNull
+     * @see getStoreOrNull
      */
-    fun store(storeId: StoreId): TransactionBoundStore {
-        return storeOrNull(storeId)
+    fun getStore(storeId: StoreId): TransactionBoundStore {
+        return getStoreOrNull(storeId)
             ?: throw IllegalArgumentException("There is no store with ID '${storeId}'!")
     }
 
@@ -84,9 +84,9 @@ interface ChronoStoreTransaction : AutoCloseable {
      *
      * @return The store with the given [storeId], or `null` if it doesn't exist.
      *
-     * @see store
+     * @see getStore
      */
-    fun storeOrNull(storeId: StoreId): TransactionBoundStore?
+    fun getStoreOrNull(storeId: StoreId): TransactionBoundStore?
 
     /**
      * Checks if there is a store with the given [name].
@@ -100,7 +100,7 @@ interface ChronoStoreTransaction : AutoCloseable {
      * @return `true` if there is a store with the given name, otherwise `false`.
      */
     fun existsStoreByName(name: String): Boolean {
-        return this.storeOrNull(name) != null
+        return this.getStoreOrNull(name) != null
     }
 
     /**
@@ -109,7 +109,7 @@ interface ChronoStoreTransaction : AutoCloseable {
      * @return `true` if there is a store with the given ID, otherwise `false`.
      */
     fun existsStoreById(storeId: StoreId): Boolean {
-        return this.storeOrNull(storeId) != null
+        return this.getStoreOrNull(storeId) != null
     }
 
     /**

@@ -44,7 +44,7 @@ object SerialReadWriteBenchmark {
             measureTimeMillis {
                 repeat(NUMBER_OF_COMMITS) { c ->
                     chronoStore.transaction { tx ->
-                        val store = tx.store("test")
+                        val store = tx.getStore("test")
                         repeat(WRITES_PER_COMMIT) { i ->
                             val keyBytes = BasicBytes(uniqueKeys.random())
                             if ((c + i % 7) == 0) {
@@ -72,7 +72,7 @@ object SerialReadWriteBenchmark {
 
             println("Performing major compaction")
             measureTimeMillis {
-                chronoStore.mergeService.mergeNow(true)
+                chronoStore.mergeService.performMajorCompaction()
             }.let { println("Major compaction took ${it}ms.") }
 
             println("root path: ${chronoStore.rootPath}")
@@ -81,7 +81,7 @@ object SerialReadWriteBenchmark {
             measureTimeMillis {
                 repeat(NUMBER_OF_READS) { r ->
                     totalSize += chronoStore.transaction { tx ->
-                        val store = tx.store("test")
+                        val store = tx.getStore("test")
                         val keyBytes = BasicBytes(uniqueKeys.random())
                         store.openCursorOnLatest().use { cursor ->
                             val sum = if (cursor.seekExactlyOrNext(keyBytes)) {

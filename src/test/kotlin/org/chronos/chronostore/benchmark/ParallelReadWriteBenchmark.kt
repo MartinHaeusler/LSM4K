@@ -2,7 +2,6 @@ package org.chronos.chronostore.benchmark
 
 import org.chronos.chronostore.test.util.ChronoStoreMode
 import org.chronos.chronostore.util.bytes.BasicBytes
-import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.statistics.ChronoStoreStatistics
 import kotlin.concurrent.thread
 
@@ -35,7 +34,7 @@ object ParallelReadWriteBenchmark {
                 val timeBefore = System.currentTimeMillis()
                 repeat(NUMBER_OF_COMMITS) { c ->
                     chronoStore.transaction { tx ->
-                        val store = tx.store("test")
+                        val store = tx.getStore("test")
                         repeat(WRITES_PER_COMMIT) { i ->
                             val keyBytes = BasicBytes(uniqueKeys.random())
                             if ((c + i % 7) == 0) {
@@ -66,7 +65,7 @@ object ParallelReadWriteBenchmark {
                     var totalSum = 0
                     repeat(NUMBER_OF_READS) { r ->
                         totalSum += chronoStore.transaction { tx ->
-                            val store = tx.store("test")
+                            val store = tx.getStore("test")
                             val keyBytes = BasicBytes(uniqueKeys.random())
                             store.openCursorOnLatest().use { cursor ->
                                 val sum = if (cursor.seekExactlyOrNext(keyBytes)) {

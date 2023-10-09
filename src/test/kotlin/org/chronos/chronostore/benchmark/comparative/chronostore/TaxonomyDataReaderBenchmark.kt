@@ -1,7 +1,6 @@
-package org.chronos.chronostore.benchmark
+package org.chronos.chronostore.benchmark.comparative.chronostore
 
 import org.chronos.chronostore.io.fileaccess.FileChannelDriver
-import org.chronos.chronostore.io.fileaccess.MemorySegmentFileDriver
 import org.chronos.chronostore.io.format.ChronoStoreFileReader
 import org.chronos.chronostore.io.vfs.disk.DiskBasedVirtualFileSystem
 import org.chronos.chronostore.lsm.cache.LocalBlockCache

@@ -13,6 +13,7 @@ import org.chronos.chronostore.io.format.ChronoStoreFileSettings
 import org.chronos.chronostore.io.structure.ChronoStoreStructure
 import org.chronos.chronostore.io.vfs.VirtualFileSystem
 import org.chronos.chronostore.lsm.LSMForestMemoryManager
+import org.chronos.chronostore.lsm.cache.BlockCacheManager
 import org.chronos.chronostore.lsm.cache.BlockCacheManagerImpl
 import org.chronos.chronostore.lsm.merge.strategy.MergeService
 import org.chronos.chronostore.lsm.merge.strategy.MergeServiceImpl
@@ -36,7 +37,7 @@ class ChronoStoreImpl(
     private var isOpen = true
 
     private val timeManager: TimeManager
-    private val blockCacheManager = BlockCacheManagerImpl(configuration.blockCacheSize)
+    private val blockCacheManager = BlockCacheManager.create(configuration.blockCacheSize)
     private val taskManager = AsyncTaskManagerImpl(Executors.newScheduledThreadPool(configuration.maxWriterThreads))
 
     @VisibleForTesting
