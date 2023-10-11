@@ -324,8 +324,6 @@ class LSMTree(
             val maxMerge = filesToMerge.maxOfOrNull { it.header.metaData.numberOfMerges } ?: 0
 
             targetFile.deleteOverWriterFileIfExists()
-            val timeBeforeMerge = System.currentTimeMillis()
-            var timeBeforeCommit = 0L
             targetFile.createOverWriter().use { overWriter ->
                 val cursors = filesToMerge.map { it.cursor() }
                 try {
@@ -361,18 +359,15 @@ class LSMTree(
                         cursor.close()
                     }
                 }
-                timeBeforeCommit = System.currentTimeMillis()
+                // prepare the new LSM file outside the lock (we don't need the lock, and opening the file can take a few seconds)
+                val mergedLsmTreeFile = LSMTreeFile(targetFile, targetFileIndex, this.driverFactory, this.blockCache)
                 this.lock.write {
                     overWriter.commit()
                     this.garbageFileManager.addAll(filesToMerge.map { it.virtualFile.name })
                     this.fileList.removeAll(filesToMerge.toSet())
-                    this.fileList.add(LSMTreeFile(targetFile, targetFileIndex, this.driverFactory, this.blockCache))
+                    this.fileList.add(mergedLsmTreeFile)
                 }
             }
-            val timeAfterMerge = System.currentTimeMillis()
-            val totalTime = timeAfterMerge - timeBeforeMerge
-            val commitTime = timeAfterMerge - timeBeforeCommit
-            println("Merge of tree ${this.path} (${filesToMerge.size} files) took ${totalTime}ms (of which ${commitTime} was spent in the write lock).")
         }
     }
 
