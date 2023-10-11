@@ -227,7 +227,7 @@ class LSMTree(
         log.trace(LogMarkers.PERF) { "TASK: Flush in-memory data to disk" }
         this.performAsyncWriteTask(monitor) {
             monitor.reportStarted("Flushing Data to Disk")
-            if (this.inMemorySize < minFlushSize) {
+            if (this.inMemoryTree.isEmpty() || this.inMemorySize < minFlushSize) {
                 // flush not necessary
                 monitor.reportDone()
                 return -1L
@@ -323,9 +323,9 @@ class LSMTree(
             val targetFile = this.directory.file(this.createFileNameForIndex(targetFileIndex))
             val maxMerge = filesToMerge.maxOfOrNull { it.header.metaData.numberOfMerges } ?: 0
 
-            println("merge target file: ${targetFile.name}")
-
             targetFile.deleteOverWriterFileIfExists()
+            val timeBeforeMerge = System.currentTimeMillis()
+            var timeBeforeCommit = 0L
             targetFile.createOverWriter().use { overWriter ->
                 val cursors = filesToMerge.map { it.cursor() }
                 try {
@@ -361,7 +361,7 @@ class LSMTree(
                         cursor.close()
                     }
                 }
-
+                timeBeforeCommit = System.currentTimeMillis()
                 this.lock.write {
                     overWriter.commit()
                     this.garbageFileManager.addAll(filesToMerge.map { it.virtualFile.name })
@@ -369,6 +369,10 @@ class LSMTree(
                     this.fileList.add(LSMTreeFile(targetFile, targetFileIndex, this.driverFactory, this.blockCache))
                 }
             }
+            val timeAfterMerge = System.currentTimeMillis()
+            val totalTime = timeAfterMerge - timeBeforeMerge
+            val commitTime = timeAfterMerge - timeBeforeCommit
+            println("Merge of tree ${this.path} (${filesToMerge.size} files) took ${totalTime}ms (of which ${commitTime} was spent in the write lock).")
         }
     }
 

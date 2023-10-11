@@ -65,7 +65,7 @@ class GarbageFileManager(
 
     fun removeAll(deleted: Set<String>) {
         this.lock.write {
-            this._garbageFiles.removeAll(deleted)
+            this.garbageFiles = this._garbageFiles - deleted
         }
     }
 
