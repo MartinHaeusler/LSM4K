@@ -27,12 +27,31 @@ class IndexOfBlocks {
     }
 
     val isEmpty: Boolean
-        get(){
+        get() {
             return this.minKeyAndTimestampToBlockIndex.isEmpty()
         }
 
     val size: Int
         get() = this.minKeyAndTimestampToBlockIndex.size
+
+    private var binarySizeCached: Long? = null
+
+    val sizeInBytes: Long
+        get(){
+            val cached = binarySizeCached
+            if(cached != null){
+                return cached
+            }
+            val computedSize = computeBinarySizeUncached()
+            this.binarySizeCached = computedSize
+            return computedSize
+        }
+
+    private fun computeBinarySizeUncached(): Long{
+        val startPositionsSize = startPositions.size * Long.SIZE_BYTES
+        val treeSize = minKeyAndTimestampToBlockIndex.entries.sumOf { (it.key.byteSize + Int.SIZE_BYTES).toLong() }
+        return treeSize + startPositionsSize + Long.SIZE_BYTES
+    }
 
     fun isValidBlockIndex(index: Int): Boolean {
         return index >= 0 && index <= this.startPositions.lastIndex
@@ -43,11 +62,13 @@ class IndexOfBlocks {
             blockIndex > this.startPositions.lastIndex -> {
                 null
             }
+
             blockIndex == startPositions.lastIndex -> {
                 val lastBlockStart = this.startPositions.last()
                 val length = (this.endOfLastBlock - lastBlockStart).toInt()
                 Pair(lastBlockStart, length)
             }
+
             else -> {
                 val start = this.startPositions[blockIndex]
                 val end = this.startPositions[blockIndex + 1]
@@ -61,7 +82,7 @@ class IndexOfBlocks {
         val floorEntry = this.minKeyAndTimestampToBlockIndex.floorEntry(keyAndTimestamp)
             ?: return null // the key is too small to exist in this file
         return floorEntry.value.also {
-            if(it > this.startPositions.lastIndex){
+            if (it > this.startPositions.lastIndex) {
                 throw IllegalStateException("KABOOM!")
             }
         }

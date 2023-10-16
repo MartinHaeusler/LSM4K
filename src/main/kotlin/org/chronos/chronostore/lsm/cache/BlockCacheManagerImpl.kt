@@ -18,7 +18,7 @@ class BlockCacheManagerImpl(
 
     private fun computeBlockCacheWeight(
         // The cache key is a necessary parameter to fulfill the guava cache API.
-        // If we would remove this parameter here, we couldn't use this method as
+        // If we remove this parameter here, we couldn't use this method as
         // a method reference for the cache loader.
         @Suppress("UNUSED_PARAMETER") key: CacheKey,
         value: DataBlock

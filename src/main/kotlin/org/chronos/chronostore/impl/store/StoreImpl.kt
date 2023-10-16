@@ -7,6 +7,7 @@ import org.chronos.chronostore.io.vfs.VirtualDirectory
 import org.chronos.chronostore.lsm.LSMForestMemoryManager
 import org.chronos.chronostore.lsm.cache.LocalBlockCache
 import org.chronos.chronostore.lsm.LSMTree
+import org.chronos.chronostore.lsm.cache.FileHeaderCache
 import org.chronos.chronostore.lsm.merge.strategy.MergeService
 import org.chronos.chronostore.util.StoreId
 import org.chronos.chronostore.util.Timestamp
@@ -24,6 +25,7 @@ class StoreImpl(
     forest: LSMForestMemoryManager,
     mergeService: MergeService,
     blockCache: LocalBlockCache,
+    fileHeaderCache: FileHeaderCache,
     driverFactory: RandomFileAccessDriverFactory,
     newFileSettings: ChronoStoreFileSettings,
 ) : Store {
@@ -35,6 +37,7 @@ class StoreImpl(
         blockCache = blockCache,
         driverFactory = driverFactory,
         newFileSettings = newFileSettings,
+        fileHeaderCache = fileHeaderCache,
     )
 
     override fun toString(): String {

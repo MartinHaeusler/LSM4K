@@ -16,7 +16,9 @@ class DiskBasedVirtualDirectory(
     }
 
     override fun mkdirs() {
-        this.file.mkdirs()
+        if(!this.file.exists()){
+            this.file.mkdirs()
+        }
     }
 
     override fun clear() {

@@ -10,8 +10,11 @@ import org.chronos.chronostore.io.fileaccess.RandomFileAccessDriverFactory
 import org.chronos.chronostore.io.format.ChronoStoreFileSettings
 import org.chronos.chronostore.io.format.ChronoStoreFileWriter
 import org.chronos.chronostore.io.vfs.VirtualDirectory
+import org.chronos.chronostore.io.vfs.VirtualFile
+import org.chronos.chronostore.io.vfs.VirtualReadWriteFile
 import org.chronos.chronostore.io.vfs.VirtualReadWriteFile.Companion.withOverWriter
 import org.chronos.chronostore.lsm.LSMTreeFile.Companion.FILE_EXTENSION
+import org.chronos.chronostore.lsm.cache.FileHeaderCache
 import org.chronos.chronostore.lsm.cache.LocalBlockCache
 import org.chronos.chronostore.lsm.event.InMemoryLsmFlushEvent
 import org.chronos.chronostore.lsm.event.InMemoryLsmInsertEvent
@@ -43,6 +46,7 @@ class LSMTree(
     private val directory: VirtualDirectory,
     private val mergeService: MergeService,
     private val blockCache: LocalBlockCache,
+    private val fileHeaderCache: FileHeaderCache,
     private val driverFactory: RandomFileAccessDriverFactory,
     private val newFileSettings: ChronoStoreFileSettings,
 ) {
@@ -86,16 +90,7 @@ class LSMTree(
         val fileList = this.directory.list().asSequence()
             .map { it.substringAfterLast(File.separatorChar) }
             .filter { it.endsWith(FILE_EXTENSION) }
-            .mapNotNull {
-                val index = parseFileIndexOrNull(it)
-                    ?: return@mapNotNull null
-                LSMTreeFile(
-                    virtualFile = this.directory.file(it),
-                    index = index,
-                    driverFactory = this.driverFactory,
-                    blockCache = this.blockCache
-                )
-            }
+            .mapNotNull(::createLsmTreeFileOrNull)
             // sort by file index ascending
             .sortedBy { it.index }
             .toMutableList()
@@ -115,6 +110,27 @@ class LSMTree(
             .substringAfterLast(File.separatorChar)
             .removeSuffix(FILE_EXTENSION)
             .toIntOrNull()
+    }
+
+    private fun createLsmTreeFileOrNull(name: String): LSMTreeFile? {
+        return this.createLsmTreeFileOrNull(this.directory.file(name))
+    }
+
+    private fun createLsmTreeFile(file: VirtualFile): LSMTreeFile {
+        return this.createLsmTreeFileOrNull(file)
+            ?: throw IllegalArgumentException("Failed to parse index from file name: '${file.path}'!")
+    }
+
+    private fun createLsmTreeFileOrNull(file: VirtualFile): LSMTreeFile? {
+        val index = this.parseFileIndexOrNull(file.name)
+            ?: return null
+        return LSMTreeFile(
+            virtualFile = file,
+            index = index,
+            driverFactory = this.driverFactory,
+            blockCache = this.blockCache,
+            fileHeaderCache = this.fileHeaderCache,
+        )
     }
 
 
@@ -263,7 +279,7 @@ class LSMTree(
             log.trace(LogMarkers.PERF) { "Flush into index file ${newFileIndex} completed in ${flushTime}ms. Redirecting traffic to new data file for LSM tree ${this.path}" }
             val event = monitor.subTask(0.1, "Redirecting traffic to file") {
                 this.lock.write {
-                    this.fileList.add(LSMTreeFile(file, newFileIndex, this.driverFactory, this.blockCache))
+                    this.fileList.add(this.createLsmTreeFile(file))
                     log.trace(LogMarkers.PERF) { "Removing ${commands.keys.size} keys from the in-memory tree (which has ${this.inMemoryTree.size} keys)..." }
                     this.inMemoryTree = this.inMemoryTree.minusAll(commands.keys)
                     log.trace(LogMarkers.PERF) { "${inMemoryTree.size} entries remaining in-memory after flush of tree ${this.path}" }
@@ -360,7 +376,7 @@ class LSMTree(
                     }
                 }
                 // prepare the new LSM file outside the lock (we don't need the lock, and opening the file can take a few seconds)
-                val mergedLsmTreeFile = LSMTreeFile(targetFile, targetFileIndex, this.driverFactory, this.blockCache)
+                val mergedLsmTreeFile = this.createLsmTreeFile(targetFile)
                 this.lock.write {
                     overWriter.commit()
                     this.garbageFileManager.addAll(filesToMerge.map { it.virtualFile.name })

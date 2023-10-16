@@ -141,6 +141,28 @@ class FileMetaData(
             return this.headEntries.toDouble() / this.totalEntries
         }
 
+    val sizeBytes: Long
+        get() {
+            val settingsSize = this.settings.sizeBytes
+            // UUID = 128 bits = 2 x 64 bits
+            val fileUUIDSize = Long.SIZE_BYTES * 2
+            val minKeySize = this.minKey?.size ?: 0
+            val maxKeySize = this.maxKey?.size ?: 0
+            val minTimestampSize = Timestamp.SIZE_BYTES
+            val maxTimestampSize = Timestamp.SIZE_BYTES
+            val statsSize = Long.SIZE_BYTES * 3 + Int.SIZE_BYTES
+            val createdAtSize = Timestamp.SIZE_BYTES
+            val infoMapSize = this.infoMap.entries.sumOf { (it.key.size + it.value.size).toLong() }
+            return settingsSize + fileUUIDSize +
+                minKeySize +
+                maxKeySize +
+                minTimestampSize +
+                maxTimestampSize +
+                statsSize +
+                createdAtSize +
+                infoMapSize
+        }
+
     override fun toString(): String {
         return "FileMetaData(settings=$settings, fileUUID=$fileUUID, minKey=$minKey, maxKey=$maxKey, minTimestamp=$minTimestamp, maxTimestamp=$maxTimestamp, headEntries=$headEntries, totalEntries=$totalEntries, numberOfBlocks=$numberOfBlocks, numberOfMerges=$numberOfMerges, createdAt=$createdAt, infoMap=$infoMap, historyEntries=$historyEntries, headHistoryRatio=$headHistoryRatio)"
     }

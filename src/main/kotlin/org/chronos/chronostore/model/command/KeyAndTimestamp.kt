@@ -72,7 +72,7 @@ data class KeyAndTimestamp(
         outputStream.writeLittleEndianLong(this.timestamp)
     }
 
-    private val byteSize: Int
+    val byteSize: Int
         get() {
             return 4 + // int prefix, indicating key length.
                 key.size + // bytes of the key

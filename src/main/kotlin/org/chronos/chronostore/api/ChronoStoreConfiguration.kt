@@ -56,12 +56,42 @@ class ChronoStoreConfiguration {
     var garbageCollectionTimeOfDay: TimeOfDay? = TimeOfDay.parse("00:00")
 
     /**
-     * The maximum size of the block cache to use, in bytes.
+     * The maximum size of the block cache to use.
+     *
+     * Each data file contains a list of data blocks. These blocks are
+     * stored one after another and are typically [compressed][compressionAlgorithm].
+     * Since it is very likely that a single data block will be accessed more
+     * than once, and loading them from disk is a comparably expensive operation,
+     * the block cache allows the store to keep a certain amount of blocks in-memory
+     * to avoid constant re-fetching.
+     *
+     * The individual block size is solely determined by the keys and values
+     * contained in the block. The maximum size of a single block is given
+     * by [maxBlockSize], though this value may be exceeded by individual blocks
+     * when dealing with very large individual keys and/or values.
      *
      * By default, 25% of the JVM heap space is used.
      *
      * Use `null` to disable the cache.
      */
     var blockCacheSize: BinarySize? = (Runtime.getRuntime().maxMemory() / 4).toInt().Bytes
+
+    /**
+     * The maximum size of the file header cache to use.
+     *
+     * Each data file has a predefined section which is known as the "header",
+     * containing metadata and index information. The data in a file can only
+     * be loaded after the header has been processed. The file header cache
+     * allows the store to keep some of the file headers in-memory to avoid
+     * constant re-fetching.
+     *
+     * File header size is primarily determined by the number of keys in the
+     * file (logarithmically) and the average size of a single key (linearly).
+     *
+     * By default, 1% of the JVM heap space is used.
+     *
+     * Use `null` to disable the cache.
+     */
+    var fileHeaderCacheSize: BinarySize? = (Runtime.getRuntime().maxMemory() / 100).toInt().Bytes
 
 }

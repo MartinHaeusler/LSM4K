@@ -9,6 +9,13 @@ class ChronoStoreFileSettings(
     val maxBlockSize: BinarySize,
 ) {
 
+    val sizeBytes: Int
+        get(){
+            return Int.SIZE_BYTES +
+                // size of "maxBlockSize"
+                Int.SIZE_BYTES +
+                Long.SIZE_BYTES
+        }
 
     override fun toString(): String {
         return "ChronoStoreFileSettings(compression=$compression, maxBlockSize=$maxBlockSize)"

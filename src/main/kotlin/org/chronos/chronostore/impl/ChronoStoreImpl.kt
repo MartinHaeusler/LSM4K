@@ -15,6 +15,7 @@ import org.chronos.chronostore.io.vfs.VirtualFileSystem
 import org.chronos.chronostore.lsm.LSMForestMemoryManager
 import org.chronos.chronostore.lsm.cache.BlockCacheManager
 import org.chronos.chronostore.lsm.cache.BlockCacheManagerImpl
+import org.chronos.chronostore.lsm.cache.FileHeaderCache
 import org.chronos.chronostore.lsm.merge.strategy.MergeService
 import org.chronos.chronostore.lsm.merge.strategy.MergeServiceImpl
 import org.chronos.chronostore.util.Timestamp
@@ -38,6 +39,7 @@ class ChronoStoreImpl(
 
     private val timeManager: TimeManager
     private val blockCacheManager = BlockCacheManager.create(configuration.blockCacheSize)
+    private val fileHeaderCache = FileHeaderCache.create(configuration.fileHeaderCacheSize)
     private val taskManager = AsyncTaskManagerImpl(Executors.newScheduledThreadPool(configuration.maxWriterThreads))
 
     @VisibleForTesting
@@ -52,6 +54,7 @@ class ChronoStoreImpl(
     private val storeManager = StoreManagerImpl(
         vfs = this.vfs,
         blockCacheManager = this.blockCacheManager,
+        fileHeaderCache = this.fileHeaderCache,
         mergeService = this.mergeService,
         forest = this.forest,
         driverFactory = this.configuration.randomFileAccessDriverFactory,

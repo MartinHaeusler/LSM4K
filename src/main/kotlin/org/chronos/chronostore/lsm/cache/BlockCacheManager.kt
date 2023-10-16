@@ -4,7 +4,7 @@ import mu.KotlinLogging
 import org.chronos.chronostore.util.StoreId
 import org.chronos.chronostore.util.unit.BinarySize
 
-interface BlockCacheManager {
+sealed interface BlockCacheManager {
 
     fun getBlockCache(storeId: StoreId): LocalBlockCache
 

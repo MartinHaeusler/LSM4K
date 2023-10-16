@@ -11,17 +11,18 @@ import org.chronos.chronostore.io.fileaccess.RandomFileAccessDriverFactory
 import org.chronos.chronostore.io.format.ChronoStoreFileSettings
 import org.chronos.chronostore.io.structure.ChronoStoreStructure.STORE_DIR_PREFIX
 import org.chronos.chronostore.io.structure.ChronoStoreStructure.STORE_INFO_FILE_NAME
+import org.chronos.chronostore.io.vfs.VirtualDirectory
 import org.chronos.chronostore.io.vfs.VirtualFileSystem
 import org.chronos.chronostore.lsm.LSMForestMemoryManager
 import org.chronos.chronostore.lsm.LSMTree
 import org.chronos.chronostore.lsm.cache.BlockCacheManager
+import org.chronos.chronostore.lsm.cache.FileHeaderCache
 import org.chronos.chronostore.lsm.merge.strategy.MergeService
 import org.chronos.chronostore.util.IOExtensions.withInputStream
 import org.chronos.chronostore.util.StoreId
 import org.chronos.chronostore.util.Timestamp
 import org.chronos.chronostore.util.TransactionId
 import org.chronos.chronostore.util.json.JsonUtil
-import org.chronos.chronostore.util.unit.BinarySize
 import java.util.*
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.concurrent.read
@@ -30,6 +31,7 @@ import kotlin.concurrent.write
 class StoreManagerImpl(
     private val vfs: VirtualFileSystem,
     private val blockCacheManager: BlockCacheManager,
+    private val fileHeaderCache: FileHeaderCache,
     private val mergeService: MergeService,
     private val forest: LSMForestMemoryManager,
     private val driverFactory: RandomFileAccessDriverFactory,
@@ -65,30 +67,40 @@ class StoreManagerImpl(
                 // read the store infos from the JSON file
                 val storeInfos = this.readStoreInfoFromJson()
                 for (storeInfo in storeInfos) {
-                    val store = StoreImpl(
-                        id = storeInfo.storeId,
-                        name = storeInfo.storeName,
-                        retainOldVersions = storeInfo.retainOldVersions,
-                        validFrom = storeInfo.validFrom,
-                        validTo = storeInfo.validTo,
-                        createdByTransactionId = storeInfo.createdByTransactionId,
-                        directory = vfs.directory(STORE_DIR_PREFIX + storeInfo.storeId),
-                        forest = this.forest,
-                        mergeService = this.mergeService,
-                        blockCache = this.blockCacheManager.getBlockCache(storeInfo.storeId),
-                        driverFactory = this.driverFactory,
-                        newFileSettings = this.newFileSettings,
-                    )
+                    val storeDirectory = getStoreDirectory(storeInfo.storeId)
+                    val store = createStore(storeInfo, storeDirectory)
                     this.registerStoreInCaches(store)
                 }
             }
             // ensure that the system stores exist
-            for (systemStore in SystemStore.values()) {
+            for (systemStore in SystemStore.entries) {
                 this.ensureSystemStoreExists(systemStore)
             }
 
             this.initialized = true
         }
+    }
+
+    private fun getStoreDirectory(storeId: StoreId): VirtualDirectory {
+        return this.vfs.directory(STORE_DIR_PREFIX + storeId)
+    }
+
+    private fun createStore(storeInfo: StoreInfo, directory: VirtualDirectory): StoreImpl {
+        return StoreImpl(
+            id = storeInfo.storeId,
+            name = storeInfo.storeName,
+            retainOldVersions = storeInfo.retainOldVersions,
+            validFrom = storeInfo.validFrom,
+            validTo = storeInfo.validTo,
+            createdByTransactionId = storeInfo.createdByTransactionId,
+            directory = directory,
+            forest = this.forest,
+            mergeService = this.mergeService,
+            blockCache = this.blockCacheManager.getBlockCache(storeInfo.storeId),
+            fileHeaderCache = this.fileHeaderCache,
+            driverFactory = this.driverFactory,
+            newFileSettings = this.newFileSettings,
+        )
     }
 
     override fun <T> withStoreReadLock(action: () -> T): T {
@@ -135,7 +147,7 @@ class StoreManagerImpl(
         // do a small probing by creating the directory, but don't do anything with it just yet.
         // We still have to update the storeInfo.json first before going ahead. Creating the
         // directory first helps us sort out file system issues (invalid names, path too long, folder permission issues, etc.)
-        val directory = vfs.directory(STORE_DIR_PREFIX + storeId)
+        val directory = this.getStoreDirectory(storeId)
         directory.mkdirs()
 
         val storeInfoList = mutableListOf<StoreInfo>()
@@ -155,20 +167,7 @@ class StoreManagerImpl(
         this.overwriteStoreInfoJson(storeInfoList)
 
         // then, create the store itself
-        val store = StoreImpl(
-            id = newStoreInfo.storeId,
-            name = newStoreInfo.storeName,
-            retainOldVersions = newStoreInfo.retainOldVersions,
-            validFrom = newStoreInfo.validFrom,
-            validTo = newStoreInfo.validTo,
-            createdByTransactionId = transactionId,
-            directory = directory,
-            forest = this.forest,
-            mergeService = this.mergeService,
-            blockCache = this.blockCacheManager.getBlockCache(storeId),
-            driverFactory = this.driverFactory,
-            newFileSettings = this.newFileSettings,
-        )
+        val store = this.createStore(newStoreInfo, directory)
 
         this.registerStoreInCaches(store)
         return store

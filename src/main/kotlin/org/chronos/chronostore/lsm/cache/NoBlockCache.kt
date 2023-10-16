@@ -4,7 +4,7 @@ import org.chronos.chronostore.io.format.datablock.DataBlock
 import org.chronos.chronostore.util.StoreId
 import java.util.*
 
-object NoBlockCache: LocalBlockCache {
+data object NoBlockCache: LocalBlockCache {
 
     override val storeId: StoreId?
         get() = null

@@ -5,7 +5,7 @@ import org.chronos.chronostore.lsm.cache.NoBlockCache
 import org.chronos.chronostore.util.StoreId
 import java.util.UUID
 
-interface LocalBlockCache {
+sealed interface LocalBlockCache {
 
     val storeId: StoreId?
 
