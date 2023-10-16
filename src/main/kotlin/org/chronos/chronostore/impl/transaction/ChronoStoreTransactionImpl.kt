@@ -9,11 +9,13 @@ import org.chronos.chronostore.impl.TransactionManager
 import org.chronos.chronostore.impl.store.StoreImpl
 import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.model.command.KeyAndTimestamp
-import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.StoreId
 import org.chronos.chronostore.util.Timestamp
 import org.chronos.chronostore.util.TransactionId
-import org.chronos.chronostore.util.cursor.*
+import org.chronos.chronostore.util.bytes.Bytes
+import org.chronos.chronostore.util.cursor.Cursor
+import org.chronos.chronostore.util.cursor.IndexBasedCursor
+import org.chronos.chronostore.util.cursor.OverlayCursor
 import org.chronos.chronostore.wal.WriteAheadLogTransaction
 
 class ChronoStoreTransactionImpl(
@@ -31,8 +33,7 @@ class ChronoStoreTransactionImpl(
 
     }
 
-    private val openStoresByName = mutableMapOf<String, TransactionBoundStoreImpl>()
-    private val openStoresById = mutableMapOf<StoreId, TransactionBoundStoreImpl>()
+    private val openStoresByName = mutableMapOf<StoreId, TransactionBoundStoreImpl>()
 
     @Transient
     override var isOpen: Boolean = true
@@ -41,7 +42,7 @@ class ChronoStoreTransactionImpl(
         log.trace { "Started transaction ${this.id} at timestamp ${lastVisibleTimestamp}." }
     }
 
-    override fun getStoreOrNull(name: String): TransactionBoundStore? {
+    override fun getStoreOrNull(name: StoreId): TransactionBoundStore? {
         check(this.isOpen) { TX_ALREADY_CLOSED }
         val cachedStore = this.openStoresByName[name]
         if (cachedStore != null) {
@@ -53,21 +54,14 @@ class ChronoStoreTransactionImpl(
         return this.bindStore(store)
     }
 
-    override fun getStoreOrNull(storeId: StoreId): TransactionBoundStore? {
+    override fun createNewStore(name: StoreId, versioned: Boolean): TransactionBoundStore {
         check(this.isOpen) { TX_ALREADY_CLOSED }
-        val cachedStore = this.openStoresById[storeId]
-        if (cachedStore != null) {
-            return cachedStore
-        }
-        val store = this.storeManager.getStoreByIdOrNull(this, storeId)
-            ?: return null
-
-        return this.bindStore(store)
-    }
-
-    override fun createNewStore(name: String, versioned: Boolean): TransactionBoundStore {
-        check(this.isOpen) { TX_ALREADY_CLOSED }
-        val newStore = this.storeManager.createNewStore(this, name, versioned, this.transactionManager.timeManager.getUniqueWallClockTimestamp())
+        val newStore = this.storeManager.createNewStore(
+            transaction = this,
+            name = name,
+            versioned = versioned,
+            validFrom = this.transactionManager.timeManager.getUniqueWallClockTimestamp()
+        )
         return this.bindStore(newStore)
     }
 
@@ -77,7 +71,7 @@ class ChronoStoreTransactionImpl(
             val allStores = this.storeManager.getAllStores(this)
             return allStores.asSequence()
                 .filterNot { it.isSystemInternal }
-                .map { this.openStoresById[it.id] ?: bindStore(it) }
+                .map { this.openStoresByName[it.name] ?: bindStore(it) }
                 .toList()
         }
 
@@ -88,27 +82,22 @@ class ChronoStoreTransactionImpl(
         return this.transactionManager.performCommit(this, metadata)
     }
 
-    private fun renameStore(txStore: TransactionBoundStoreImpl, newName: String) {
-        require(this.isOpen) { TX_ALREADY_CLOSED }
-        val oldName = txStore.store.name
-        val renamed = this.storeManager.renameStore(this@ChronoStoreTransactionImpl, txStore.store.id, newName)
-        if (renamed) {
-            this.openStoresByName.remove(oldName)
-            this.openStoresByName[oldName] = txStore
-        }
-    }
-
     private fun deleteStore(txStore: TransactionBoundStoreImpl) {
         require(this.isOpen) { TX_ALREADY_CLOSED }
-        this.storeManager.deleteStoreById(this, txStore.store.id)
+        this.storeManager.deleteStore(this, txStore.store.name)
     }
 
     fun toWALTransaction(commitTimestamp: Timestamp, metadata: Bytes?): WriteAheadLogTransaction {
-        val changes = this.openStoresById.values.associate { txStore ->
-            txStore.store.id to txStore.transactionContext.convertToCommands(commitTimestamp)
+        val changes = this.openStoresByName.values.associate { txStore ->
+            txStore.store.name to txStore.transactionContext.convertToCommands(commitTimestamp)
         }
 
-        return WriteAheadLogTransaction(this.id, commitTimestamp, changes, metadata ?: Bytes.EMPTY)
+        return WriteAheadLogTransaction(
+            transactionId = this.id,
+            commitTimestamp = commitTimestamp,
+            storeIdToCommands = changes,
+            commitMetadata = metadata ?: Bytes.EMPTY
+        )
     }
 
     override fun rollback() {
@@ -122,7 +111,6 @@ class ChronoStoreTransactionImpl(
     private fun bindStore(store: Store): TransactionBoundStoreImpl {
         val txBoundStore = TransactionBoundStoreImpl(store)
         this.openStoresByName[store.name] = txBoundStore
-        this.openStoresById[store.id] = txBoundStore
         return txBoundStore
     }
 
@@ -198,10 +186,6 @@ class ChronoStoreTransactionImpl(
             return treeCursor.filterValues { it != null && it.opCode != Command.OpCode.DEL }.mapValue { it.value }
         }
 
-        override fun renameStore(newName: String) {
-            this@ChronoStoreTransactionImpl.renameStore(this, newName)
-        }
-
         override fun deleteStore() {
             this@ChronoStoreTransactionImpl.deleteStore(this)
             this.transactionContext.clearModifications()
@@ -210,7 +194,7 @@ class ChronoStoreTransactionImpl(
         val transactionContext = TransactionBoundStoreContext(this.store)
 
         override fun toString(): String {
-            return "TransactionBoundStore[${"${this.store.name} (ID: ${this.store.id})"}]"
+            return "TransactionBoundStore[${this.store.name}]"
         }
 
     }

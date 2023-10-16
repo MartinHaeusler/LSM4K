@@ -10,14 +10,13 @@ import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.model.command.KeyAndTimestamp
 import org.chronos.chronostore.test.util.VFSMode
 import org.chronos.chronostore.test.util.VirtualFileSystemTest
-import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.StoreId
 import org.chronos.chronostore.util.bytes.BasicBytes
+import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.unit.KiB
 import org.chronos.chronostore.util.unit.MiB
 import strikt.api.expectThat
 import strikt.assertions.*
-import java.util.*
 import kotlin.random.Random
 
 class ChronoStoreFileTest {
@@ -46,7 +45,7 @@ class ChronoStoreFileTest {
 
             val factory = MemorySegmentFileDriver.Factory
             factory.createDriver(file).use { driver ->
-                ChronoStoreFileReader(driver, blockCache.getBlockCache(StoreId.randomUUID())).use { reader ->
+                ChronoStoreFileReader(driver, blockCache.getBlockCache(StoreId.of("doesnt-matter"))).use { reader ->
                     expectThat(reader) {
                         get { fileHeader }.and {
                             get { this.indexOfBlocks.isEmpty }.isTrue()
@@ -107,7 +106,7 @@ class ChronoStoreFileTest {
 
             val factory = FileChannelDriver.Factory
             factory.createDriver(file).use { driver ->
-                ChronoStoreFileReader(driver, blockCache.getBlockCache(UUID.randomUUID())).use { reader ->
+                ChronoStoreFileReader(driver, blockCache.getBlockCache(StoreId.of("doesnt-matter"))).use { reader ->
                     val min = reader.fileHeader.metaData.minTimestamp!!
                     val max = reader.fileHeader.metaData.maxTimestamp!!
 
@@ -167,7 +166,7 @@ class ChronoStoreFileTest {
 
             val factory = FileChannelDriver.Factory
             factory.createDriver(file).use { driver ->
-                ChronoStoreFileReader(driver, blockCache.getBlockCache(UUID.randomUUID())).use { reader ->
+                ChronoStoreFileReader(driver, blockCache.getBlockCache(StoreId.of("doesnt-matter"))).use { reader ->
                     val min = reader.fileHeader.metaData.minTimestamp!!
                     val max = reader.fileHeader.metaData.maxTimestamp!!
 

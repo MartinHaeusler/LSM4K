@@ -7,37 +7,20 @@ import org.chronos.chronostore.util.Timestamp
 
 interface StoreManager {
 
-    fun getStoreByName(transaction: ChronoStoreTransaction, name: String): Store {
+    fun getStore(transaction: ChronoStoreTransaction, name: StoreId): Store {
         return getStoreByNameOrNull(transaction, name)
             ?: throw IllegalArgumentException("There is no store with name '${name}'!")
     }
 
-    fun getStoreByNameOrNull(transaction: ChronoStoreTransaction, name: String): Store?
+    fun getStoreByNameOrNull(transaction: ChronoStoreTransaction, name: StoreId): Store?
 
-    fun getStoreById(transaction: ChronoStoreTransaction, storeId: StoreId): Store {
-        return getStoreByIdOrNull(transaction, storeId)
-            ?: throw IllegalArgumentException("There is no store with ID '${storeId}'!")
-    }
-
-    fun getStoreByIdOrNull(transaction: ChronoStoreTransaction, storeId: StoreId): Store?
-
-    fun existsStoreByName(transaction: ChronoStoreTransaction, name: String): Boolean {
+    fun existsStore(transaction: ChronoStoreTransaction, name: StoreId): Boolean {
         return this.getStoreByNameOrNull(transaction, name) != null
     }
 
-    fun existsStoreById(transaction: ChronoStoreTransaction, storeId: StoreId): Boolean {
-        return this.getStoreByIdOrNull(transaction, storeId) != null
-    }
+    fun createNewStore(transaction: ChronoStoreTransaction, name: StoreId, versioned: Boolean, validFrom: Timestamp): Store
 
-    fun createNewStore(transaction: ChronoStoreTransaction, name: String, versioned: Boolean, validFrom: Timestamp): Store
-
-    fun renameStore(transaction: ChronoStoreTransaction, oldName: String, newName: String): Boolean
-
-    fun renameStore(transaction: ChronoStoreTransaction, storeId: StoreId, newName: String): Boolean
-
-    fun deleteStoreByName(transaction: ChronoStoreTransaction, name: String): Boolean
-
-    fun deleteStoreById(transaction: ChronoStoreTransaction, storeId: StoreId): Boolean
+    fun deleteStore(transaction: ChronoStoreTransaction, name: StoreId): Boolean
 
     fun getAllStores(transaction: ChronoStoreTransaction): List<Store>
 

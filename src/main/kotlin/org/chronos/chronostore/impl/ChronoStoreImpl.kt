@@ -14,7 +14,6 @@ import org.chronos.chronostore.io.structure.ChronoStoreStructure
 import org.chronos.chronostore.io.vfs.VirtualFileSystem
 import org.chronos.chronostore.lsm.LSMForestMemoryManager
 import org.chronos.chronostore.lsm.cache.BlockCacheManager
-import org.chronos.chronostore.lsm.cache.BlockCacheManagerImpl
 import org.chronos.chronostore.lsm.cache.FileHeaderCache
 import org.chronos.chronostore.lsm.merge.strategy.MergeService
 import org.chronos.chronostore.lsm.merge.strategy.MergeServiceImpl
@@ -114,10 +113,10 @@ class ChronoStoreImpl(
     }
 
     private fun replayWriteAheadLogChanges(allStores: List<Store>): Timestamp {
-        val storeIdToStore = allStores.associateBy { it.id }
+        val storeNameToStore = allStores.associateBy { it.name }
         val storeIdToMaxTimestamp = allStores.associate { store ->
             val maxPersistedTimestamp = (store as StoreImpl).tree.getMaxPersistedTimestamp()
-            store.id to maxPersistedTimestamp
+            store.name to maxPersistedTimestamp
         }
         log.info { "Replaying Write Ahead Log file" }
         // replay the entries in the WAL which have not been persisted yet
@@ -138,7 +137,7 @@ class ChronoStoreImpl(
                 }
 
                 // we don't have this change yet, apply it
-                val store = storeIdToStore[entry.key]
+                val store = storeNameToStore[entry.key]
                     ?: continue // the store doesn't exist anymore, skip
 
                 // we're missing the changes from this transaction,

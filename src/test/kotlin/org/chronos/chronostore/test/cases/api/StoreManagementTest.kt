@@ -2,8 +2,6 @@ package org.chronos.chronostore.test.cases.api
 
 import org.chronos.chronostore.api.ChronoStoreConfiguration
 import org.chronos.chronostore.api.ChronoStoreTransaction
-import org.chronos.chronostore.api.SystemStore
-import org.chronos.chronostore.io.structure.ChronoStoreStructure
 import org.chronos.chronostore.io.vfs.VirtualDirectory
 import org.chronos.chronostore.lsm.LSMTreeFile
 import org.chronos.chronostore.test.extensions.transaction.ChronoStoreTransactionTestExtensions.allEntriesOnLatest
@@ -12,6 +10,7 @@ import org.chronos.chronostore.test.extensions.transaction.ChronoStoreTransactio
 import org.chronos.chronostore.test.extensions.transaction.ChronoStoreTransactionTestExtensions.put
 import org.chronos.chronostore.test.util.ChronoStoreMode
 import org.chronos.chronostore.test.util.ChronoStoreTest
+import org.chronos.chronostore.util.StoreId
 import org.chronos.chronostore.util.bytes.BasicBytes
 import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.unit.GiB
@@ -46,12 +45,12 @@ class StoreManagementTest {
                 expectThat(tx) {
                     get { allStores }.hasSize(2).and {
                         any {
-                            get { this.store.name }.isEqualTo("test")
+                            get { this.store.name }.isEqualTo(StoreId.of("test"))
                             get { this.getLatest("foo") }.isEqualTo(BasicBytes("bar"))
                             get { this.getLatest("bullshit") }.isNull()
                         }
                         any {
-                            get { this.store.name }.isEqualTo("math")
+                            get { this.store.name }.isEqualTo(StoreId.of("math"))
                             get { this.getLatest("pi") }.isEqualTo(BasicBytes("3.1415"))
                             get { this.getLatest("e") }.isEqualTo(BasicBytes("2.718"))
                         }
@@ -69,12 +68,12 @@ class StoreManagementTest {
             expectThat(tx) {
                 get { allStores }.hasSize(2).and {
                     any {
-                        get { this.store.name }.isEqualTo("test")
+                        get { this.store.name }.isEqualTo(StoreId.of("test"))
                         get { this.getLatest("foo") }.isEqualTo(BasicBytes("bar"))
                         get { this.getLatest("bullshit") }.isNull()
                     }
                     any {
-                        get { this.store.name }.isEqualTo("math")
+                        get { this.store.name }.isEqualTo(StoreId.of("math"))
                         get { this.getLatest("pi") }.isEqualTo(BasicBytes("3.1415"))
                         get { this.getLatest("e") }.isEqualTo(BasicBytes("2.718"))
                     }
@@ -107,11 +106,11 @@ class StoreManagementTest {
             expectThat(tx) {
                 get { allStores }.hasSize(2).and {
                     any {
-                        get { this.store.name }.isEqualTo("test")
+                        get { this.store.name }.isEqualTo(StoreId.of("test"))
                         get { this.allEntriesOnLatest }.containsExactly(BasicBytes("foo") to BasicBytes("bar"))
                     }
                     any {
-                        get { this.store.name }.isEqualTo("math")
+                        get { this.store.name }.isEqualTo(StoreId.of("math"))
                         get { this.allEntriesOnLatest }.containsExactly(
                             BasicBytes("e") to BasicBytes("2.718"),
                             BasicBytes("pi") to BasicBytes("3.1415")
@@ -267,7 +266,7 @@ class StoreManagementTest {
 
             val commitTimestamp4 = chronoStore.transaction { tx ->
                 val data = tx.getStore("data")
-                for (i in (0 until numberOfEntries step 7)) {
+                for (i in (0..< numberOfEntries step 7)) {
                     data.put(createKey(i), "c")
                 }
                 tx.commit()
@@ -276,9 +275,8 @@ class StoreManagementTest {
             val rootLevelElements = vfs.listRootLevelElements()
             val storeDir = rootLevelElements.asSequence()
                 .filterIsInstance<VirtualDirectory>()
-                .filter { it.name.startsWith(ChronoStoreStructure.STORE_DIR_PREFIX) }
                 // it must not be a system store
-                .filter { it.name !in SystemStore.values().map { systemStore -> ChronoStoreStructure.STORE_DIR_PREFIX + systemStore.id } }
+                .filterNot { it.name.startsWith("_") }
                 .singleOrNull()
 
             // since we've performed two flushes, we should have two files in the VFS.

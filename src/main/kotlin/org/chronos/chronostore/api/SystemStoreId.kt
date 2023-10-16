@@ -2,10 +2,12 @@ package org.chronos.chronostore.api
 
 import org.chronos.chronostore.util.InverseQualifiedTemporalKey
 import org.chronos.chronostore.model.command.Command
-import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.StoreId
-import java.util.*
+import org.chronos.chronostore.util.bytes.Bytes
 
+/**
+ * [SystemStore]s are predefined [Store]s which are intended for system-internal purposes.
+ */
 enum class SystemStore {
 
     /**
@@ -18,11 +20,9 @@ enum class SystemStore {
      */
     COMMIT_METADATA {
 
-        override val isVersioned: Boolean = false
+        override val isVersioned = false
 
-        override val id: StoreId = UUID.fromString("11111111-1111-1111-1111-000000000001")
-
-        override val storeName: String = "${SystemStore.NAME_PREFIX}CommitMetadata"
+        override val storeId = systemStorePath("commit-metadata")
 
     },
 
@@ -36,11 +36,9 @@ enum class SystemStore {
      */
     COMMIT_LOG {
 
-        override val isVersioned: Boolean = false
+        override val isVersioned = false
 
-        override val id: StoreId = UUID.fromString("11111111-1111-1111-1111-000000000002")
-
-        override val storeName: String = "${SystemStore.NAME_PREFIX}CommitLog"
+        override val storeId = systemStorePath("commit-log")
 
     },
 
@@ -48,14 +46,17 @@ enum class SystemStore {
 
     companion object {
 
-        const val NAME_PREFIX = "_chronostore_internal__"
+        const val PATH_PREFIX = "_system_"
 
     }
 
     abstract val isVersioned: Boolean
 
-    abstract val id: StoreId
+    abstract val storeId: StoreId
 
-    abstract val storeName: String
+}
 
+private fun systemStorePath(vararg path: String): StoreId {
+    require(path.isNotEmpty()) { "System store paths must not be empty!" }
+    return StoreId.of(SystemStore.PATH_PREFIX, *path)
 }

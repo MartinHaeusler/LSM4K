@@ -6,5 +6,4 @@ object ChronoStoreStructure {
 
     val STORE_INFO_FILE_NAME = "storeInfo.json"
 
-    val STORE_DIR_PREFIX = "store-"
 }

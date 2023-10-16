@@ -4,6 +4,7 @@ import org.chronos.chronostore.io.vfs.VirtualReadWriteFile.Companion.withOverWri
 import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.test.util.VFSMode
 import org.chronos.chronostore.test.util.VirtualFileSystemTest
+import org.chronos.chronostore.util.StoreId
 import org.chronos.chronostore.util.bytes.BasicBytes
 import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.wal.WriteAheadLog
@@ -23,23 +24,23 @@ class WriteAheadLogTest {
             val tx1Id = UUID.randomUUID()
             val tx2Id = UUID.randomUUID()
             val tx3Id = UUID.randomUUID()
-            val store1Id = UUID.randomUUID()
-            val store2Id = UUID.randomUUID()
-            val store3Id = UUID.randomUUID()
+            val store1Name = StoreId.of("d272b6e7-e1bc-4d6f-bf04-93e36445b279")
+            val store2Name = StoreId.of("508e1b3c-3383-47c4-bdfe-13175c88a146")
+            val store3Name = StoreId.of("c4071866-48fe-48df-af6b-5e29f1e833cb")
 
             val tx1 = WriteAheadLogTransaction(
                 transactionId = tx1Id,
                 commitTimestamp = 1000,
                 storeIdToCommands = mapOf(
-                    store1Id to listOf(
+                    store1Name to listOf(
                         Command.put(BasicBytes("hello"), 1000, BasicBytes("world")),
                         Command.put(BasicBytes("foo"), 1000, BasicBytes("bar")),
                     ),
-                    store2Id to listOf(
+                    store2Name to listOf(
                         Command.put(BasicBytes("pi"), 1000, BasicBytes("3.1415")),
                         Command.put(BasicBytes("e"), 1000, BasicBytes("2.71828"))
                     ),
-                    store3Id to listOf(
+                    store3Name to listOf(
                         Command.put(BasicBytes("john"), 1000, BasicBytes("doe")),
                         Command.put(BasicBytes("jane"), 1000, BasicBytes("doe")),
                     )
@@ -59,11 +60,11 @@ class WriteAheadLogTest {
                 transactionId = tx3Id,
                 commitTimestamp = 777777,
                 storeIdToCommands = mapOf(
-                    store1Id to listOf(
+                    store1Name to listOf(
                         Command.del(BasicBytes("hello"), 777777),
                         Command.put(BasicBytes("foo"), 777777, BasicBytes("baz")),
                     ),
-                    store3Id to listOf(
+                    store3Name to listOf(
                         Command.put(BasicBytes("sarah"), 777777, BasicBytes("doe")),
                     )
                 ),
@@ -83,15 +84,15 @@ class WriteAheadLogTest {
                     get { this.commitTimestamp }.isEqualTo(1000)
                     get { this.commitMetadata }.isEqualTo(BasicBytes("John was here"))
                     get { this.storeIdToCommands }.hasSize(3).and {
-                        get(store1Id).isNotNull().hasSize(2).and {
+                        get(store1Name).isNotNull().hasSize(2).and {
                             get(0).isEqualTo(Command.put(BasicBytes("hello"), 1000, BasicBytes("world")))
                             get(1).isEqualTo(Command.put(BasicBytes("foo"), 1000, BasicBytes("bar")))
                         }
-                        get(store2Id).isNotNull().hasSize(2).and {
+                        get(store2Name).isNotNull().hasSize(2).and {
                             get(0).isEqualTo(Command.put(BasicBytes("pi"), 1000, BasicBytes("3.1415")))
                             get(1).isEqualTo(Command.put(BasicBytes("e"), 1000, BasicBytes("2.71828")))
                         }
-                        get(store3Id).isNotNull().hasSize(2).and {
+                        get(store3Name).isNotNull().hasSize(2).and {
                             get(0).isEqualTo(Command.put(BasicBytes("john"), 1000, BasicBytes("doe")))
                             get(1).isEqualTo(Command.put(BasicBytes("jane"), 1000, BasicBytes("doe")))
                         }
@@ -108,11 +109,11 @@ class WriteAheadLogTest {
                     get { this.commitTimestamp }.isEqualTo(777777)
                     get { this.commitMetadata }.isEqualTo(BasicBytes("Jane did this"))
                     get { this.storeIdToCommands }.hasSize(2).and {
-                        get(store1Id).isNotNull().hasSize(2).and {
+                        get(store1Name).isNotNull().hasSize(2).and {
                             get(0).isEqualTo(Command.del(BasicBytes("hello"), 777777))
                             get(1).isEqualTo(Command.put(BasicBytes("foo"), 777777, BasicBytes("baz")))
                         }
-                        get(store3Id).isNotNull().hasSize(1).and {
+                        get(store3Name).isNotNull().hasSize(1).and {
                             get(0).isEqualTo(Command.put(BasicBytes("sarah"), 777777, BasicBytes("doe")))
                         }
                     }
@@ -129,7 +130,7 @@ class WriteAheadLogTest {
             val tx1Id = UUID.randomUUID()
             val tx2Id = UUID.randomUUID()
 
-            val storeId = UUID.randomUUID()
+            val storeId = StoreId.of("b6b8388f-0e1d-444a-9254-86fe3d9e6b02")
 
             walFile.withOverWriter { overWriter ->
                 val outputStream = overWriter.outputStream
@@ -181,7 +182,7 @@ class WriteAheadLogTest {
             val tx2Id = UUID.randomUUID()
             val tx3Id = UUID.randomUUID()
 
-            val storeId = UUID.randomUUID()
+            val storeId = StoreId.of("c5518104-0100-44cb-b94d-ffaab60e96c2")
 
             walFile.withOverWriter { overWriter ->
                 val outputStream = overWriter.outputStream
@@ -253,7 +254,7 @@ class WriteAheadLogTest {
             val tx2Id = UUID.fromString("60fe702f-c0f2-44b6-8216-d67a6256d4ed")
             val tx3Id = UUID.fromString("996c8fb9-b659-4307-b574-36e7a3c21bd0")
 
-            val storeId = UUID.randomUUID()
+            val storeId = StoreId.of("10ba23ca-f371-4243-8894-0c1719404c38")
 
             walFile.withOverWriter { overWriter ->
                 val outputStream = overWriter.outputStream
@@ -319,7 +320,7 @@ class WriteAheadLogTest {
             val tx2Id = UUID.fromString("60fe702f-c0f2-44b6-8216-d67a6256d4ed")
             val tx3Id = UUID.fromString("996c8fb9-b659-4307-b574-36e7a3c21bd0")
 
-            val storeId = UUID.randomUUID()
+            val storeId = StoreId.of("6d529fdd-1553-4cf4-9f97-e3d1a52cef3e")
 
             walFile.withOverWriter { overWriter ->
                 val outputStream = overWriter.outputStream

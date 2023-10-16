@@ -92,8 +92,8 @@ sealed interface WriteAheadLogEntry {
                 when (it) {
                     is BeginTransactionEntry -> null
                     is CommitTransactionEntry -> null
-                    is DeleteEntry -> CommandAndStoreId(it.storeId, Command.del(it.key, commitTimestamp))
-                    is PutEntry -> CommandAndStoreId(it.storeId, Command.put(it.key, commitTimestamp, it.value))
+                    is DeleteEntry -> CommandAndStoreName(it.storeId, Command.del(it.key, commitTimestamp))
+                    is PutEntry -> CommandAndStoreName(it.storeId, Command.put(it.key, commitTimestamp, it.value))
                 }
             }.groupBy({ it.storeId }, { it.command })
             return WriteAheadLogTransaction(
@@ -169,7 +169,7 @@ sealed interface WriteAheadLogEntry {
 
             fun readFromWithoutTypeByte(inputStream: InputStream): PutEntry {
                 val transactionId = readUUIDFrom(inputStream.readNBytes(Long.SIZE_BYTES * 2))
-                val storeId = readUUIDFrom(inputStream.readNBytes(Long.SIZE_BYTES * 2))
+                val storeId = StoreId.readFrom(inputStream)
                 val key = PrefixIO.readBytes(inputStream)
                 val value = PrefixIO.readBytes(inputStream)
                 return PutEntry(transactionId, storeId, key, value)
@@ -180,7 +180,7 @@ sealed interface WriteAheadLogEntry {
         override fun writeTo(outputStream: OutputStream) {
             outputStream.write(TYPE_BYTE)
             outputStream.write(transactionId.toBytes())
-            outputStream.write(storeId.toBytes())
+            storeId.writeTo(outputStream)
             PrefixIO.writeBytes(outputStream, this.key)
             PrefixIO.writeBytes(outputStream, this.value)
         }
@@ -199,7 +199,7 @@ sealed interface WriteAheadLogEntry {
 
             fun readFromWithoutTypeByte(inputStream: InputStream): DeleteEntry {
                 val transactionId = readUUIDFrom(inputStream.readNBytes(Long.SIZE_BYTES * 2))
-                val storeId = readUUIDFrom(inputStream.readNBytes(Long.SIZE_BYTES * 2))
+                val storeId = StoreId.readFrom(inputStream)
                 val key = PrefixIO.readBytes(inputStream)
                 return DeleteEntry(transactionId, storeId, key)
             }
@@ -209,7 +209,7 @@ sealed interface WriteAheadLogEntry {
         override fun writeTo(outputStream: OutputStream) {
             outputStream.write(TYPE_BYTE)
             outputStream.write(transactionId.toBytes())
-            outputStream.write(storeId.toBytes())
+            storeId.writeTo(outputStream)
             PrefixIO.writeBytes(outputStream, this.key)
         }
 

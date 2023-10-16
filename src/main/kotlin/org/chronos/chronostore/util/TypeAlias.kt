@@ -4,6 +4,4 @@ import java.util.*
 
 typealias Timestamp = Long
 
-typealias StoreId = UUID
-
 typealias TransactionId = UUID

@@ -1,10 +1,10 @@
 package org.chronos.chronostore.wal
 
 import org.chronos.chronostore.model.command.Command
-import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.StoreId
 import org.chronos.chronostore.util.Timestamp
 import org.chronos.chronostore.util.TransactionId
+import org.chronos.chronostore.util.bytes.Bytes
 
 class WriteAheadLogTransaction(
     val transactionId: TransactionId,

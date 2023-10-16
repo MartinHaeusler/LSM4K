@@ -2,16 +2,14 @@ package org.chronos.chronostore.impl
 
 import mu.KotlinLogging
 import org.chronos.chronostore.api.ChronoStoreTransaction
+import org.chronos.chronostore.api.Store
 import org.chronos.chronostore.api.StoreManager
 import org.chronos.chronostore.api.SystemStore
-import org.chronos.chronostore.util.InverseQualifiedTemporalKey
 import org.chronos.chronostore.impl.store.StoreImpl
 import org.chronos.chronostore.impl.transaction.ChronoStoreTransactionImpl
 import org.chronos.chronostore.model.command.Command
+import org.chronos.chronostore.util.*
 import org.chronos.chronostore.util.bytes.Bytes
-import org.chronos.chronostore.util.StoreId
-import org.chronos.chronostore.util.Timestamp
-import org.chronos.chronostore.util.TransactionId
 import org.chronos.chronostore.wal.WriteAheadLog
 import java.util.concurrent.locks.ReentrantLock
 import java.util.concurrent.locks.ReentrantReadWriteLock
@@ -78,17 +76,17 @@ class TransactionManager(
             this.storeManager.withStoreReadLock {
                 // ensure first that all stores are indeed writeable, otherwise we may
                 // write something into our WAL file which isn't actually "legal".
-                val storeIdToStore = walTransaction.storeIdToCommands.keys.asSequence()
-                    .mapNotNull { storeId -> this.storeManager.getStoreByIdOrNull(tx, storeId) }
-                    .associateBy { it.id }
+                val storeNameToStore = walTransaction.storeIdToCommands.keys.asSequence()
+                    .mapNotNull { storeName -> this.storeManager.getStoreByNameOrNull(tx, storeName) }
+                    .associateBy(Store::name)
 
                 this.writeAheadLog.addCommittedTransaction(walTransaction)
 
                 val commitLogStore = this.storeManager.getSystemStore(SystemStore.COMMIT_LOG)
 
-                for ((storeId, commands) in walTransaction.storeIdToCommands.entries) {
+                for ((storeName, commands) in walTransaction.storeIdToCommands.entries) {
 
-                    val store = storeIdToStore[storeId]
+                    val store = storeNameToStore[storeName]
                         ?: continue // these changes cannot be performed and will be ignored.
 
                     // TODO[Feature]: offer a setting to fail commits if some of the target stores don't exist.
@@ -97,7 +95,7 @@ class TransactionManager(
                     // put them into the store.
                     (store as StoreImpl).tree.put(commands)
 
-                    val commitLogCommands = commands.map { createCommitLogEntry(commitTimestamp, storeId, it) }
+                    val commitLogCommands = commands.map { createCommitLogEntry(commitTimestamp, storeName, it) }
                     (commitLogStore as StoreImpl).tree.put(commitLogCommands)
                 }
             }

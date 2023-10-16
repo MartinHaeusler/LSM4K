@@ -14,7 +14,7 @@ class InverseQualifiedTemporalKeyTest {
 
     @Test
     fun canSerializeAndDeserialize() {
-        val storeId = StoreId.randomUUID()
+        val storeId = StoreId.of("test")
         val userKey = Bytes.random(Random(System.currentTimeMillis()), 256)
         val original = InverseQualifiedTemporalKey(1234, storeId, userKey)
         val serialized = original.toBytes()
@@ -26,8 +26,8 @@ class InverseQualifiedTemporalKeyTest {
 
     @Test
     fun sortOrderBinaryAndInMemoryIsConsistent() {
-        val storeId1 = StoreId.fromString("00000000-0000-0000-0000-000000000001")
-        val storeId2 = StoreId.fromString("00000000-0000-0000-0000-000000000002")
+        val storeId1 = StoreId.of("00000000-0000-0000-0000-000000000001")
+        val storeId2 = StoreId.of("00000000-0000-0000-0000-000000000002")
 
         val userKey1 = BasicBytes("hello")
         val userKey2 = BasicBytes("world")

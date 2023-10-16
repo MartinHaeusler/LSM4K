@@ -21,6 +21,7 @@ import org.chronos.chronostore.lsm.event.LsmCursorClosedEvent
 import org.chronos.chronostore.lsm.merge.strategy.MergeService
 import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.model.command.KeyAndTimestamp
+import org.chronos.chronostore.util.StoreId
 import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.Timestamp
 import org.chronos.chronostore.util.cursor.*
@@ -291,8 +292,8 @@ class LSMTree(
         }
     }
 
-    fun performGarbageCollection(storeName: String, taskMonitor: TaskMonitor) {
-        taskMonitor.reportStarted("Collecting Garbage in '${storeName}'")
+    fun performGarbageCollection(storeId: StoreId, taskMonitor: TaskMonitor) {
+        taskMonitor.reportStarted("Collecting Garbage in '${storeId}'")
         val deleted = mutableSetOf<String>()
         taskMonitor.forEach(1.0, "Deleting old files", this.garbageFileManager.garbageFiles) { fileName ->
             if (this.cursorManager.hasOpenCursorOnFile(fileName)) {

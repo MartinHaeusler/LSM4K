@@ -12,11 +12,9 @@ import org.chronos.chronostore.lsm.merge.strategy.MergeService
 import org.chronos.chronostore.util.StoreId
 import org.chronos.chronostore.util.Timestamp
 import org.chronos.chronostore.util.TransactionId
-import org.chronos.chronostore.util.unit.BinarySize
 
 class StoreImpl(
-    override val id: StoreId,
-    override var name: String,
+    override val name: StoreId,
     override val retainOldVersions: Boolean,
     override val validFrom: Timestamp,
     override var validTo: Timestamp?,
@@ -41,7 +39,7 @@ class StoreImpl(
     )
 
     override fun toString(): String {
-        return "Store[${this.name} (ID: ${this.id})]"
+        return "Store[${this.name}]"
     }
 
 }

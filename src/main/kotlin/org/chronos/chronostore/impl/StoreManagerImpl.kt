@@ -9,7 +9,6 @@ import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.forEachWi
 import org.chronos.chronostore.impl.store.StoreImpl
 import org.chronos.chronostore.io.fileaccess.RandomFileAccessDriverFactory
 import org.chronos.chronostore.io.format.ChronoStoreFileSettings
-import org.chronos.chronostore.io.structure.ChronoStoreStructure.STORE_DIR_PREFIX
 import org.chronos.chronostore.io.structure.ChronoStoreStructure.STORE_INFO_FILE_NAME
 import org.chronos.chronostore.io.vfs.VirtualDirectory
 import org.chronos.chronostore.io.vfs.VirtualFileSystem
@@ -23,7 +22,6 @@ import org.chronos.chronostore.util.StoreId
 import org.chronos.chronostore.util.Timestamp
 import org.chronos.chronostore.util.TransactionId
 import org.chronos.chronostore.util.json.JsonUtil
-import java.util.*
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.concurrent.read
 import kotlin.concurrent.write
@@ -49,8 +47,7 @@ class StoreManagerImpl(
 
     private var initialized: Boolean = false
     private val storeInfoFile = vfs.file(STORE_INFO_FILE_NAME)
-    private val storesById = mutableMapOf<StoreId, Store>()
-    private val storesByName = mutableMapOf<String, Store>()
+    private val storesByName = mutableMapOf<StoreId, Store>()
     private val lock = ReentrantReadWriteLock(true)
 
     fun initialize(isEmptyDatabase: Boolean) {
@@ -82,13 +79,21 @@ class StoreManagerImpl(
     }
 
     private fun getStoreDirectory(storeId: StoreId): VirtualDirectory {
-        return this.vfs.directory(STORE_DIR_PREFIX + storeId)
+        val names = storeId.path
+        return if (names.size == 1) {
+            this.vfs.directory(names[0])
+        } else {
+            val rootName = names[0]
+            val rootDir = this.vfs.directory(rootName)
+            names.asSequence().drop(1).fold(rootDir) { currentDir, name ->
+                currentDir.directory(name)
+            }
+        }
     }
 
     private fun createStore(storeInfo: StoreInfo, directory: VirtualDirectory): StoreImpl {
         return StoreImpl(
-            id = storeInfo.storeId,
-            name = storeInfo.storeName,
+            name = storeInfo.storeId,
             retainOldVersions = storeInfo.retainOldVersions,
             validFrom = storeInfo.validFrom,
             validTo = storeInfo.validTo,
@@ -107,7 +112,7 @@ class StoreManagerImpl(
         return this.lock.read(action)
     }
 
-    override fun getStoreByNameOrNull(transaction: ChronoStoreTransaction, name: String): Store? {
+    override fun getStoreByNameOrNull(transaction: ChronoStoreTransaction, name: StoreId): Store? {
         check(this.isOpen) { DB_ALREADY_CLOSED }
         this.lock.read {
             assertInitialized()
@@ -115,46 +120,35 @@ class StoreManagerImpl(
         }
     }
 
-    override fun getStoreByIdOrNull(transaction: ChronoStoreTransaction, storeId: StoreId): Store? {
-        check(this.isOpen) { DB_ALREADY_CLOSED }
-        this.lock.read {
-            assertInitialized()
-            return this.storesById[storeId]?.takeIf { it.isVisibleFor(transaction) }
-        }
-    }
-
-    override fun createNewStore(transaction: ChronoStoreTransaction, name: String, versioned: Boolean, validFrom: Timestamp): Store {
+    override fun createNewStore(transaction: ChronoStoreTransaction, name: StoreId, versioned: Boolean, validFrom: Timestamp): Store {
         check(this.isOpen) { DB_ALREADY_CLOSED }
         check(transaction.isOpen) { "Argument 'transaction' must refer to an open transaction, but the given transaction has already been closed!" }
         require(validFrom >= transaction.lastVisibleTimestamp) { "Argument 'validFrom' (${validFrom}) must not be smaller than the transaction timestamp (${transaction.lastVisibleTimestamp})!" }
         this.lock.write {
             assertInitialized()
-            require(!name.startsWith(SystemStore.NAME_PREFIX)) { "Store names must not start with '${SystemStore.NAME_PREFIX}' (reserved for internal purposes)!" }
+            require(!name.isSystemInternal) { "Store names must not start with '_' (reserved for internal purposes)!" }
             require(!this.storesByName.containsKey(name)) { "There already exists a store with name '${name}'!" }
-            val storeId = UUID.randomUUID()
             val transactionId = transaction.id
-            return createAndRegisterStoreInternal(storeId, name, versioned, validFrom, transactionId)
+            return createAndRegisterStoreInternal(name, versioned, validFrom, transactionId)
         }
     }
 
     private fun createAndRegisterStoreInternal(
-        storeId: UUID,
-        name: String,
+        storeId: StoreId,
         versioned: Boolean,
         validFrom: Timestamp,
         transactionId: TransactionId
     ): StoreImpl {
         // do a small probing by creating the directory, but don't do anything with it just yet.
         // We still have to update the storeInfo.json first before going ahead. Creating the
-        // directory first helps us sort out file system issues (invalid names, path too long, folder permission issues, etc.)
+        // directory first helps us sort out file system issues (path too long, folder permission issues, etc.)
         val directory = this.getStoreDirectory(storeId)
         directory.mkdirs()
 
         val storeInfoList = mutableListOf<StoreInfo>()
-        this.storesById.values.asSequence().map { it.storeInfo }.toCollection(storeInfoList)
+        this.storesByName.values.asSequence().map { it.storeInfo }.toCollection(storeInfoList)
         val newStoreInfo = StoreInfo(
             storeId = storeId,
-            storeName = name,
             retainOldVersions = versioned,
             validFrom = validFrom,
             validTo = null,
@@ -178,7 +172,7 @@ class StoreManagerImpl(
         this.lock.read {
             assertInitialized()
 
-            return this.storesById[systemStore.id]
+            return this.storesByName[systemStore.storeId]
                 ?: throw IllegalStateException("System Store '${systemStore}' was not initialized!")
         }
     }
@@ -186,13 +180,12 @@ class StoreManagerImpl(
     private fun ensureSystemStoreExists(systemStore: SystemStore): Store {
         check(this.isOpen) { DB_ALREADY_CLOSED }
         this.lock.write {
-            val existingStore = this.storesById[systemStore.id]
+            val existingStore = this.storesByName[systemStore.storeId]
             if (existingStore != null) {
                 return existingStore
             }
             return this.createAndRegisterStoreInternal(
-                storeId = systemStore.id,
-                name = systemStore.storeName,
+                storeId = systemStore.storeId,
                 versioned = systemStore.isVersioned,
                 validFrom = 0L,
                 transactionId = TransactionId.fromString("11111111-1111-1111-2222-000000000001")
@@ -200,89 +193,18 @@ class StoreManagerImpl(
         }
     }
 
-    override fun renameStore(transaction: ChronoStoreTransaction, oldName: String, newName: String): Boolean {
-        check(this.isOpen) { DB_ALREADY_CLOSED }
-        this.lock.write {
-            assertInitialized()
-            val store = this.getStoreByNameOrNull(transaction, oldName)
-                ?: return false  // not found
-
-            return this.renameStoreInternal(store, newName)
-        }
-    }
-
-    override fun renameStore(transaction: ChronoStoreTransaction, storeId: StoreId, newName: String): Boolean {
-        check(this.isOpen) { DB_ALREADY_CLOSED }
-        this.lock.write {
-            assertInitialized()
-
-            val store = this.getStoreByIdOrNull(transaction, storeId)
-                ?: return false  // not found
-
-            return this.renameStoreInternal(store, newName)
-        }
-    }
-
-    private fun renameStoreInternal(store: Store, newName: String): Boolean {
-        this.lock.write {
-            assertInitialized()
-
-            require(!storesByName.containsKey(newName)) {
-                " Cannot rename store '${store.name}' to '${newName}': There already exists a store with name '${newName}'!"
-            }
-
-            val oldName = store.name
-
-            val storeInfoList = mutableListOf<StoreInfo>()
-            this.storesById.values.asSequence().map { it.storeInfo }.toCollection(storeInfoList)
-            storeInfoList.replaceAll { storeInfo ->
-                if (storeInfo.storeId == store.id) {
-                    storeInfo.copy(storeName = newName)
-                } else {
-                    storeInfo
-                }
-            }
-            this.overwriteStoreInfoJson(storeInfoList)
-
-            store.name = newName
-
-            storesByName.remove(oldName)
-            storesByName[newName] = store
-
-            return true
-        }
-    }
-
-    override fun deleteStoreByName(transaction: ChronoStoreTransaction, name: String): Boolean {
+    override fun deleteStore(transaction: ChronoStoreTransaction, name: StoreId): Boolean {
         check(this.isOpen) { DB_ALREADY_CLOSED }
         this.lock.write {
             assertInitialized()
             val store = this.getStoreByNameOrNull(transaction, name)
                 ?: return false
-            return this.deleteStoreInternal(store)
-        }
-    }
-
-    override fun deleteStoreById(transaction: ChronoStoreTransaction, storeId: StoreId): Boolean {
-        check(this.isOpen) { DB_ALREADY_CLOSED }
-        this.lock.write {
-            assertInitialized()
-            val store = this.getStoreByIdOrNull(transaction, storeId)
-                ?: return false
-            return this.deleteStoreInternal(store)
-        }
-    }
-
-    private fun deleteStoreInternal(store: Store): Boolean {
-        check(this.isOpen) { "This database has already been closed." }
-        this.lock.write {
-            val storeInfoList = this.storesById.values.asSequence()
-                .filter { it.id != store.id }
+            val storeInfoList = this.storesByName.values.asSequence()
+                .filter { it.name != store.name }
                 .map { it.storeInfo }
                 .toList()
 
             this.overwriteStoreInfoJson(storeInfoList)
-            this.storesById.remove(store.id)
             this.storesByName.remove(store.name)
             store.directory.clear()
             store.directory.delete()
@@ -303,7 +225,7 @@ class StoreManagerImpl(
         check(this.isOpen) { DB_ALREADY_CLOSED }
         this.lock.read {
             this.assertInitialized()
-            return this.storesById.values.toList()
+            return this.storesByName.values.toList()
         }
     }
 
@@ -323,7 +245,7 @@ class StoreManagerImpl(
             return
         }
         this.lock.read {
-            monitor.forEachWithMonitor(1.0, "Cleaning up old files", this.storesById.values.toList()) { taskMonitor, store ->
+            monitor.forEachWithMonitor(1.0, "Cleaning up old files", this.storesByName.values.toList()) { taskMonitor, store ->
                 store as StoreImpl
                 store.tree.performGarbageCollection(store.name, taskMonitor)
             }
@@ -357,7 +279,6 @@ class StoreManagerImpl(
 
     private fun registerStoreInCaches(store: Store) {
         this.lock.write {
-            this.storesById[store.id] = store
             this.storesByName[store.name] = store
         }
     }
@@ -367,7 +288,13 @@ class StoreManagerImpl(
     }
 
     private val Store.storeInfo: StoreInfo
-        get() = StoreInfo(id, name, retainOldVersions, validFrom, validTo, createdByTransactionId)
+        get() = StoreInfo(
+            storeId = name,
+            retainOldVersions = retainOldVersions,
+            validFrom = validFrom,
+            validTo = validTo,
+            createdByTransactionId = createdByTransactionId
+        )
 
     private fun Store.isVisibleFor(transaction: ChronoStoreTransaction): Boolean {
         val validFrom = this.validFrom
@@ -380,7 +307,6 @@ class StoreManagerImpl(
 
     private data class StoreInfo(
         val storeId: StoreId,
-        val storeName: String,
         val retainOldVersions: Boolean,
         val validFrom: Timestamp,
         val validTo: Timestamp?,

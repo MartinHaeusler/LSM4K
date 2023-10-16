@@ -22,20 +22,20 @@ class WALCompactionTask(
     override fun run(monitor: TaskMonitor) {
         monitor.reportStarted("WAL Compaction")
 
-        val idToStore = (this.storeManager as StoreManagerImpl).getAllStoresInternal().associateBy { it.id }
+        val idToStore = (this.storeManager as StoreManagerImpl).getAllStoresInternal().associateBy(Store::name)
         this.writeAheadLog.compactWal { transaction -> isFullyPersisted(transaction, idToStore) }
         monitor.reportDone()
     }
 
     private fun isFullyPersisted(
         transaction: WriteAheadLogTransaction,
-        idToStore: Map<StoreId, Store>
+        nameToStore: Map<StoreId, Store>
     ): Boolean {
         // a transaction is fully persisted if all involved stores...
         // - ... EITHER don't exist anymore
         // - ... OR contain the transaction timestamp in their persisted files
         return transaction.storeIdToCommands.keys.asSequence()
-            .mapNotNull { idToStore[it] }
+            .mapNotNull { nameToStore[it] }
             .filterIsInstance<StoreImpl>()
             .all { store -> hasPersistedTransactionTimestamp(store.tree, transaction.commitTimestamp) }
     }

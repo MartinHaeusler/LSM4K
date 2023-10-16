@@ -178,21 +178,6 @@ interface TransactionBoundStore {
     fun openCursorAtTimestamp(timestamp: Timestamp): Cursor<Bytes, Bytes>
 
     /**
-     * Renames the [store].
-     *
-     * Please note that stores may be renamed immediately, even before the current transaction is [committed][ChronoStoreTransaction.commit],
-     * and they may continue to use the new name even if the current transaction is [rolled back][ChronoStoreTransaction.rollback].
-     *
-     * Versioned stores will follow the same semantics as non-versioned stores, so renaming a versioned store is
-     * not recommended.
-     *
-     * @param newName The new name for the store. The new name must not be in use by another store.
-     *
-     * @throws IllegalArgumentException if the [newName] is already in use by another store.
-     */
-    fun renameStore(newName: String)
-
-    /**
      * Deletes the [store].
      *
      * The deletion on disk will not be carried out immediately; it will eventually be deleted once all

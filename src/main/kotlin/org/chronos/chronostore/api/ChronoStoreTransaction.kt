@@ -1,7 +1,7 @@
 package org.chronos.chronostore.api
 
-import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.StoreId
+import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.Timestamp
 import org.chronos.chronostore.util.TransactionId
 
@@ -43,9 +43,26 @@ interface ChronoStoreTransaction : AutoCloseable {
      *
      * @see getStoreOrNull
      */
-    fun getStore(name: String): TransactionBoundStore {
+    fun getStore(name: StoreId): TransactionBoundStore {
         return getStoreOrNull(name)
             ?: throw IllegalArgumentException("There is no store with name '${name}'!")
+    }
+
+    /**
+     * Gets an existing store by [name].
+     *
+     * Throws an [IllegalArgumentException] if there is no store with the given [name].
+     *
+     * @param name The name of the store to get.
+     *
+     * @return The store with the given name.
+     *
+     * @throws IllegalArgumentException if there is no store with the given [name].
+     *
+     * @see getStoreOrNull
+     */
+    fun getStore(name: String): TransactionBoundStore {
+        return getStore(StoreId.of(name))
     }
 
     /**
@@ -57,36 +74,20 @@ interface ChronoStoreTransaction : AutoCloseable {
      *
      * @see getStore
      */
-    fun getStoreOrNull(name: String): TransactionBoundStore?
+    fun getStoreOrNull(name: StoreId): TransactionBoundStore?
 
     /**
-     * Gets a store by its [storeId].
+     * Gets an existing store by [name] or `null` if there is no such store.
      *
-     * Throws an [IllegalArgumentException] if there is no store with the given [storeId].
+     * @param name The name of the store to get.
      *
-     * @param storeId The ID of the store to get.
-     *
-     * @return The store with the given [storeId].
-     *
-     * @throws IllegalArgumentException if three is no store with the given [storeId].
-     *
-     * @see getStoreOrNull
-     */
-    fun getStore(storeId: StoreId): TransactionBoundStore {
-        return getStoreOrNull(storeId)
-            ?: throw IllegalArgumentException("There is no store with ID '${storeId}'!")
-    }
-
-    /**
-     * Gets a store by its [storeId] or `null` if there is no such store.
-     *
-     * @param storeId The ID of the store to get.
-     *
-     * @return The store with the given [storeId], or `null` if it doesn't exist.
+     * @return The store with the given name, or `null` if it doesn't exist.
      *
      * @see getStore
      */
-    fun getStoreOrNull(storeId: StoreId): TransactionBoundStore?
+    fun getStoreOrNull(name: String): TransactionBoundStore? {
+        return getStoreOrNull(StoreId.of(name))
+    }
 
     /**
      * Checks if there is a store with the given [name].
@@ -99,17 +100,23 @@ interface ChronoStoreTransaction : AutoCloseable {
      *
      * @return `true` if there is a store with the given name, otherwise `false`.
      */
-    fun existsStoreByName(name: String): Boolean {
+    fun existsStore(name: StoreId): Boolean {
         return this.getStoreOrNull(name) != null
     }
 
     /**
-     * Checks if there is a store with the given [id].
+     * Checks if there is a store with the given [name].
      *
-     * @return `true` if there is a store with the given ID, otherwise `false`.
+     * Please note that [createNewStore] may still throw an exception even if
+     * this method returns `false` for the same [name]. This is because a
+     * concurrent transaction may have created a store with this name, and
+     * that store might not be visible to this transaction. Likewise, a
+     * versioned store may be terminated but never removed, so its name stays bound.
+     *
+     * @return `true` if there is a store with the given name, otherwise `false`.
      */
-    fun existsStoreById(storeId: StoreId): Boolean {
-        return this.getStoreOrNull(storeId) != null
+    fun existsStore(name: String): Boolean {
+        return this.existsStore(StoreId.of(name))
     }
 
     /**
@@ -124,7 +131,23 @@ interface ChronoStoreTransaction : AutoCloseable {
      *
      * @return The newly created store.
      */
-    fun createNewStore(name: String, versioned: Boolean): TransactionBoundStore
+    fun createNewStore(name: StoreId, versioned: Boolean): TransactionBoundStore
+
+    /**
+     * Creates a new store with the given [name].
+     *
+     * Please note that stores may be created immediately, even before the current transaction is [committed][commit],
+     * and they may continue to exist even if the current transaction is [rolled back][rollback].
+     *
+     * @param name The name of the store to create. Must be unique among all stores.
+     * @param versioned Use `true` to apply version control on the store and keep old versions of entries,
+     * or `false` to discard old versions of entries when they're overwritten.
+     *
+     * @return The newly created store.
+     */
+    fun createNewStore(name: String, versioned: Boolean): TransactionBoundStore {
+        return this.createNewStore(StoreId.of(name), versioned)
+    }
 
     /**
      * Gets the list of all stores visible to this transaction.
