@@ -11,7 +11,6 @@ import org.chronos.chronostore.io.format.ChronoStoreFileSettings
 import org.chronos.chronostore.io.format.ChronoStoreFileWriter
 import org.chronos.chronostore.io.vfs.VirtualDirectory
 import org.chronos.chronostore.io.vfs.VirtualFile
-import org.chronos.chronostore.io.vfs.VirtualReadWriteFile
 import org.chronos.chronostore.io.vfs.VirtualReadWriteFile.Companion.withOverWriter
 import org.chronos.chronostore.lsm.LSMTreeFile.Companion.FILE_EXTENSION
 import org.chronos.chronostore.lsm.cache.FileHeaderCache
@@ -87,22 +86,13 @@ class LSMTree(
     }
 
     private fun loadFileList(): MutableList<LSMTreeFile> {
-        val fileList = this.directory.list().asSequence()
+        return directory.list().asSequence()
             .map { it.substringAfterLast(File.separatorChar) }
             .filter { it.endsWith(FILE_EXTENSION) }
             .mapNotNull(::createLsmTreeFileOrNull)
             // sort by file index ascending
             .sortedBy { it.index }
             .toMutableList()
-
-        if (fileList.isNotEmpty()) {
-            // if we have a non-empty file list, there should be one file named "0.chronostore"
-            val firstFile = fileList.first()
-            check(firstFile.index == 0) {
-                "LSM Tree Base file '0${FILE_EXTENSION}' is missing in directory '${this.directory.path}'!"
-            }
-        }
-        return fileList
     }
 
     private fun parseFileIndexOrNull(fileName: String): Int? {
