@@ -18,7 +18,7 @@ import org.chronos.chronostore.lsm.cache.FileHeaderCache
 import org.chronos.chronostore.lsm.merge.strategy.MergeService
 import org.chronos.chronostore.lsm.merge.strategy.MergeServiceImpl
 import org.chronos.chronostore.util.Timestamp
-import org.chronos.chronostore.wal.WriteAheadLog
+import org.chronos.chronostore.wal2.WriteAheadLog2
 import java.util.concurrent.Executors
 import kotlin.math.max
 
@@ -60,12 +60,12 @@ class ChronoStoreImpl(
         newFileSettings = ChronoStoreFileSettings(configuration.compressionAlgorithm, configuration.maxBlockSize),
     )
 
-    private val writeAheadLog: WriteAheadLog
+    private val writeAheadLog: WriteAheadLog2
     private val transactionManager: TransactionManager
 
     init {
         val walFile = this.vfs.file(ChronoStoreStructure.WAL_FILE_NAME)
-        this.writeAheadLog = WriteAheadLog(walFile)
+        this.writeAheadLog = WriteAheadLog2(walFile, this.configuration.compressionAlgorithm)
         val currentTimestamp = if (!walFile.exists()) {
             // The WAL file doesn't exist. It's a new, empty database.
             // We don't need a recovery, but we have to "set up camp".

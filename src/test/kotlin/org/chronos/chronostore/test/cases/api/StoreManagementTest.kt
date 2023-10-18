@@ -244,7 +244,7 @@ class StoreManagementTest {
             }
             val commitTimestamp2 = chronoStore.transaction { tx ->
                 val data = tx.getStore("data")
-                for (i in (0 until numberOfEntries step 3)) {
+                for (i in (0..<numberOfEntries step 3)) {
                     data.put(createKey(i), "b")
                 }
                 tx.commit()
@@ -255,7 +255,7 @@ class StoreManagementTest {
 
             val commitTimestamp3 = chronoStore.transaction { tx ->
                 val data = tx.getStore("data")
-                for (i in (0 until numberOfEntries step 5)) {
+                for (i in (0..<numberOfEntries step 5)) {
                     data.delete(createKey(i))
                 }
                 tx.commit()
@@ -266,7 +266,7 @@ class StoreManagementTest {
 
             val commitTimestamp4 = chronoStore.transaction { tx ->
                 val data = tx.getStore("data")
-                for (i in (0..< numberOfEntries step 7)) {
+                for (i in (0..<numberOfEntries step 7)) {
                     data.put(createKey(i), "c")
                 }
                 tx.commit()

@@ -269,7 +269,7 @@ sealed interface Bytes :
         // and slightly adapted, but RocksDB uses the same comparison technique.
         val min = kotlin.math.min(this.size, other.size)
 
-        for (i in 0 until min) {
+        for (i in 0..<min) {
             val myByteUnsigned = this[i].toInt() and 0xff
             val otherByteUnsigned = other[i].toInt() and 0xff
             val cmp = myByteUnsigned - otherByteUnsigned

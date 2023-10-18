@@ -41,9 +41,19 @@ class StoreId: Comparable<StoreId> {
             return readFrom(bytes)
         }
 
+        fun readFromOrNull(input: InputStream): StoreId? {
+            val bytes = PrefixIO.readBytesOrNull(input)
+                ?: return null
+            return readFrom(bytes)
+        }
+
         fun readFrom(bytes: Bytes): StoreId {
             val string = bytes.asString()
             return of(string)
+        }
+
+        fun OutputStream.write(storeId: StoreId) {
+            return storeId.writeTo(this)
         }
 
         private const val PATH_SEPARATOR_CHAR = '/'

@@ -8,9 +8,12 @@ import org.chronos.chronostore.api.SystemStore
 import org.chronos.chronostore.impl.store.StoreImpl
 import org.chronos.chronostore.impl.transaction.ChronoStoreTransactionImpl
 import org.chronos.chronostore.model.command.Command
-import org.chronos.chronostore.util.*
+import org.chronos.chronostore.util.InverseQualifiedTemporalKey
+import org.chronos.chronostore.util.StoreId
+import org.chronos.chronostore.util.Timestamp
+import org.chronos.chronostore.util.TransactionId
 import org.chronos.chronostore.util.bytes.Bytes
-import org.chronos.chronostore.wal.WriteAheadLog
+import org.chronos.chronostore.wal2.WriteAheadLog2
 import java.util.concurrent.locks.ReentrantLock
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.concurrent.read
@@ -20,7 +23,7 @@ import kotlin.concurrent.write
 class TransactionManager(
     val storeManager: StoreManager,
     val timeManager: TimeManager,
-    val writeAheadLog: WriteAheadLog,
+    val writeAheadLog: WriteAheadLog2,
 ) : AutoCloseable {
 
     companion object {

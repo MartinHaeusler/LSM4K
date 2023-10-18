@@ -15,6 +15,7 @@ import org.chronos.chronostore.lsm.merge.tasks.FlushInMemoryTreeToDiskTask
 import org.chronos.chronostore.lsm.merge.tasks.WALCompactionTask
 import org.chronos.chronostore.util.unit.Bytes
 import org.chronos.chronostore.wal.WriteAheadLog
+import org.chronos.chronostore.wal2.WriteAheadLog2
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -27,18 +28,16 @@ class MergeServiceImpl(
 
         private val log = KotlinLogging.logger {}
 
-        private const val FILL_RATE_FLUSH_THRESHOLD = 0.3
-
     }
 
     private var initialized: Boolean = false
     private lateinit var compactionTask: CompactionTask
-    private lateinit var writeAheadLog: WriteAheadLog
+    private lateinit var writeAheadLog: WriteAheadLog2
     private lateinit var walCompactionTask: WALCompactionTask
     private lateinit var garbageCollectorTask: GarbageCollectorTask
     private lateinit var storeManager: StoreManager
 
-    override fun initialize(storeManager: StoreManager, writeAheadLog: WriteAheadLog) {
+    override fun initialize(storeManager: StoreManager, writeAheadLog: WriteAheadLog2) {
         this.writeAheadLog = writeAheadLog
         this.compactionTask = CompactionTask(storeManager, this.storeConfig.mergeStrategy)
         val timeBetweenExecutions = this.storeConfig.mergeInterval

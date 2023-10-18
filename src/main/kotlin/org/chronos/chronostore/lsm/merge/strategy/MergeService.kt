@@ -6,10 +6,11 @@ import org.chronos.chronostore.lsm.event.InMemoryLsmFlushEvent
 import org.chronos.chronostore.lsm.event.InMemoryLsmInsertEvent
 import org.chronos.chronostore.lsm.event.LsmCursorClosedEvent
 import org.chronos.chronostore.wal.WriteAheadLog
+import org.chronos.chronostore.wal2.WriteAheadLog2
 
 interface MergeService {
 
-    fun initialize(storeManager: StoreManager, writeAheadLog: WriteAheadLog)
+    fun initialize(storeManager: StoreManager, writeAheadLog: WriteAheadLog2)
 
     /**
      * Performs a major compaction of store files.

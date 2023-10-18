@@ -8,11 +8,11 @@ import org.chronos.chronostore.impl.StoreManagerImpl
 import org.chronos.chronostore.impl.store.StoreImpl
 import org.chronos.chronostore.lsm.LSMTree
 import org.chronos.chronostore.util.StoreId
-import org.chronos.chronostore.wal.WriteAheadLog
 import org.chronos.chronostore.wal.WriteAheadLogTransaction
+import org.chronos.chronostore.wal2.WriteAheadLog2
 
 class WALCompactionTask(
-    private val writeAheadLog: WriteAheadLog,
+    private val writeAheadLog: WriteAheadLog2,
     private val storeManager: StoreManager,
 ) : AsyncTask {
 
