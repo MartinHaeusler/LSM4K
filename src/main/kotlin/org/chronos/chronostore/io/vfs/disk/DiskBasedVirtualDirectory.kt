@@ -1,6 +1,7 @@
 package org.chronos.chronostore.io.vfs.disk
 
 import org.chronos.chronostore.io.vfs.VirtualDirectory
+import org.chronos.chronostore.io.vfs.VirtualFileSystemElement
 import org.chronos.chronostore.io.vfs.VirtualReadWriteFile
 import java.io.File
 import java.nio.file.Files
@@ -15,8 +16,18 @@ class DiskBasedVirtualDirectory(
         return this.file.list()?.asList() ?: emptyList()
     }
 
+    override fun listElements(): List<VirtualFileSystemElement> {
+        return this.file.listFiles()?.map {
+            if (it.isFile) {
+                DiskBasedVirtualFile(this, it)
+            } else {
+                DiskBasedVirtualDirectory(this, it)
+            }
+        } ?: emptyList()
+    }
+
     override fun mkdirs() {
-        if(!this.file.exists()){
+        if (!this.file.exists()) {
             this.file.mkdirs()
         }
     }

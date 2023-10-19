@@ -2,114 +2,96 @@ package org.chronos.chronostore.wal2
 
 import mu.KotlinLogging
 import org.chronos.chronostore.io.format.CompressionAlgorithm
+import org.chronos.chronostore.io.structure.ChronoStoreStructure.WRITE_AHEAD_LOG_FILE_PREFIX
+import org.chronos.chronostore.io.structure.ChronoStoreStructure.WRITE_AHEAD_LOG_FILE_SUFFIX
+import org.chronos.chronostore.io.vfs.VirtualDirectory
+import org.chronos.chronostore.io.vfs.VirtualFile
 import org.chronos.chronostore.io.vfs.VirtualReadWriteFile
 import org.chronos.chronostore.util.IOExtensions.withInputStream
-import org.chronos.chronostore.util.StreamExtensions.hasNext
-import org.chronos.chronostore.wal.WriteAheadLogEntry
+import org.chronos.chronostore.util.Timestamp
+import org.chronos.chronostore.util.iterator.IteratorExtensions.peekOrNull
+import org.chronos.chronostore.util.iterator.IteratorExtensions.toPeekingIterator
 import org.chronos.chronostore.wal.WriteAheadLogTransaction
-import java.io.PushbackInputStream
+import java.io.InputStream
+import java.io.OutputStream
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.concurrent.read
 import kotlin.concurrent.write
 
 
 /**
- * The [WriteAheadLog2] class manages the Write-Ahead-Log of the store.
+ * The [WriteAheadLog2] class manages the Write-Ahead-Log (WAL) of the store.
  *
- * Each entry of the log (on disk) consists of a **header**, a **body** and a **footer**:
+ * The WAL is stored in a single [directory] and can consist of multiple files.
+ * Each file is written in an append-only fashion. For a description of the file
+ * format, please see [WriteAheadLogFormat]. Each file has a maximum size given
+ * by [maxWalFileSizeBytes] (please note that this is not a hard limit; no further
+ * data will be stored in a WAL file **after** this size has been reached, but
+ * one transaction will always be stored in exactly one file).
  *
- * ```
- * +--------------------------------------+--------+
- * | Transaction ID                       |        |
- * | Commit Timestamp                     | HEADER |
- * | Commit Metadata                      |        |
- * | Compression Algorithm                |        |
- * +--------------------------------------+--------+
- * | Block 1 Header                       |        |
- * |   Target Store ID                    |  BODY  |
- * +--------------------------------------+        |
- * |     Block 1 Body                     |        |
- * |       Key + Operation                |        |
- * |       Key + Operation                |  BODY  |
- * |       ...                            |        |
- * |       Key + Operation                |        |
- * +--------------------------------------+        |
- * |     Block 1 Footer                   |        |
- * |       Block Checksum                 |  BODY  |
- * +--------------------------------------+        |
- * | Block 2 Header                       |        |
- * |   Target Store ID                    |        |
- * +--------------------------------------+        |
- * |     Block 2 Body                     |        |
- * |       Key + Operation                |  BODY  |
- * |       Key + Operation                |        |
- * |       ...                            |        |
- * |       Key + Operation                |        |
- * +--------------------------------------+        |
- * |     Block 2 Footer                   |  BODY  |
- * |       Block Checksum                 |        |
- * +--------------------------------------+        |
- * |   ...                                |        |
- * +--------------------------------------+        |
- * | Block N Header                       |  BODY  |
- * |   Target Store ID                    |        |
- * +--------------------------------------+        |
- * |     Block N Body                     |        |
- * |       Key + Operation                |  BODY  |
- * |       Key + Operation                |        |
- * |       ...                            |        |
- * |       Key + Operation                |        |
- * +--------------------------------------+        |
- * |     Block N Footer                   |  BODY  |
- * |       Block Checksum                 |        |
- * +--------------------------------------+--------+
- * | Entry Checksum                       | FOOTER |
- * | Magic Byte                           |        |
- * +--------------------------------------+--------+
- * ```
+ * When a WAL file becomes full, the next WAL file in sequence is opened; this
+ * is sometimes referred to as "log segmentation". The main purpose of this
+ * behavior is to easily delete old "chunks" of the WAL which are not needed
+ * anymore because all of their content has already been (persistently) written
+ * to the actual stores.
  *
- * It's worth noting that:
- *
- * - The *entire* body is being compressed as one block.
- * - The compression algorithm is contained in the header.
- *   In theory, every block may have its own compression
- *   algorithm. This allows us to change the WAL compression
- *   algorithm over time.
- * - The StoreID of every store is only encoded once, and only
- *   if this store has received changes from the transaction.
- * - The footer contains a checksum for the **compressed**
- *   bytes. This allows us to check for corrupted or truncated
- *   entries. The checksum is non-cryptographic.
- * - The entire entry is terminated by a magic byte. This is
- *   a fixed sequence of 8 bytes which is used as a "checkpoint".
- *   If an entry is not terminated by these magic bytes, it is
- *   considered invalid. This is another safeguard against
- *   truncation.
- * - Each entry is written atomically to the WAL, i.e. no
- *   interleavings between entries are allowed. This means
- *   that this WAL format can only process one transaction
- *   commit at a time, which is fine because we expect the
- *   transaction commit timestamps to be unique.
+ * In order to determine which WAL files can be discarded, we consider the
+ * largest transaction timestamp which has been (persistently) written by all
+ * stores. This is called the "low watermark". If the transaction with the
+ * highest timestamp in a WAL file is less than or equal to the low watermark,
+ * we can safely discard the WAL file because all of its data has already been
+ * transferred to and been persisted by the actual stores.
  */
 class WriteAheadLog2(
-    val file: VirtualReadWriteFile,
-    val compressionAlgorithm: CompressionAlgorithm,
+    private val directory: VirtualDirectory,
+    private val compressionAlgorithm: CompressionAlgorithm,
+    private val maxWalFileSizeBytes: Long,
 ) {
 
     companion object {
 
         private val log = KotlinLogging.logger {}
 
+        private val FILE_NAME_REGEX = """$WRITE_AHEAD_LOG_FILE_PREFIX(\d+)$WRITE_AHEAD_LOG_FILE_SUFFIX""".toRegex()
+
     }
+
+    @Transient
+    private var initialized: Boolean = false
 
     private val lock = ReentrantReadWriteLock(true)
 
-    fun createFileIfNotExists() {
+    private val walFiles = mutableListOf<WALFile>()
+
+    init {
+        require(maxWalFileSizeBytes > 0) { "Argument 'maxWalFileSizeBytes' (${maxWalFileSizeBytes}) must be positive!" }
+    }
+
+    fun initialize() {
         this.lock.write {
-            if (!this.file.exists()) {
-                this.file.create()
+            if (initialized) {
+                return
             }
+            initialized = true
+            if (!this.directory.exists()) {
+                this.directory.mkdirs()
+            }
+            this.directory.listFiles().asSequence()
+                .mapNotNull(::createWALFileOrNull)
+                .sortedBy { it.minTimestamp }
+                .forEach(walFiles::add)
         }
+    }
+
+    private fun createWALFileOrNull(file: VirtualFile): WALFile? {
+        if (file !is VirtualReadWriteFile) {
+            return null
+        }
+        val match = FILE_NAME_REGEX.matchEntire(file.name)
+            ?: return null
+        val sequenceNumber = match.groups[2]?.value?.toLong()
+            ?: return null
+        return WALFile(file, sequenceNumber)
     }
 
     /**
@@ -121,15 +103,34 @@ class WriteAheadLog2(
      * @param walTransaction The transaction to add to the file.
      */
     fun addCommittedTransaction(walTransaction: WriteAheadLogTransaction) {
+        this.assertInitialized()
         this.lock.write {
-            this.file.append { out ->
+            val targetFile = getOrCreateTargetWALFileForTransactionTimestamp(walTransaction.commitTimestamp)
+            targetFile.append { out ->
                 WriteAheadLogFormat.writeTransaction(walTransaction, this.compressionAlgorithm, out)
             }
         }
     }
 
+    private fun getOrCreateTargetWALFileForTransactionTimestamp(newTransactionTimestamp: Timestamp): WALFile {
+        val currentWALFile = this.walFiles.lastOrNull()
+        if (currentWALFile != null && !currentWALFile.isFull(this.maxWalFileSizeBytes)) {
+            // we still have room in our current file.
+            check(currentWALFile.minTimestamp <= newTransactionTimestamp) {
+                "Cannot write transaction with commit timestamp ${newTransactionTimestamp} into WAL file with min timestamp ${currentWALFile.minTimestamp}!"
+            }
+            return currentWALFile
+        }
+        // current WAL file either doesn't exist or is full.
+        val newFile = this.directory.file("${WRITE_AHEAD_LOG_FILE_PREFIX}${newTransactionTimestamp}${WRITE_AHEAD_LOG_FILE_SUFFIX}")
+        newFile.create()
+        val newWALFile = WALFile(newFile, newTransactionTimestamp)
+        this.walFiles.add(newWALFile)
+        return newWALFile
+    }
+
     /**
-     * Sequentially reads the Write Ahead Log file, permitting a given [consumer] to read the contained transactions one after another.
+     * Sequentially reads the Write Ahead Log, permitting a given [consumer] to read the contained transactions one after another.
      *
      * If the file contains invalid entries (e.g. incomplete transactions due to a system shutdown during WAL writes), these
      * entries will **not** be reported to the [consumer]. The consumer will receive the transactions in ascending timestamp order.
@@ -138,17 +139,20 @@ class WriteAheadLog2(
      *                 The transactions will be provided to the consumer in a lazy fashion, in ascending timestamp order.
      */
     fun readWal(consumer: (WriteAheadLogTransaction) -> Unit) {
+        this.assertInitialized()
         this.lock.read {
-            this.file.withInputStream { input ->
-                var previousTxCommitTimestamp = -1L
-                while (true) {
-                    val tx = WriteAheadLogFormat.readTransactionOrNull(input)
-                        ?: break
-                    if (tx.commitTimestamp <= previousTxCommitTimestamp) {
-                        throw WriteAheadLogEntryCorruptedException("Found non-ascending commit timestamp in the WAL! The WAL file is corrupted!")
+            var previousTxCommitTimestamp = -1L
+            for (walFile in this.walFiles) {
+                walFile.withInputStream { input ->
+                    while (true) {
+                        val tx = WriteAheadLogFormat.readTransactionOrNull(input)
+                            ?: break
+                        if (tx.commitTimestamp <= previousTxCommitTimestamp) {
+                            throw WriteAheadLogEntryCorruptedException("Found non-ascending commit timestamp in the WAL! The WAL file is corrupted!")
+                        }
+                        consumer(tx)
+                        previousTxCommitTimestamp = tx.commitTimestamp
                     }
-                    consumer(tx)
-                    previousTxCommitTimestamp = tx.commitTimestamp
                 }
             }
         }
@@ -166,32 +170,29 @@ class WriteAheadLog2(
      * to complete; it should be used with care and only during periods of low database utilization, because
      * no commits will be permitted until this method has been completed.
      *
-     * @param isTransactionFullyPersisted A function which can determine if all elements of the given transaction have been fully persisted.
-     *                                    Receives the transaction as argument and returns `true` if all changes have been fully persisted
-     *                                    (in this case, the transaction will be removed from the WAL), or `false` if some of the changes
-     *                                    are only held in-memory (in this case, the transaction will remain in the WAL).
+     * @param lowWatermarkTimestamp The maximum timestamp for which it is guaranteed that *all* stores have
+     *                              persistently stored the results of *all* transactions with commit timestamps
+     *                              less than or equal to the watermark.
      */
-    fun compactWal(isTransactionFullyPersisted: (WriteAheadLogTransaction) -> Boolean) {
+    fun compactWal(lowWatermarkTimestamp: Timestamp) {
+        this.assertInitialized()
         this.lock.write {
-            this.file.deleteOverWriterFileIfExists()
-            this.file.createOverWriter().use { overWriter ->
-                // do NOT close the outputStream obtained by the overWriter!
-                // It will be flushed and f-synced when the overWriter is committed.
-                overWriter.outputStream.buffered().also { outputStream ->
-                    this.readWal { transaction ->
-                        if (!isTransactionFullyPersisted(transaction)) {
-                            // this transaction has not yet been fully persisted outside
-                            // the WAL file, so we have to keep the WAL record.
-                            WriteAheadLogFormat.writeTransaction(transaction, this.compressionAlgorithm, outputStream)
-                        }
-                    }
-                    // flush the buffer of the output stream, but don't close it, because
-                    // this will fail the fsync in the overWriter.
-                    outputStream.flush()
+            val iterator = this.walFiles.iterator().toPeekingIterator()
+            while (iterator.hasNext()) {
+                val currentWALFile = iterator.next()
+                val nextWALFile = iterator.peekOrNull()
+                    ?: break // the currentWALFile is actually the LAST file in our WAL, don't drop it.
+
+                if(currentWALFile.minTimestamp < lowWatermarkTimestamp && nextWALFile.minTimestamp < lowWatermarkTimestamp){
+                    // the current file is below the watermark, because the HIGHEST timestamp in this file is strictly
+                    // smaller than the min timestamp of the next file. Since that is below the watermark, we DEFINITELY
+                    // are below the watermark.
+                    currentWALFile.delete()
+                    iterator.remove()
                 }
-                overWriter.commit()
             }
         }
+
     }
 
     /**
@@ -200,6 +201,7 @@ class WriteAheadLog2(
      * In particular, this method will remove any invalid or incomplete transactions from the WAL.
      */
     fun performStartupRecoveryCleanup() {
+        this.assertInitialized()
         this.lock.write {
             this.file.deleteOverWriterFileIfExists()
             this.file.createOverWriter().use { overWriter ->
@@ -221,6 +223,41 @@ class WriteAheadLog2(
                 overWriter.commit()
             }
         }
+    }
+
+    @Suppress("NOTHING_TO_INLINE")
+    private inline fun assertInitialized() {
+        check(this.initialized) { "WriteAheadLog has not been initialized yet!" }
+    }
+
+    private class WALFile(
+        val file: VirtualReadWriteFile,
+        val minTimestamp: Timestamp,
+    ) {
+
+        init {
+            require(minTimestamp >= 0) { "Argument 'minTimestamp' (${minTimestamp}) must not be negative!" }
+        }
+
+        fun isFull(maxWalFileSizeBytes: Long): Boolean {
+            return this.length >= maxWalFileSizeBytes
+        }
+
+        val length: Long
+            get() = this.file.length
+
+        fun <T> append(action: (OutputStream) -> T): T {
+            return this.file.append(action)
+        }
+
+        fun <T> withInputStream(action: (InputStream) -> T): T {
+            return this.file.withInputStream(action)
+        }
+
+        fun delete() {
+            return this.file.delete()
+        }
+
     }
 
 }

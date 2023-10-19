@@ -64,7 +64,7 @@ class ChronoStoreImpl(
     private val transactionManager: TransactionManager
 
     init {
-        val walFile = this.vfs.file(ChronoStoreStructure.WAL_FILE_NAME)
+        val walFile = this.vfs.directory(ChronoStoreStructure.WRITE_AHEAD_LOG_DIR_NAME)
         this.writeAheadLog = WriteAheadLog2(walFile, this.configuration.compressionAlgorithm)
         val currentTimestamp = if (!walFile.exists()) {
             // The WAL file doesn't exist. It's a new, empty database.
@@ -95,7 +95,7 @@ class ChronoStoreImpl(
 
     private fun createNewEmptyDatabase(): Timestamp {
         log.info { "Creating a new, empty database in: ${this.vfs}" }
-        this.writeAheadLog.createFileIfNotExists()
+        this.writeAheadLog.initialize()
         this.storeManager.initialize(isEmptyDatabase = true)
         return 0L
     }

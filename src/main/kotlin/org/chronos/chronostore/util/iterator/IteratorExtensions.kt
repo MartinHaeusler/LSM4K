@@ -45,4 +45,12 @@ object IteratorExtensions {
         return Iterators.peekingIterator(this.iterator())
     }
 
+    fun <T> PeekingIterator<T>.peekOrNull(): T? {
+        return if (this.hasNext()) {
+            this.peek()
+        } else {
+            null
+        }
+    }
+
 }

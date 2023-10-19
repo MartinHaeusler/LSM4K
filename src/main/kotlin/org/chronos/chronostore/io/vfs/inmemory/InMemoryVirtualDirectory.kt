@@ -1,6 +1,7 @@
 package org.chronos.chronostore.io.vfs.inmemory
 
 import org.chronos.chronostore.io.vfs.VirtualDirectory
+import org.chronos.chronostore.io.vfs.VirtualFileSystemElement
 import org.chronos.chronostore.io.vfs.VirtualReadWriteFile
 import java.io.File
 
@@ -31,6 +32,16 @@ class InMemoryVirtualDirectory : VirtualDirectory, InMemoryVirtualFileSystemElem
 
     override fun list(): List<String> {
         return this.fileSystem.listChildrenOfPath(this.path)
+    }
+
+    override fun listElements(): List<VirtualFileSystemElement> {
+        return this.list().map {
+            if (this.fileSystem.isFile(this.path + "/" + it)) {
+                this.file(it)
+            } else {
+                this.directory(it)
+            }
+        }
     }
 
     override fun mkdirs() {
