@@ -1,8 +1,6 @@
-package org.chronos.chronostore.wal2
+package org.chronos.chronostore.api.exceptions
 
-import org.chronos.chronostore.api.exceptions.ChronoStoreException
-
-class WriteAheadLogEntryCorruptedException : ChronoStoreException {
+class TruncatedInputException: ChronoStoreException {
 
     constructor() : super()
 

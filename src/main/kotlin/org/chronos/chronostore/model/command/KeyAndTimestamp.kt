@@ -1,7 +1,7 @@
 package org.chronos.chronostore.model.command
 
 import org.chronos.chronostore.util.bytes.Bytes
-import org.chronos.chronostore.util.bytes.Bytes.Companion.write
+import org.chronos.chronostore.util.bytes.Bytes.Companion.writeBytesWithoutSize
 import org.chronos.chronostore.util.IOExtensions.withInputStream
 import org.chronos.chronostore.util.LittleEndianExtensions.readLittleEndianInt
 import org.chronos.chronostore.util.LittleEndianExtensions.readLittleEndianIntOrNull
@@ -68,7 +68,7 @@ data class KeyAndTimestamp(
 
     fun writeTo(outputStream: OutputStream){
         outputStream.writeLittleEndianInt(this.key.size)
-        outputStream.write(this.key)
+        outputStream.writeBytesWithoutSize(this.key)
         outputStream.writeLittleEndianLong(this.timestamp)
     }
 

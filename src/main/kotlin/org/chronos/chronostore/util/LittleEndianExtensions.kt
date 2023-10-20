@@ -1,5 +1,6 @@
 package org.chronos.chronostore.util
 
+import org.chronos.chronostore.api.exceptions.TruncatedInputException
 import org.chronos.chronostore.util.IOExtensions.readByte
 import java.io.EOFException
 import java.io.InputStream
@@ -45,7 +46,7 @@ object LittleEndianExtensions {
     @JvmStatic
     fun InputStream.readLittleEndianLong(): Long {
         return readLittleEndianLongOrNull()
-            ?: throw EOFException("End of input has been reached!")
+            ?: throw TruncatedInputException("End of input has been reached!")
     }
 
     @JvmStatic
@@ -65,7 +66,7 @@ object LittleEndianExtensions {
     @JvmStatic
     fun InputStream.readLittleEndianDouble(): Double {
         return this.readLittleEndianDoubleOrNull()
-            ?: throw EOFException("End of input has been reached!")
+            ?: throw TruncatedInputException("End of input has been reached!")
     }
 
     @JvmStatic
@@ -85,7 +86,7 @@ object LittleEndianExtensions {
     @JvmStatic
     fun InputStream.readLittleEndianInt(): Int {
         return this.readLittleEndianIntOrNull()
-            ?: throw EOFException("End of input has been reached!")
+            ?: throw TruncatedInputException("End of input has been reached!")
     }
 
     @JvmStatic

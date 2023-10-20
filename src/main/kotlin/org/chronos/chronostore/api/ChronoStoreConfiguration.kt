@@ -94,4 +94,27 @@ class ChronoStoreConfiguration {
      */
     var fileHeaderCacheSize: BinarySize? = (Runtime.getRuntime().maxMemory() / 100).toInt().Bytes
 
+    /**
+     * The maximum disk footprint of a single Write-Ahead-Log file.
+     *
+     * Please note that this is a **soft limit**. No more data may be written
+     * to a Write-Ahead-Log file if it reaches this limit, but transactions are
+     * always written as a whole into these files. If a transaction happens to
+     * be very large, the file will be made larger to accommodate the contents
+     * of the transaction.
+     *
+     * Write-Ahead-Log files are cleaned up over time and do not accumulate
+     * indefinitely.
+     *
+     * Defaults to 128 MiB, must be greater than 0.
+     */
+    var maxWriteAheadLogFileSize: BinarySize = 128.MiB
+
+
+    init {
+        require(this.maxWriteAheadLogFileSize.bytes > 0) {
+            "Cannot use a negative value for 'maxWriteAheadLogFileSize'!"
+        }
+    }
+
 }

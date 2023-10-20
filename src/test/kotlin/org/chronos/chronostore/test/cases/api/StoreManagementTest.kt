@@ -272,16 +272,10 @@ class StoreManagementTest {
                 tx.commit()
             }
 
-            val rootLevelElements = vfs.listRootLevelElements()
-            val storeDir = rootLevelElements.asSequence()
-                .filterIsInstance<VirtualDirectory>()
-                // it must not be a system store
-                .filterNot { it.name.startsWith("_") }
-                .singleOrNull()
+            val storeDir = vfs.directory("data")
 
             // since we've performed two flushes, we should have two files in the VFS.
             expectThat(storeDir)
-                .isNotNull()
                 .get { this.list() }
                 .filter { it.endsWith(LSMTreeFile.FILE_EXTENSION) }
                 .hasSize(2)

@@ -1,7 +1,7 @@
 package org.chronos.chronostore.io.format
 
 import org.chronos.chronostore.util.bytes.Bytes
-import org.chronos.chronostore.util.bytes.Bytes.Companion.write
+import org.chronos.chronostore.util.bytes.Bytes.Companion.writeBytesWithoutSize
 import org.chronos.chronostore.util.LittleEndianExtensions.readLittleEndianInt
 import org.chronos.chronostore.util.LittleEndianExtensions.readLittleEndianLong
 import org.chronos.chronostore.util.LittleEndianExtensions.writeLittleEndianInt
@@ -91,7 +91,7 @@ class FileMetaData(
     fun writeTo(outputStream: OutputStream) {
         outputStream.writeLittleEndianInt(this.settings.compression.algorithmIndex)
         outputStream.writeLittleEndianInt(this.settings.maxBlockSize.bytes.toInt())
-        outputStream.write(fileUUID.toBytes())
+        outputStream.writeBytesWithoutSize(fileUUID.toBytes())
         PrefixIO.writeBytes(outputStream, this.minKey ?: Bytes.EMPTY)
         PrefixIO.writeBytes(outputStream, this.maxKey ?: Bytes.EMPTY)
         outputStream.writeLittleEndianLong(this.minTimestamp ?: 0)

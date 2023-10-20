@@ -38,6 +38,24 @@ class StoreImpl(
         fileHeaderCache = fileHeaderCache,
     )
 
+    override val highWatermarkTimestamp: Timestamp?
+        get() = this.tree.latestReceivedCommitTimestamp
+
+    override val lowWatermarkTimestamp: Timestamp?
+        get() {
+            if(!this.hasInMemoryChanges()){
+                // we have no in-memory changes, therefore ALL data belonging
+                // to this store has been persisted. We have nothing to
+                // contribute to the low watermark.
+                return null
+            }
+            return this.tree.latestPersistedCommitTimestamp
+        }
+
+    override fun hasInMemoryChanges(): Boolean {
+        return this.tree.inMemorySize.bytes > 0L
+    }
+
     override fun toString(): String {
         return "Store[${this.name}]"
     }

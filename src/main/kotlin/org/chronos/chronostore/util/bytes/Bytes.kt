@@ -59,7 +59,7 @@ sealed interface Bytes :
             this.put(bytes.toSharedArray())
         }
 
-        fun OutputStream.write(bytes: Bytes) {
+        fun OutputStream.writeBytesWithoutSize(bytes: Bytes) {
             // we assume here that the output stream is somehow
             // buffered. If it is buffered, it's more efficient
             // to put in the bytes one by one as it avoids

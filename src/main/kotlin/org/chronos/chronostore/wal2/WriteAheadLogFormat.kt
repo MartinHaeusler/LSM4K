@@ -1,5 +1,7 @@
 package org.chronos.chronostore.wal2
 
+import org.chronos.chronostore.api.exceptions.TruncatedInputException
+import org.chronos.chronostore.api.exceptions.WriteAheadLogEntryCorruptedException
 import org.chronos.chronostore.io.format.CompressionAlgorithm
 import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.util.IOExtensions.withInputStream
@@ -15,7 +17,7 @@ import org.chronos.chronostore.util.TransactionId
 import org.chronos.chronostore.util.UUIDExtensions.readUUIDFrom
 import org.chronos.chronostore.util.UUIDExtensions.toBytes
 import org.chronos.chronostore.util.bytes.Bytes
-import org.chronos.chronostore.util.bytes.Bytes.Companion.write
+import org.chronos.chronostore.util.bytes.Bytes.Companion.writeBytesWithoutSize
 import org.chronos.chronostore.wal.WriteAheadLogTransaction
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
@@ -136,10 +138,10 @@ object WriteAheadLogFormat {
         compressionAlgorithm: CompressionAlgorithm,
         out: OutputStream,
     ) {
-        out.write(tx.transactionId.toBytes())
+        PrefixIO.writeBytes(out, tx.transactionId.toBytes())
         out.writeLittleEndianLong(tx.commitTimestamp)
         out.writeLittleEndianInt(compressionAlgorithm.algorithmIndex)
-        out.write(tx.commitMetadata)
+        PrefixIO.writeBytes(out, tx.commitMetadata)
     }
 
     private fun writeBody(
@@ -166,15 +168,18 @@ object WriteAheadLogFormat {
             }
             baos.toByteArray()
         }
-        val compressedBody = compressionAlgorithm.compress(bodyBytes)
-        PrefixIO.writeBytes(out, Bytes.wrap(compressedBody))
-        out.write(compressedBody)
+        val compressedBody = if(bodyBytes.isEmpty()){
+            Bytes.EMPTY
+        }else{
+            Bytes.wrap(compressionAlgorithm.compress(bodyBytes))
+        }
+        PrefixIO.writeBytes(out, compressedBody)
         return crc32(compressedBody)
     }
 
     private fun writeFooter(checksum: Long, out: OutputStream) {
         out.writeLittleEndianLong(checksum)
-        out.write(ENTRY_MAGIC_BYTES)
+        out.writeBytesWithoutSize(ENTRY_MAGIC_BYTES)
     }
 
 
@@ -189,15 +194,17 @@ object WriteAheadLogFormat {
      *
      * @return The transaction, or `null` if [input] has no more data to read.
      */
-    fun readTransactionOrNull(
+    fun readTransaction(
         input: InputStream
     ): WriteAheadLogTransaction? {
-        val header = readHeaderOrNull(input)
-            ?: return null
+        val header = readHeader(input)
         // read the body
         val compressedBody = PrefixIO.readBytes(input)
         val expectedChecksum = input.readLittleEndianLong()
         val magicBytes = Bytes.wrap(input.readNBytes(ENTRY_MAGIC_BYTES.size))
+        if(magicBytes.size < ENTRY_MAGIC_BYTES.size){
+            throw TruncatedInputException("WAL entry has been truncated!")
+        }
         checkForValidity(magicBytes == ENTRY_MAGIC_BYTES) {
             "Error reading WAL entry: The magic byte sequence at the end doesn't match (expected: ${magicBytes}, found: ${magicBytes})!" +
                 " The entry is corrupted or truncated!"
@@ -208,7 +215,11 @@ object WriteAheadLogFormat {
                 " The entry is corrupted or truncated!"
         }
         // decompress and decode the body
-        val decompressedBody = header.compressionAlgorithm.decompress(compressedBody)
+        val decompressedBody = if (compressedBody.isEmpty()) {
+            Bytes.EMPTY
+        } else {
+            header.compressionAlgorithm.decompress(compressedBody)
+        }
         val storeIdToCommands = decompressedBody.withInputStream(this::decodeBody)
         return WriteAheadLogTransaction(
             transactionId = header.transactionId,
@@ -218,10 +229,9 @@ object WriteAheadLogFormat {
         )
     }
 
-    private fun readHeaderOrNull(input: InputStream): Header? {
-        val headerBytes = PrefixIO.readBytesOrNull(input)
-            ?: return null // input has no more data
-        val transactionId = readUUIDFrom(headerBytes)
+    private fun readHeader(input: InputStream): Header {
+        val transactionIdBytes = PrefixIO.readBytes(input)
+        val transactionId = readUUIDFrom(transactionIdBytes)
         val commitTimestamp = input.readLittleEndianLong()
         checkForValidity(commitTimestamp >= 0) {
             "Error reading WAL entry header: commit timestamp must not be negative (${commitTimestamp})!" +
@@ -243,9 +253,9 @@ object WriteAheadLogFormat {
         while (true) {
             var storeId: StoreId?
             var commands: List<Command>? = null
-            val actualChecksum = CheckedInputStream(inputStream, CRC32()).use { checkedIn->
+            val actualChecksum = CheckedInputStream(inputStream, CRC32()).use { checkedIn ->
                 storeId = StoreId.readFromOrNull(checkedIn)
-                if(storeId == null){
+                if (storeId == null) {
                     // input stream has no more data
                     return@use -1L
                 }
@@ -259,12 +269,12 @@ object WriteAheadLogFormat {
 
                 return@use checkedIn.checksum.value
             }
-            if(storeId == null){
+            if (storeId == null) {
                 // no more entries in the input
                 break
             }
             val expectedChecksum = inputStream.readLittleEndianLong()
-            checkForValidity(actualChecksum == expectedChecksum){
+            checkForValidity(actualChecksum == expectedChecksum) {
                 "Error reading WAL body entry for store '${storeId}': The checksum doesn't match (expected: ${expectedChecksum}, found: ${actualChecksum})!" +
                     " The entry is corrupted or truncated!"
             }

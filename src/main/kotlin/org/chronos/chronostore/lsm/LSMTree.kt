@@ -134,6 +134,29 @@ class LSMTree(
     val allFiles: List<LSMTreeFile>
         get() = this.lock.read { this.fileList.toList() }
 
+    val latestReceivedCommitTimestamp: Timestamp?
+        get() {
+            this.lock.read {
+                // first, check if we have commits in memory.
+                val latestInMemoryCommitTimestamp = this.inMemoryTree.keys.maxOfOrNull { it.timestamp }
+                if(latestInMemoryCommitTimestamp != null){
+                    return latestInMemoryCommitTimestamp
+                }
+                // we have no in-memory changes, so we have
+                // to check our latest persisted timestamp
+                return this.latestPersistedCommitTimestamp
+            }
+        }
+
+    val latestPersistedCommitTimestamp: Timestamp?
+        get() {
+            this.lock.read {
+                // we don't have in-memory commits, check the files.
+                // IMPORTANT: we assume here that the highest timestamp is in the file with the HIGHEST index!
+                return this.fileList.lastOrNull()?.header?.metaData?.maxTimestamp
+            }
+        }
+
     fun get(keyAndTimestamp: KeyAndTimestamp): Command? {
         this.lock.read {
             // first, check the in-memory tree

@@ -4,7 +4,7 @@ import org.chronos.chronostore.util.IOExtensions.withInputStream
 import org.chronos.chronostore.util.bits.BitTricks.readStableLong
 import org.chronos.chronostore.util.bits.BitTricks.writeStableLong
 import org.chronos.chronostore.util.bytes.Bytes
-import org.chronos.chronostore.util.bytes.Bytes.Companion.write
+import org.chronos.chronostore.util.bytes.Bytes.Companion.writeBytesWithoutSize
 import java.io.ByteArrayOutputStream
 
 data class InverseQualifiedTemporalKey(
@@ -35,7 +35,7 @@ data class InverseQualifiedTemporalKey(
         val output = ByteArrayOutputStream(Timestamp.SIZE_BYTES + 16 + userKey.size)
         output.writeStableLong(this.timestamp)
         this.storeId.writeTo(output)
-        output.write(this.userKey)
+        output.writeBytesWithoutSize(this.userKey)
         return Bytes.wrap(output.toByteArray())
     }
 

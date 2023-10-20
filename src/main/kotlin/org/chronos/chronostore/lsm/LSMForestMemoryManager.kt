@@ -13,6 +13,7 @@ import org.chronos.chronostore.util.log.LogMarkers
 import org.chronos.chronostore.util.statistics.ChronoStoreStatistics
 import java.util.concurrent.Future
 import java.util.concurrent.locks.ReentrantReadWriteLock
+import kotlin.concurrent.read
 import kotlin.concurrent.write
 import kotlin.math.min
 

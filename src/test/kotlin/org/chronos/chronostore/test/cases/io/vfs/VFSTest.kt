@@ -9,6 +9,8 @@ import org.chronos.chronostore.io.vfs.VirtualReadWriteFile.Companion.withOverWri
 import org.chronos.chronostore.test.util.VFSMode
 import org.chronos.chronostore.test.util.VirtualFileSystemTest
 import org.chronos.chronostore.util.IOExtensions.withInputStream
+import org.chronos.chronostore.util.bytes.BasicBytes
+import org.chronos.chronostore.util.bytes.Bytes.Companion.writeBytesWithoutSize
 import org.junit.jupiter.api.Assumptions
 import strikt.api.expect
 import strikt.api.expectThat
@@ -136,6 +138,22 @@ class VFSTest {
     }
 
     @VirtualFileSystemTest
+    fun canTruncateFile(mode: VFSMode) {
+        mode.withVFS { vfs ->
+            val file = vfs.file("test.txt")
+            file.append { out ->
+                out.writeBytesWithoutSize(BasicBytes("lorem ipsum dolor sit amet"))
+            }
+            file.truncateAfter(11)
+
+            expectThat(file).get { this.length }.isEqualTo(11)
+
+            val content = file.withInputStream { input -> input.readAllBytes() }
+            expectThat(String(content)).isEqualTo("lorem ipsum")
+        }
+    }
+
+    @VirtualFileSystemTest
     fun canUseInMemoryRandomFileAccessDriver(mode: VFSMode) {
         val driverFactory = InMemoryFileDriver.Factory
         runRandomFileAccessDriverTest(mode, driverFactory)
@@ -156,7 +174,6 @@ class VFSTest {
         val driverFactory = MemorySegmentFileDriver.Factory
         runRandomFileAccessDriverTest(mode, driverFactory)
     }
-
 
     private fun runRandomFileAccessDriverTest(mode: VFSMode, driverFactory: RandomFileAccessDriverFactory) {
         mode.withVFS { vfs ->
@@ -182,6 +199,5 @@ class VFSTest {
                 }
             }
         }
-
     }
 }

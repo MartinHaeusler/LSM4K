@@ -65,7 +65,7 @@ class ChronoStoreImpl(
 
     init {
         val walFile = this.vfs.directory(ChronoStoreStructure.WRITE_AHEAD_LOG_DIR_NAME)
-        this.writeAheadLog = WriteAheadLog2(walFile, this.configuration.compressionAlgorithm)
+        this.writeAheadLog = WriteAheadLog2(walFile, this.configuration.compressionAlgorithm, this.configuration.maxWriteAheadLogFileSize.bytes)
         val currentTimestamp = if (!walFile.exists()) {
             // The WAL file doesn't exist. It's a new, empty database.
             // We don't need a recovery, but we have to "set up camp".
@@ -95,17 +95,16 @@ class ChronoStoreImpl(
 
     private fun createNewEmptyDatabase(): Timestamp {
         log.info { "Creating a new, empty database in: ${this.vfs}" }
-        this.writeAheadLog.initialize()
         this.storeManager.initialize(isEmptyDatabase = true)
         return 0L
     }
 
     private fun performStartupRecovery(): Timestamp {
         log.info { "Opening database in: ${this.vfs}" }
-        // remove any incomplete transactions from the WAL file.
-        this.writeAheadLog.performStartupRecoveryCleanup()
         // initialize the store manager so that we can read from it.
         this.storeManager.initialize(isEmptyDatabase = false)
+        // remove any incomplete transactions from the WAL file.
+        this.writeAheadLog.performStartupRecoveryCleanup(this.storeManager::getHighWatermarkTimestamp)
         val allStores = this.storeManager.getAllStoresInternal()
         // with the store info, replay the changes found in the WAL.
         log.info { "Located ${allStores.size} stores belonging to this database." }
@@ -123,7 +122,7 @@ class ChronoStoreImpl(
         var totalTransactions = 0
         var missingTransactions = 0
         var maxTimestamp = 0L
-        this.writeAheadLog.readWal { walTransaction ->
+        this.writeAheadLog.readWalStreaming { walTransaction ->
             totalTransactions++
             maxTimestamp = max(maxTimestamp, walTransaction.commitTimestamp)
             var changed = false

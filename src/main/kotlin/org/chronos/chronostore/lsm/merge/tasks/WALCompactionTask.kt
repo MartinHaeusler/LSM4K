@@ -21,9 +21,8 @@ class WALCompactionTask(
 
     override fun run(monitor: TaskMonitor) {
         monitor.reportStarted("WAL Compaction")
-
-        val idToStore = (this.storeManager as StoreManagerImpl).getAllStoresInternal().associateBy(Store::name)
-        this.writeAheadLog.compactWal { transaction -> isFullyPersisted(transaction, idToStore) }
+        val lowWatermark = this.storeManager.getLowWatermarkTimestamp()
+        this.writeAheadLog.compactWal(lowWatermark)
         monitor.reportDone()
     }
 

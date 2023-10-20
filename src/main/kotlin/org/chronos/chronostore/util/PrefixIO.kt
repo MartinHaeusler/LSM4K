@@ -1,6 +1,7 @@
 package org.chronos.chronostore.util
 
-import org.chronos.chronostore.util.bytes.Bytes.Companion.write
+import org.chronos.chronostore.api.exceptions.TruncatedInputException
+import org.chronos.chronostore.util.bytes.Bytes.Companion.writeBytesWithoutSize
 import org.chronos.chronostore.util.LittleEndianExtensions.readLittleEndianInt
 import org.chronos.chronostore.util.LittleEndianExtensions.writeLittleEndianInt
 import org.chronos.chronostore.util.bytes.Bytes
@@ -12,12 +13,16 @@ object PrefixIO {
 
     fun writeBytes(outputStream: OutputStream, bytes: Bytes) {
         outputStream.writeLittleEndianInt(bytes.size)
-        outputStream.write(bytes)
+        outputStream.writeBytesWithoutSize(bytes)
     }
 
     fun readBytes(inputStream: InputStream): Bytes {
         val length = inputStream.readLittleEndianInt()
         val array = inputStream.readNBytes(length)
+        if(array.size < length){
+            // not enough bytes in the stream
+            throw TruncatedInputException("Attempted to read ${length} bytes but got only ${array.size}!")
+        }
         return Bytes.wrap(array)
     }
 

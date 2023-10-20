@@ -19,7 +19,7 @@ class DiskBasedVirtualDirectory(
     override fun listElements(): List<VirtualFileSystemElement> {
         return this.file.listFiles()?.map {
             if (it.isFile) {
-                DiskBasedVirtualFile(this, it)
+                DiskBasedVirtualReadWriteFile(this, it)
             } else {
                 DiskBasedVirtualDirectory(this, it)
             }

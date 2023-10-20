@@ -2,7 +2,7 @@ package org.chronos.chronostore.wal
 
 import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.util.*
-import org.chronos.chronostore.util.bytes.Bytes.Companion.write
+import org.chronos.chronostore.util.bytes.Bytes.Companion.writeBytesWithoutSize
 import org.chronos.chronostore.util.LittleEndianExtensions.readLittleEndianLong
 import org.chronos.chronostore.util.LittleEndianExtensions.writeLittleEndianLong
 import org.chronos.chronostore.util.UUIDExtensions.readUUIDFrom
@@ -151,7 +151,7 @@ sealed interface WriteAheadLogEntry {
 
         override fun writeTo(outputStream: OutputStream) {
             outputStream.write(TYPE_BYTE)
-            outputStream.write(this.transactionId.toBytes())
+            outputStream.writeBytesWithoutSize(this.transactionId.toBytes())
         }
 
     }
@@ -179,7 +179,7 @@ sealed interface WriteAheadLogEntry {
 
         override fun writeTo(outputStream: OutputStream) {
             outputStream.write(TYPE_BYTE)
-            outputStream.write(transactionId.toBytes())
+            outputStream.writeBytesWithoutSize(transactionId.toBytes())
             storeId.writeTo(outputStream)
             PrefixIO.writeBytes(outputStream, this.key)
             PrefixIO.writeBytes(outputStream, this.value)
@@ -208,7 +208,7 @@ sealed interface WriteAheadLogEntry {
 
         override fun writeTo(outputStream: OutputStream) {
             outputStream.write(TYPE_BYTE)
-            outputStream.write(transactionId.toBytes())
+            outputStream.writeBytesWithoutSize(transactionId.toBytes())
             storeId.writeTo(outputStream)
             PrefixIO.writeBytes(outputStream, this.key)
         }
@@ -243,7 +243,7 @@ sealed interface WriteAheadLogEntry {
 
         override fun writeTo(outputStream: OutputStream) {
             outputStream.write(TYPE_BYTE)
-            outputStream.write(transactionId.toBytes())
+            outputStream.writeBytesWithoutSize(transactionId.toBytes())
             outputStream.writeLittleEndianLong(commitTimestamp)
             PrefixIO.writeBytes(outputStream, commitMetadata)
         }

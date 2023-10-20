@@ -22,6 +22,12 @@ interface Store {
 
     val createdByTransactionId: TransactionId
 
+    val lowWatermarkTimestamp: Timestamp?
+
+    val highWatermarkTimestamp: Timestamp?
+
+    fun hasInMemoryChanges(): Boolean
+
     val isTerminated: Boolean
         get() = this.validTo != null
 

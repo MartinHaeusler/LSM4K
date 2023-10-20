@@ -6,7 +6,7 @@ import org.chronos.chronostore.io.vfs.VirtualFileSystemElement
 import org.chronos.chronostore.io.vfs.VirtualReadWriteFile
 import org.chronos.chronostore.util.bytes.BasicBytes
 import org.chronos.chronostore.util.bytes.Bytes
-import org.chronos.chronostore.util.bytes.Bytes.Companion.write
+import org.chronos.chronostore.util.bytes.Bytes.Companion.writeBytesWithoutSize
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.IOException
@@ -209,6 +209,16 @@ class InMemoryVirtualFileSystem : VirtualFileSystem {
         return path.removePrefix(PATH_PREFIX).substringAfterLast(File.separatorChar, missingDelimiterValue = "")
     }
 
+    fun truncateFile(path: String, bytesToKeep: Long) {
+        require(bytesToKeep >= 0) { "Argument 'bytesToKeep' (${bytesToKeep}) must not be negative!" }
+        require(bytesToKeep <= Int.MAX_VALUE) { "Argument 'bytesToKeep' (${bytesToKeep}) is too large for the in-memory Virtual File System!" }
+        this.fileSystemLock.withLock {
+            check(this.isFile(path)) { "The given path is not an existing file: '${path}'!" }
+            this.fileContents[path] = Bytes.wrap(this.fileContents.getValue(path).slice(0, bytesToKeep.toInt()).toOwnedArray())
+        }
+    }
+
+
     fun overwrite(path: String, bytes: Bytes) {
         // overwrites can be made atomic by creating a temporary secondary file,
         // writing the desired content to the secondary file, and renaming the
@@ -228,7 +238,7 @@ class InMemoryVirtualFileSystem : VirtualFileSystem {
         }
         val outputStream = ByteArrayOutputStream()
         val existingContent = this.getFileContentOrNull(path) ?: Bytes.EMPTY
-        outputStream.write(existingContent)
+        outputStream.writeBytesWithoutSize(existingContent)
         return ObservableOutputStream(outputStream) {
             this.overwrite(path, Bytes.wrap(outputStream.toByteArray()))
         }

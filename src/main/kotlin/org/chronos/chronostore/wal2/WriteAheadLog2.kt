@@ -1,6 +1,9 @@
 package org.chronos.chronostore.wal2
 
+import com.google.common.io.CountingInputStream
 import mu.KotlinLogging
+import org.chronos.chronostore.api.exceptions.TruncatedInputException
+import org.chronos.chronostore.api.exceptions.WriteAheadLogEntryCorruptedException
 import org.chronos.chronostore.io.format.CompressionAlgorithm
 import org.chronos.chronostore.io.structure.ChronoStoreStructure.WRITE_AHEAD_LOG_FILE_PREFIX
 import org.chronos.chronostore.io.structure.ChronoStoreStructure.WRITE_AHEAD_LOG_FILE_SUFFIX
@@ -8,15 +11,18 @@ import org.chronos.chronostore.io.vfs.VirtualDirectory
 import org.chronos.chronostore.io.vfs.VirtualFile
 import org.chronos.chronostore.io.vfs.VirtualReadWriteFile
 import org.chronos.chronostore.util.IOExtensions.withInputStream
+import org.chronos.chronostore.util.StreamExtensions.hasNext
 import org.chronos.chronostore.util.Timestamp
 import org.chronos.chronostore.util.iterator.IteratorExtensions.peekOrNull
 import org.chronos.chronostore.util.iterator.IteratorExtensions.toPeekingIterator
 import org.chronos.chronostore.wal.WriteAheadLogTransaction
 import java.io.InputStream
 import java.io.OutputStream
+import java.io.PushbackInputStream
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.concurrent.read
 import kotlin.concurrent.write
+import kotlin.experimental.and
 
 
 /**
@@ -41,6 +47,11 @@ import kotlin.concurrent.write
  * highest timestamp in a WAL file is less than or equal to the low watermark,
  * we can safely discard the WAL file because all of its data has already been
  * transferred to and been persisted by the actual stores.
+ *
+ * @param directory The directory where the WAL files are stored.
+ * @param compressionAlgorithm The compression algorithm to use when creating new WAL files. Existing WAL files may use other algorithms.
+ * @param maxWalFileSizeBytes The maximum size for a single WAL file (soft limit).
+ *
  */
 class WriteAheadLog2(
     private val directory: VirtualDirectory,
@@ -56,31 +67,19 @@ class WriteAheadLog2(
 
     }
 
-    @Transient
-    private var initialized: Boolean = false
-
     private val lock = ReentrantReadWriteLock(true)
 
     private val walFiles = mutableListOf<WALFile>()
 
     init {
         require(maxWalFileSizeBytes > 0) { "Argument 'maxWalFileSizeBytes' (${maxWalFileSizeBytes}) must be positive!" }
-    }
-
-    fun initialize() {
-        this.lock.write {
-            if (initialized) {
-                return
-            }
-            initialized = true
-            if (!this.directory.exists()) {
-                this.directory.mkdirs()
-            }
-            this.directory.listFiles().asSequence()
-                .mapNotNull(::createWALFileOrNull)
-                .sortedBy { it.minTimestamp }
-                .forEach(walFiles::add)
+        if (!this.directory.exists()) {
+            this.directory.mkdirs()
         }
+        this.directory.listFiles().asSequence()
+            .mapNotNull(::createWALFileOrNull)
+            .sortedBy { it.minTimestamp }
+            .forEach(walFiles::add)
     }
 
     private fun createWALFileOrNull(file: VirtualFile): WALFile? {
@@ -89,7 +88,7 @@ class WriteAheadLog2(
         }
         val match = FILE_NAME_REGEX.matchEntire(file.name)
             ?: return null
-        val sequenceNumber = match.groups[2]?.value?.toLong()
+        val sequenceNumber = match.groups[1]?.value?.toLong()
             ?: return null
         return WALFile(file, sequenceNumber)
     }
@@ -103,7 +102,6 @@ class WriteAheadLog2(
      * @param walTransaction The transaction to add to the file.
      */
     fun addCommittedTransaction(walTransaction: WriteAheadLogTransaction) {
-        this.assertInitialized()
         this.lock.write {
             val targetFile = getOrCreateTargetWALFileForTransactionTimestamp(walTransaction.commitTimestamp)
             targetFile.append { out ->
@@ -138,20 +136,21 @@ class WriteAheadLog2(
      * @param consumer The consumer function which will receive the transactions in the write-ahead log for further processing.
      *                 The transactions will be provided to the consumer in a lazy fashion, in ascending timestamp order.
      */
-    fun readWal(consumer: (WriteAheadLogTransaction) -> Unit) {
-        this.assertInitialized()
+    fun readWalStreaming(consumer: (WriteAheadLogTransaction) -> Unit) {
         this.lock.read {
             var previousTxCommitTimestamp = -1L
             for (walFile in this.walFiles) {
                 walFile.withInputStream { input ->
-                    while (true) {
-                        val tx = WriteAheadLogFormat.readTransactionOrNull(input)
-                            ?: break
-                        if (tx.commitTimestamp <= previousTxCommitTimestamp) {
-                            throw WriteAheadLogEntryCorruptedException("Found non-ascending commit timestamp in the WAL! The WAL file is corrupted!")
+                    PushbackInputStream(input).use { pbIn ->
+                        while (pbIn.hasNext()) {
+                            val tx = WriteAheadLogFormat.readTransaction(pbIn)
+                                ?: break
+                            if (tx.commitTimestamp <= previousTxCommitTimestamp) {
+                                throw WriteAheadLogEntryCorruptedException("Found non-ascending commit timestamp in the WAL! The WAL file is corrupted!")
+                            }
+                            consumer(tx)
+                            previousTxCommitTimestamp = tx.commitTimestamp
                         }
-                        consumer(tx)
-                        previousTxCommitTimestamp = tx.commitTimestamp
                     }
                 }
             }
@@ -175,7 +174,6 @@ class WriteAheadLog2(
      *                              less than or equal to the watermark.
      */
     fun compactWal(lowWatermarkTimestamp: Timestamp) {
-        this.assertInitialized()
         this.lock.write {
             val iterator = this.walFiles.iterator().toPeekingIterator()
             while (iterator.hasNext()) {
@@ -183,7 +181,7 @@ class WriteAheadLog2(
                 val nextWALFile = iterator.peekOrNull()
                     ?: break // the currentWALFile is actually the LAST file in our WAL, don't drop it.
 
-                if(currentWALFile.minTimestamp < lowWatermarkTimestamp && nextWALFile.minTimestamp < lowWatermarkTimestamp){
+                if (currentWALFile.minTimestamp < lowWatermarkTimestamp && nextWALFile.minTimestamp < lowWatermarkTimestamp) {
                     // the current file is below the watermark, because the HIGHEST timestamp in this file is strictly
                     // smaller than the min timestamp of the next file. Since that is below the watermark, we DEFINITELY
                     // are below the watermark.
@@ -200,34 +198,45 @@ class WriteAheadLog2(
      *
      * In particular, this method will remove any invalid or incomplete transactions from the WAL.
      */
-    fun performStartupRecoveryCleanup() {
-        this.assertInitialized()
+    fun performStartupRecoveryCleanup(getHighWatermarkTimestamp: () -> Timestamp) {
         this.lock.write {
-            this.file.deleteOverWriterFileIfExists()
-            this.file.createOverWriter().use { overWriter ->
-                // TODO [PERFORMANCE]: rewriting the entire WAL is quite inefficient.
-                val output = overWriter.outputStream
-                this.file.withInputStream { input ->
-                    while (true) {
-                        try {
-                            val tx = WriteAheadLogFormat.readTransactionOrNull(input)
-                                ?: break
-                            WriteAheadLogFormat.writeTransaction(tx, this.compressionAlgorithm, output)
-                        } catch (e: WriteAheadLogEntryCorruptedException) {
-                            log.warn { "Found corrupted or incomplete WAL entry. Cleaning WAL transactions..." }
-                            // entry is corrupted, stop reading
-                            break
+            for ((index, walFile) in this.walFiles.withIndex()) {
+                // we tolerate incomplete trailing writes on the last file.
+                val isLastFile = index == this.walFiles.lastIndex
+
+                walFile.withInputStream { input ->
+                    PushbackInputStream(input).use { pbIn ->
+                        CountingInputStream(pbIn).use { cIn ->
+                            var startOfBlock: Long
+                            var lastSuccessfulTransactionTimestamp = -1L
+                            while (pbIn.hasNext()) {
+                                startOfBlock = cIn.count
+                                try {
+                                    val tx = WriteAheadLogFormat.readTransaction(cIn)
+                                        ?: break // we're done reading this file
+                                    lastSuccessfulTransactionTimestamp = tx.commitTimestamp
+                                } catch (e: TruncatedInputException) {
+                                    if (isLastFile) {
+                                        // the last file in our WAL may become truncated if the last
+                                        // commit was interrupted by process kill or power outage. We
+                                        // can tolerate that, as long as no store has ever seen a
+                                        // higher timestamp than the previous entry.
+                                        if (getHighWatermarkTimestamp() > lastSuccessfulTransactionTimestamp) {
+                                            throw WriteAheadLogEntryCorruptedException("WAL file '${walFile.file.path}' is has been truncated and cannot be read!")
+                                        }
+                                        // truncate the file
+                                        walFile.file.truncateAfter(startOfBlock)
+                                    } else {
+                                        // for all other WAL files (which are not the last one) we cannot tolerate missing data.
+                                        throw WriteAheadLogEntryCorruptedException("WAL file '${walFile.file.path}' is has been truncated and cannot be read!")
+                                    }
+                                }
+                            }
                         }
                     }
                 }
-                overWriter.commit()
             }
         }
-    }
-
-    @Suppress("NOTHING_TO_INLINE")
-    private inline fun assertInitialized() {
-        check(this.initialized) { "WriteAheadLog has not been initialized yet!" }
     }
 
     private class WALFile(

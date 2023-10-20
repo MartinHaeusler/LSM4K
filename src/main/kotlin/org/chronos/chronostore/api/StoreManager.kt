@@ -18,6 +18,10 @@ interface StoreManager {
         return this.getStoreByNameOrNull(transaction, name) != null
     }
 
+    fun getHighWatermarkTimestamp(): Timestamp
+
+    fun getLowWatermarkTimestamp(): Timestamp
+
     fun createNewStore(transaction: ChronoStoreTransaction, name: StoreId, versioned: Boolean, validFrom: Timestamp): Store
 
     fun deleteStore(transaction: ChronoStoreTransaction, name: StoreId): Boolean

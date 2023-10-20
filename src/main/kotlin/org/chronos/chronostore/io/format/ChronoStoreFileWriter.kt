@@ -9,7 +9,7 @@ import org.chronos.chronostore.model.command.KeyAndTimestamp
 import org.chronos.chronostore.util.BloomFilterExtensions.toBytes
 import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.bytes.Bytes.Companion.put
-import org.chronos.chronostore.util.bytes.Bytes.Companion.write
+import org.chronos.chronostore.util.bytes.Bytes.Companion.writeBytesWithoutSize
 import org.chronos.chronostore.util.LittleEndianExtensions.writeLittleEndianInt
 import org.chronos.chronostore.util.LittleEndianExtensions.writeLittleEndianLong
 import org.chronos.chronostore.util.PositionTrackingStream
@@ -62,7 +62,7 @@ class ChronoStoreFileWriter : AutoCloseable {
         val wallClockTime = System.currentTimeMillis()
 
         // the file starts with the magic bytes (for later filetype recognition; fixed size)
-        this.outputStream.write(ChronoStoreFileFormat.FILE_MAGIC_BYTES)
+        this.outputStream.writeBytesWithoutSize(ChronoStoreFileFormat.FILE_MAGIC_BYTES)
         // the next 4 bytes are reserved for the file format version (fixed size)
         this.outputStream.writeLittleEndianInt(FILE_FORMAT_VERSION.versionInt)
 
@@ -222,7 +222,7 @@ class ChronoStoreFileWriter : AutoCloseable {
         )
 
         // write the "magic bytes" that demarcate the beginning of a block
-        this.outputStream.write(ChronoStoreFileFormat.BLOCK_MAGIC_BYTES)
+        this.outputStream.writeBytesWithoutSize(ChronoStoreFileFormat.BLOCK_MAGIC_BYTES)
         // write the total size of the block
         val computedTotalBlockSize = computeTotalBlockSize(
             blockMetaDataSize = blockMetaData.byteSize,
@@ -237,7 +237,7 @@ class ChronoStoreFileWriter : AutoCloseable {
         // write the size of the bloom filter
         this.outputStream.writeLittleEndianInt(bloomFilterBytes.size)
         // write the content of the bloom filter
-        this.outputStream.write(bloomFilterBytes)
+        this.outputStream.writeBytesWithoutSize(bloomFilterBytes)
         // write the compressed size of the block
         this.outputStream.writeLittleEndianInt(compressedSize)
         // write the compressed block bytes

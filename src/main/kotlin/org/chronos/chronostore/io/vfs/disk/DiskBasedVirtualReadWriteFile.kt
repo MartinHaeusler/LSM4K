@@ -10,6 +10,7 @@ import java.io.IOException
 import java.io.OutputStream
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
+import kotlin.math.min
 
 class DiskBasedVirtualReadWriteFile(
     parent: DiskBasedVirtualDirectory?,
@@ -43,7 +44,7 @@ class DiskBasedVirtualReadWriteFile(
     override fun <T> append(action: (OutputStream) -> T): T {
         val outputStream = FileOutputStream(file, true)
         try {
-            val bufferedOutputStream = outputStream.buffered()
+            val bufferedOutputStream = outputStream.unclosable().buffered()
             val result = action(bufferedOutputStream)
             bufferedOutputStream.flush()
             return result
@@ -64,6 +65,20 @@ class DiskBasedVirtualReadWriteFile(
     override fun deleteOverWriterFileIfExists() {
         val tempFile = File(file.path + ".tmp")
         Files.deleteIfExists(tempFile.toPath())
+    }
+
+    override fun truncateAfter(bytesToKeep: Long) {
+        require(bytesToKeep >= 0) { "Argument 'bytesToKeep' (${bytesToKeep}) must not be negative!" }
+        check(this.exists()) { "Cannot truncate file '${this.path}' because it doesn't exist!" }
+        if(bytesToKeep >= this.length){
+            // nothing to truncate
+            return
+        }
+        FileOutputStream(this.file, true).use { fos ->
+            fos.channel.use { channel ->
+                channel.truncate(bytesToKeep)
+            }
+        }
     }
 
     private inner class FileOverWriter(private val tempFile: File) : VirtualReadWriteFile.OverWriter {

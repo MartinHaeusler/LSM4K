@@ -4,10 +4,9 @@ import com.google.common.hash.BloomFilter
 import com.google.common.hash.Funnels
 import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.util.bytes.BasicBytes
-import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.bytes.Bytes.Companion.mightContain
 import org.chronos.chronostore.util.bytes.Bytes.Companion.put
-import org.chronos.chronostore.util.bytes.Bytes.Companion.write
+import org.chronos.chronostore.util.bytes.Bytes.Companion.writeBytesWithoutSize
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import strikt.api.expectThat
@@ -51,7 +50,7 @@ class CommandTest {
         )
         val out = ByteArrayOutputStream()
         for(command in commands){
-            out.write(command.toBytes())
+            out.writeBytesWithoutSize(command.toBytes())
         }
         val serialized = out.toByteArray()
         val input = ByteArrayInputStream(serialized)

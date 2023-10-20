@@ -25,6 +25,7 @@ import org.chronos.chronostore.util.json.JsonUtil
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.concurrent.read
 import kotlin.concurrent.write
+import kotlin.math.min
 
 class StoreManagerImpl(
     private val vfs: VirtualFileSystem,
@@ -251,6 +252,27 @@ class StoreManagerImpl(
             }
         }
         monitor.reportDone()
+    }
+
+    override fun getHighWatermarkTimestamp(): Timestamp {
+        this.lock.read {
+            val latestTimestamp = this.storesByName.values.asSequence()
+                .mapNotNull { it.highWatermarkTimestamp }
+                .maxOrNull()
+            return latestTimestamp ?: -1L
+        }
+    }
+
+    override fun getLowWatermarkTimestamp(): Timestamp {
+        this.lock.read {
+            val highWatermark = this.getHighWatermarkTimestamp()
+            val maxLowWatermark = this.storesByName.values.asSequence()
+                .filter { it.hasInMemoryChanges() }
+                .mapNotNull { it.lowWatermarkTimestamp }
+                .maxOrNull()
+
+            return min(highWatermark, maxLowWatermark ?: -1L)
+        }
     }
 
     override fun close() {

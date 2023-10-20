@@ -4,6 +4,7 @@ import org.chronos.chronostore.io.vfs.VirtualReadWriteFile
 import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.stream.UnclosableOutputStream.Companion.unclosable
 import java.io.ByteArrayOutputStream
+import java.io.FileOutputStream
 import java.io.OutputStream
 
 class InMemoryVirtualReadWriteFile(
@@ -29,6 +30,16 @@ class InMemoryVirtualReadWriteFile(
 
     override fun delete() {
         this.fileSystem.delete(this.path)
+    }
+
+    override fun truncateAfter(bytesToKeep: Long) {
+        require(bytesToKeep >= 0) { "Argument 'bytesToKeep' (${bytesToKeep}) must not be negative!" }
+        check(this.exists()) { "Cannot truncate file '${this.path}' because it doesn't exist!" }
+        if(bytesToKeep >= this.length){
+            // nothing to truncate
+            return
+        }
+        this.fileSystem.truncateFile(this.path, bytesToKeep)
     }
 
     override fun createOverWriter(): VirtualReadWriteFile.OverWriter {
