@@ -2,7 +2,6 @@ package org.chronos.chronostore.test.cases.api
 
 import org.chronos.chronostore.api.ChronoStoreConfiguration
 import org.chronos.chronostore.api.ChronoStoreTransaction
-import org.chronos.chronostore.io.vfs.VirtualDirectory
 import org.chronos.chronostore.lsm.LSMTreeFile
 import org.chronos.chronostore.test.extensions.transaction.ChronoStoreTransactionTestExtensions.allEntriesOnLatest
 import org.chronos.chronostore.test.extensions.transaction.ChronoStoreTransactionTestExtensions.delete
@@ -10,6 +9,7 @@ import org.chronos.chronostore.test.extensions.transaction.ChronoStoreTransactio
 import org.chronos.chronostore.test.extensions.transaction.ChronoStoreTransactionTestExtensions.put
 import org.chronos.chronostore.test.util.ChronoStoreMode
 import org.chronos.chronostore.test.util.ChronoStoreTest
+import org.chronos.chronostore.test.util.junit.IntegrationTest
 import org.chronos.chronostore.util.StoreId
 import org.chronos.chronostore.util.bytes.BasicBytes
 import org.chronos.chronostore.util.bytes.Bytes
@@ -17,10 +17,12 @@ import org.chronos.chronostore.util.unit.GiB
 import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.fail
 import strikt.api.expectThat
+import strikt.api.expectThrows
 import strikt.assertions.*
 import kotlin.math.min
 import kotlin.time.Duration.Companion.minutes
 
+@IntegrationTest
 class StoreManagementTest {
 
     @ChronoStoreTest
@@ -45,12 +47,12 @@ class StoreManagementTest {
                 expectThat(tx) {
                     get { allStores }.hasSize(2).and {
                         any {
-                            get { this.store.name }.isEqualTo(StoreId.of("test"))
+                            get { this.store.storeId }.isEqualTo(StoreId.of("test"))
                             get { this.getLatest("foo") }.isEqualTo(BasicBytes("bar"))
                             get { this.getLatest("bullshit") }.isNull()
                         }
                         any {
-                            get { this.store.name }.isEqualTo(StoreId.of("math"))
+                            get { this.store.storeId }.isEqualTo(StoreId.of("math"))
                             get { this.getLatest("pi") }.isEqualTo(BasicBytes("3.1415"))
                             get { this.getLatest("e") }.isEqualTo(BasicBytes("2.718"))
                         }
@@ -68,12 +70,12 @@ class StoreManagementTest {
             expectThat(tx) {
                 get { allStores }.hasSize(2).and {
                     any {
-                        get { this.store.name }.isEqualTo(StoreId.of("test"))
+                        get { this.store.storeId }.isEqualTo(StoreId.of("test"))
                         get { this.getLatest("foo") }.isEqualTo(BasicBytes("bar"))
                         get { this.getLatest("bullshit") }.isNull()
                     }
                     any {
-                        get { this.store.name }.isEqualTo(StoreId.of("math"))
+                        get { this.store.storeId }.isEqualTo(StoreId.of("math"))
                         get { this.getLatest("pi") }.isEqualTo(BasicBytes("3.1415"))
                         get { this.getLatest("e") }.isEqualTo(BasicBytes("2.718"))
                     }
@@ -106,11 +108,11 @@ class StoreManagementTest {
             expectThat(tx) {
                 get { allStores }.hasSize(2).and {
                     any {
-                        get { this.store.name }.isEqualTo(StoreId.of("test"))
+                        get { this.store.storeId }.isEqualTo(StoreId.of("test"))
                         get { this.allEntriesOnLatest }.containsExactly(BasicBytes("foo") to BasicBytes("bar"))
                     }
                     any {
-                        get { this.store.name }.isEqualTo(StoreId.of("math"))
+                        get { this.store.storeId }.isEqualTo(StoreId.of("math"))
                         get { this.allEntriesOnLatest }.containsExactly(
                             BasicBytes("e") to BasicBytes("2.718"),
                             BasicBytes("pi") to BasicBytes("3.1415")
@@ -455,7 +457,61 @@ class StoreManagementTest {
                     }
                 }
             }
+        }
+    }
 
+    @ChronoStoreTest
+    fun cannotCreateNestedStoresInSameTransaction(mode: ChronoStoreMode) {
+        mode.withChronoStore { chronoStore ->
+            chronoStore.transaction { tx ->
+                // ok, since we don't have any stores yet.
+                tx.createNewStore("foo/bar", versioned = false)
+                // ok, since "foo" itself is not a store.
+                tx.createNewStore("foo/baz", versioned = false)
+                // not ok, since "foo/bar" and "foo/baz" are stores
+                expectThrows<IllegalArgumentException> {
+                    tx.createNewStore("foo", versioned = false)
+                }
+                // not ok, since "foo/bar" is already a store
+                expectThrows<IllegalArgumentException> {
+                    tx.createNewStore("foo/bar/baz", versioned = false)
+                }
+                tx.commit()
+            }
+
+            chronoStore.transaction { tx ->
+                expectThat( tx.allStores).map { it.store.storeId.toString() }.containsExactly("foo/bar", "foo/baz")
+            }
+        }
+    }
+
+    @ChronoStoreTest
+    fun cannotCreateNestedStoresInDifferentTransaction(mode: ChronoStoreMode) {
+        mode.withChronoStore { chronoStore ->
+            chronoStore.transaction { tx ->
+                // ok, since we don't have any stores yet.
+                tx.createNewStore("foo/bar", versioned = false)
+                // ok, since "foo" itself is not a store.
+                tx.createNewStore("foo/baz", versioned = false)
+                tx.commit()
+            }
+
+            chronoStore.transaction { tx ->
+                // not ok, since "foo/bar" and "foo/baz" are stores
+                expectThrows<IllegalArgumentException> {
+                    tx.createNewStore("foo", versioned = false)
+                }
+                // not ok, since "foo/bar" is already a store
+                expectThrows<IllegalArgumentException> {
+                    tx.createNewStore("foo/bar/baz", versioned = false)
+                }
+                // this commit will be empty!
+                tx.commit()
+            }
+
+            chronoStore.transaction { tx ->
+                expectThat( tx.allStores).map { it.store.storeId.toString() }.containsExactly("foo/bar", "foo/baz")
+            }
         }
     }
 

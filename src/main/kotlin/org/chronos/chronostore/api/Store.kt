@@ -8,9 +8,9 @@ import org.chronos.chronostore.util.TransactionId
 interface Store {
 
     val isSystemInternal: Boolean
-        get() = this.name.isSystemInternal
+        get() = this.storeId.isSystemInternal
 
-    val name: StoreId
+    val storeId: StoreId
 
     val retainOldVersions: Boolean
 

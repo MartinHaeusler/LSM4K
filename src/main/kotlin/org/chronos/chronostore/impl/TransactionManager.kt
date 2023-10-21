@@ -81,7 +81,7 @@ class TransactionManager(
                 // write something into our WAL file which isn't actually "legal".
                 val storeNameToStore = walTransaction.storeIdToCommands.keys.asSequence()
                     .mapNotNull { storeName -> this.storeManager.getStoreByNameOrNull(tx, storeName) }
-                    .associateBy(Store::name)
+                    .associateBy(Store::storeId)
 
                 this.writeAheadLog.addCommittedTransaction(walTransaction)
 

@@ -113,10 +113,10 @@ class ChronoStoreImpl(
     }
 
     private fun replayWriteAheadLogChanges(allStores: List<Store>): Timestamp {
-        val storeNameToStore = allStores.associateBy { it.name }
+        val storeNameToStore = allStores.associateBy { it.storeId }
         val storeIdToMaxTimestamp = allStores.associate { store ->
             val maxPersistedTimestamp = (store as StoreImpl).tree.getMaxPersistedTimestamp()
-            store.name to maxPersistedTimestamp
+            store.storeId to maxPersistedTimestamp
         }
         log.info { "Replaying Write Ahead Log file" }
         // replay the entries in the WAL which have not been persisted yet

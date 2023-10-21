@@ -71,7 +71,7 @@ class ChronoStoreTransactionImpl(
             val allStores = this.storeManager.getAllStores(this)
             return allStores.asSequence()
                 .filterNot { it.isSystemInternal }
-                .map { this.openStoresByName[it.name] ?: bindStore(it) }
+                .map { this.openStoresByName[it.storeId] ?: bindStore(it) }
                 .toList()
         }
 
@@ -84,12 +84,12 @@ class ChronoStoreTransactionImpl(
 
     private fun deleteStore(txStore: TransactionBoundStoreImpl) {
         require(this.isOpen) { TX_ALREADY_CLOSED }
-        this.storeManager.deleteStore(this, txStore.store.name)
+        this.storeManager.deleteStore(this, txStore.store.storeId)
     }
 
     fun toWALTransaction(commitTimestamp: Timestamp, metadata: Bytes?): WriteAheadLogTransaction {
         val changes = this.openStoresByName.values.associate { txStore ->
-            txStore.store.name to txStore.transactionContext.convertToCommands(commitTimestamp)
+            txStore.store.storeId to txStore.transactionContext.convertToCommands(commitTimestamp)
         }
 
         return WriteAheadLogTransaction(
@@ -110,7 +110,7 @@ class ChronoStoreTransactionImpl(
 
     private fun bindStore(store: Store): TransactionBoundStoreImpl {
         val txBoundStore = TransactionBoundStoreImpl(store)
-        this.openStoresByName[store.name] = txBoundStore
+        this.openStoresByName[store.storeId] = txBoundStore
         return txBoundStore
     }
 
@@ -194,7 +194,7 @@ class ChronoStoreTransactionImpl(
         val transactionContext = TransactionBoundStoreContext(this.store)
 
         override fun toString(): String {
-            return "TransactionBoundStore[${this.store.name}]"
+            return "TransactionBoundStore[${this.store.storeId}]"
         }
 
     }

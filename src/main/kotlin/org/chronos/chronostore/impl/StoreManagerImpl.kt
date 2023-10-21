@@ -94,7 +94,7 @@ class StoreManagerImpl(
 
     private fun createStore(storeInfo: StoreInfo, directory: VirtualDirectory): StoreImpl {
         return StoreImpl(
-            name = storeInfo.storeId,
+            storeId = storeInfo.storeId,
             retainOldVersions = storeInfo.retainOldVersions,
             validFrom = storeInfo.validFrom,
             validTo = storeInfo.validTo,
@@ -121,16 +121,22 @@ class StoreManagerImpl(
         }
     }
 
-    override fun createNewStore(transaction: ChronoStoreTransaction, name: StoreId, versioned: Boolean, validFrom: Timestamp): Store {
+    override fun createNewStore(transaction: ChronoStoreTransaction, storeId: StoreId, versioned: Boolean, validFrom: Timestamp): Store {
         check(this.isOpen) { DB_ALREADY_CLOSED }
         check(transaction.isOpen) { "Argument 'transaction' must refer to an open transaction, but the given transaction has already been closed!" }
         require(validFrom >= transaction.lastVisibleTimestamp) { "Argument 'validFrom' (${validFrom}) must not be smaller than the transaction timestamp (${transaction.lastVisibleTimestamp})!" }
         this.lock.write {
             assertInitialized()
-            require(!name.isSystemInternal) { "Store names must not start with '_' (reserved for internal purposes)!" }
-            require(!this.storesByName.containsKey(name)) { "There already exists a store with name '${name}'!" }
+            require(!storeId.isSystemInternal) { "Store names must not start with '_' (reserved for internal purposes)!" }
+            require(!this.storesByName.containsKey(storeId)) { "There already exists a store with StoreID '${storeId}'!" }
+            // ensure that stores are not becoming nested.
+            val allStores = this.getAllStoresInternal()
+            val offendingStore = allStores.firstOrNull { storeId.collidesWith(it.storeId) }
+            require(offendingStore == null){
+                "The given StoreID '${storeId}' collides with existing StoreID '${offendingStore}' - StoreID paths must not be prefixes of one another (Stores cannot be 'nested')!"
+            }
             val transactionId = transaction.id
-            return createAndRegisterStoreInternal(name, versioned, validFrom, transactionId)
+            return createAndRegisterStoreInternal(storeId, versioned, validFrom, transactionId)
         }
     }
 
@@ -201,12 +207,12 @@ class StoreManagerImpl(
             val store = this.getStoreByNameOrNull(transaction, name)
                 ?: return false
             val storeInfoList = this.storesByName.values.asSequence()
-                .filter { it.name != store.name }
+                .filter { it.storeId != store.storeId }
                 .map { it.storeInfo }
                 .toList()
 
             this.overwriteStoreInfoJson(storeInfoList)
-            this.storesByName.remove(store.name)
+            this.storesByName.remove(store.storeId)
             store.directory.clear()
             store.directory.delete()
             return true
@@ -248,7 +254,7 @@ class StoreManagerImpl(
         this.lock.read {
             monitor.forEachWithMonitor(1.0, "Cleaning up old files", this.storesByName.values.toList()) { taskMonitor, store ->
                 store as StoreImpl
-                store.tree.performGarbageCollection(store.name, taskMonitor)
+                store.tree.performGarbageCollection(store.storeId, taskMonitor)
             }
         }
         monitor.reportDone()
@@ -301,7 +307,7 @@ class StoreManagerImpl(
 
     private fun registerStoreInCaches(store: Store) {
         this.lock.write {
-            this.storesByName[store.name] = store
+            this.storesByName[store.storeId] = store
         }
     }
 
@@ -311,7 +317,7 @@ class StoreManagerImpl(
 
     private val Store.storeInfo: StoreInfo
         get() = StoreInfo(
-            storeId = name,
+            storeId = storeId,
             retainOldVersions = retainOldVersions,
             validFrom = validFrom,
             validTo = validTo,
@@ -326,6 +332,22 @@ class StoreManagerImpl(
         return (validFrom < txTimestamp || createdByThisTransaction) && (txTimestamp < validTo || this.retainOldVersions)
     }
 
+    private fun StoreId.collidesWith(other: StoreId): Boolean {
+        if(this == other){
+            return true
+        }
+        val thisIterator = this.path.iterator()
+        val otherIterator = other.path.iterator()
+        while(thisIterator.hasNext() && otherIterator.hasNext()){
+            val thisElement = thisIterator.next()
+            val otherElement = otherIterator.next()
+            if(thisElement != otherElement){
+                return false
+            }
+        }
+        // one of them is a prefix of the other!
+        return true
+    }
 
     private data class StoreInfo(
         val storeId: StoreId,

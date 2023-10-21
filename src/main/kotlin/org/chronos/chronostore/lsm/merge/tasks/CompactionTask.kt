@@ -48,7 +48,7 @@ class CompactionTask(
         } else {
             "(Minor Compaction)"
         }
-        monitor.reportStarted("Compacting Store '${store.name}' ${compactionNote}")
+        monitor.reportStarted("Compacting Store '${store.storeId}' ${compactionNote}")
         val lsmTree = (store as StoreImpl).tree
         val files = lsmTree.allFiles
         val filesToMerge = selectFiles(major, files)

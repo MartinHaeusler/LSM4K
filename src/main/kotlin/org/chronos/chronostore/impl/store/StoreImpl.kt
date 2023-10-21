@@ -14,7 +14,7 @@ import org.chronos.chronostore.util.Timestamp
 import org.chronos.chronostore.util.TransactionId
 
 class StoreImpl(
-    override val name: StoreId,
+    override val storeId: StoreId,
     override val retainOldVersions: Boolean,
     override val validFrom: Timestamp,
     override var validTo: Timestamp?,
@@ -57,7 +57,7 @@ class StoreImpl(
     }
 
     override fun toString(): String {
-        return "Store[${this.name}]"
+        return "Store[${this.storeId}]"
     }
 
 }
