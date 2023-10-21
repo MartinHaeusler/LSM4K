@@ -43,7 +43,7 @@ interface ChronoStoreTransaction : AutoCloseable {
      *
      * @see getStoreOrNull
      */
-    fun getStore(name: StoreId): TransactionBoundStore {
+    fun getStore(name: StoreId): TransactionalReadWriteStore {
         return getStoreOrNull(name)
             ?: throw IllegalArgumentException("There is no store with name '${name}'!")
     }
@@ -61,7 +61,7 @@ interface ChronoStoreTransaction : AutoCloseable {
      *
      * @see getStoreOrNull
      */
-    fun getStore(name: String): TransactionBoundStore {
+    fun getStore(name: String): TransactionalReadWriteStore {
         return getStore(StoreId.of(name))
     }
 
@@ -74,7 +74,7 @@ interface ChronoStoreTransaction : AutoCloseable {
      *
      * @see getStore
      */
-    fun getStoreOrNull(name: StoreId): TransactionBoundStore?
+    fun getStoreOrNull(name: StoreId): TransactionalReadWriteStore?
 
     /**
      * Gets an existing store by [name] or `null` if there is no such store.
@@ -85,7 +85,7 @@ interface ChronoStoreTransaction : AutoCloseable {
      *
      * @see getStore
      */
-    fun getStoreOrNull(name: String): TransactionBoundStore? {
+    fun getStoreOrNull(name: String): TransactionalReadWriteStore? {
         return getStoreOrNull(StoreId.of(name))
     }
 
@@ -131,7 +131,7 @@ interface ChronoStoreTransaction : AutoCloseable {
      *
      * @return The newly created store.
      */
-    fun createNewStore(name: StoreId, versioned: Boolean): TransactionBoundStore
+    fun createNewStore(name: StoreId, versioned: Boolean): TransactionalReadWriteStore
 
     /**
      * Creates a new store with the given [name].
@@ -145,14 +145,14 @@ interface ChronoStoreTransaction : AutoCloseable {
      *
      * @return The newly created store.
      */
-    fun createNewStore(name: String, versioned: Boolean): TransactionBoundStore {
+    fun createNewStore(name: String, versioned: Boolean): TransactionalReadWriteStore {
         return this.createNewStore(StoreId.of(name), versioned)
     }
 
     /**
      * Gets the list of all stores visible to this transaction.
      */
-    val allStores: List<TransactionBoundStore>
+    val allStores: List<TransactionalReadWriteStore>
 
     // =================================================================================================================
     // LIFECYCLE

@@ -47,12 +47,12 @@ class StoreManagementTest {
                 expectThat(tx) {
                     get { allStores }.hasSize(2).and {
                         any {
-                            get { this.store.storeId }.isEqualTo(StoreId.of("test"))
+                            get { this.storeId }.isEqualTo(StoreId.of("test"))
                             get { this.getLatest("foo") }.isEqualTo(BasicBytes("bar"))
                             get { this.getLatest("bullshit") }.isNull()
                         }
                         any {
-                            get { this.store.storeId }.isEqualTo(StoreId.of("math"))
+                            get { this.storeId }.isEqualTo(StoreId.of("math"))
                             get { this.getLatest("pi") }.isEqualTo(BasicBytes("3.1415"))
                             get { this.getLatest("e") }.isEqualTo(BasicBytes("2.718"))
                         }
@@ -70,12 +70,12 @@ class StoreManagementTest {
             expectThat(tx) {
                 get { allStores }.hasSize(2).and {
                     any {
-                        get { this.store.storeId }.isEqualTo(StoreId.of("test"))
+                        get { this.storeId }.isEqualTo(StoreId.of("test"))
                         get { this.getLatest("foo") }.isEqualTo(BasicBytes("bar"))
                         get { this.getLatest("bullshit") }.isNull()
                     }
                     any {
-                        get { this.store.storeId }.isEqualTo(StoreId.of("math"))
+                        get { this.storeId }.isEqualTo(StoreId.of("math"))
                         get { this.getLatest("pi") }.isEqualTo(BasicBytes("3.1415"))
                         get { this.getLatest("e") }.isEqualTo(BasicBytes("2.718"))
                     }
@@ -108,11 +108,11 @@ class StoreManagementTest {
             expectThat(tx) {
                 get { allStores }.hasSize(2).and {
                     any {
-                        get { this.store.storeId }.isEqualTo(StoreId.of("test"))
+                        get { this.storeId }.isEqualTo(StoreId.of("test"))
                         get { this.allEntriesOnLatest }.containsExactly(BasicBytes("foo") to BasicBytes("bar"))
                     }
                     any {
-                        get { this.store.storeId }.isEqualTo(StoreId.of("math"))
+                        get { this.storeId }.isEqualTo(StoreId.of("math"))
                         get { this.allEntriesOnLatest }.containsExactly(
                             BasicBytes("e") to BasicBytes("2.718"),
                             BasicBytes("pi") to BasicBytes("3.1415")
@@ -480,7 +480,7 @@ class StoreManagementTest {
             }
 
             chronoStore.transaction { tx ->
-                expectThat( tx.allStores).map { it.store.storeId.toString() }.containsExactly("foo/bar", "foo/baz")
+                expectThat( tx.allStores).map { it.storeId.toString() }.containsExactly("foo/bar", "foo/baz")
             }
         }
     }
@@ -510,7 +510,7 @@ class StoreManagementTest {
             }
 
             chronoStore.transaction { tx ->
-                expectThat( tx.allStores).map { it.store.storeId.toString() }.containsExactly("foo/bar", "foo/baz")
+                expectThat( tx.allStores).map { it.storeId.toString() }.containsExactly("foo/bar", "foo/baz")
             }
         }
     }

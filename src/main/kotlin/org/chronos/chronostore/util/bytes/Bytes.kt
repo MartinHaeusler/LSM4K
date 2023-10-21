@@ -13,6 +13,13 @@ import java.nio.charset.Charset
 import java.util.*
 import kotlin.random.Random
 
+/**
+ * A [Bytes] object contains raw binary data. It is essentially an immutable version of a [ByteArray].
+ *
+ * To create a [Bytes] object from a [ByteArray], use [wrap].
+ *
+ * [Bytes] support arbitrary zero-copy slicing via [slice].
+ */
 sealed interface Bytes :
     Comparable<Bytes>,
     Collection<Byte>,
@@ -28,6 +35,19 @@ sealed interface Bytes :
 
         val FALSE: Bytes = BasicBytes(byteArrayOf(0))
 
+        /**
+         * Creates a new [Bytes] object that wraps the given [ByteArray].
+         *
+         * **ATTENTION:** By calling this method, ownership of the byte array is given
+         * entirely to the new [Bytes] object. For performance reasons, there is no
+         * defensive copy being created here.
+         *
+         * **DO NOT MODIFY THE ARRAY AFTER PASSING IT TO THIS METHOD!**.
+         *
+         * @param byteArray The byte array to wrap into a new [Bytes] object. **Do not modify it after passing it to this method!**
+         *
+         * @return The newly created [Bytes] object.
+         */
         fun wrap(byteArray: ByteArray): Bytes {
             return BasicBytes(byteArray)
         }

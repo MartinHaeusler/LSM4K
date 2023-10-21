@@ -1,8 +1,8 @@
 package org.chronos.chronostore.benchmark
 
 import org.chronos.chronostore.api.ChronoStoreConfiguration
-import org.chronos.chronostore.api.TransactionBoundStore.Companion.withCursorOnLatest
-import org.chronos.chronostore.io.format.CompressionAlgorithm
+import org.chronos.chronostore.api.TransactionalStore.Companion.withCursorOnLatest
+import org.chronos.chronostore.impl.transaction.TransactionalStoreInternal
 import org.chronos.chronostore.lsm.LSMTreeFile
 import org.chronos.chronostore.test.util.ChronoStoreMode
 import org.chronos.chronostore.util.bytes.Bytes
@@ -54,7 +54,7 @@ object MultiFileReadRegressionBenchmark {
 
             val numberOfFiles = chronoStore.transaction { tx ->
                 val store = tx.getStore("test")
-                val list = store.store.directory.list().filter { it.endsWith(LSMTreeFile.FILE_EXTENSION) }
+                val list = (store as TransactionalStoreInternal).store.directory.list().filter { it.endsWith(LSMTreeFile.FILE_EXTENSION) }
                 list.forEach { println(it) }
                 list.size
             }

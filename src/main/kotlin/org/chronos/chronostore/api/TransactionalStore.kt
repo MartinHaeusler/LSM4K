@@ -1,48 +1,32 @@
 package org.chronos.chronostore.api
 
-import org.chronos.chronostore.util.bytes.Bytes
+import org.chronos.chronostore.util.StoreId
 import org.chronos.chronostore.util.Timestamp
+import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.cursor.Cursor
 
 /**
- * A [TransactionBoundStore] is a helper class owned by a [transaction] which allows to interact with the bound [store].
+ * A [TransactionalStore] is a transactional representation of a [Store].
  *
- * A [TransactionBoundStore] is only available for the lifetime of the [transaction] it is bound to. The [Store] has
+ * A [TransactionalStore] is only available for the lifetime of the [ChronoStoreTransaction] it is bound to. The [Store] has
  * its own lifecycle which is independent of transactions.
  */
-interface TransactionBoundStore {
+interface TransactionalStore {
 
-    // TODO: hide this from the public API.
-    /** The [Store] to which this object refers.*/
-    val store: Store
+    /** Indicates if this is a system-internal store (`true`) or a user-defined store (`false`). */
+    val isSystemInternal: Boolean
+        get() = this.storeId.isSystemInternal
 
-    // TODO: hide this from the public API.
-    /** The [ChronoStoreTransaction] to which this object is bound.*/
-    val transaction: ChronoStoreTransaction
+    /** The [StoreId] of this store.*/
+    val storeId: StoreId
 
-    /**
-     * Inserts the given [key]-[value] pair into the store (in the context of the [transaction]).
-     *
-     * The change will be visible only to the current [transaction] until it is [committed][ChronoStoreTransaction.commit].
-     *
-     * @param key The key to modify. Keys are unique within each [store]. If the key already exists in the store, its value will be overwritten.
-     * @param value The value to set for the [key].
-     */
-    fun put(key: Bytes, value: Bytes)
+    /** Whether this store supports data versioning or not.*/
+    val isVersioned: Boolean
 
     /**
-     * Deletes the given [key] from the [store] (in the context of the [transaction]).
+     * Returns the latest version of the value bound to the given [key] within the store which is visible to the current [ChronoStoreTransaction].
      *
-     * The change will be visible only to the current [transaction] until it is [committed][ChronoStoreTransaction.commit].
-     *
-     * @param key The key to delete.
-     */
-    fun delete(key: Bytes)
-
-    /**
-     * Returns the latest version of the value bound to the given [key] within the [store] which is visible to the current [transaction].
-     *
-     * The returned value may be `null` if the key doesn't exist within the store, or the most recent visible operation was a [delete].
+     * The returned value may be `null` if the key doesn't exist within the store, or the most recent visible operation was a deletion.
      *
      * @param key The key to query.
      *
@@ -51,17 +35,36 @@ interface TransactionBoundStore {
     fun getLatest(key: Bytes): Bytes?
 
     /**
-     * Returns the value associated with the given [key] within the [store] which was valid at the given [timestamp].
+     * A variant of [getLatest] which offers more details about the matching entry.
+     *
+     * @param key The key to query.
+     *
+     * @return The latest value for the key which is visible to the transaction, plus additional details.
+     */
+    fun getLatestWithDetails(key: Bytes): GetResult
+
+    /**
+     * Returns the value associated with the given [key] within the store which was valid at the given [timestamp].
      *
      * @param key The key to get the value for.
      * @param timestamp The timestamp at which to perform the query. Must not be negative, and must not exceed the [transaction timestamp][ChronoStoreTransaction.lastVisibleTimestamp].
      *
-     * @return The value associated with the given [key] at the given [timestamp]. May be `null` if the key had no value, or if the latest relevant operation was a [delete].
+     * @return The value associated with the given [key] at the given [timestamp]. May be `null` if the key had no value, or if the latest relevant operation was a deletion.
      */
     fun getAtTimestamp(key: Bytes, timestamp: Timestamp): Bytes?
 
     /**
-     * Opens a new [Cursor] on the latest visible version of the [store].
+     * Returns the value associated with the given [key] within the store which was valid at the given [timestamp] plus additional details.
+     *
+     * @param key The key to get the value for.
+     * @param timestamp The timestamp at which to perform the query. Must not be negative, and must not exceed the [transaction timestamp][ChronoStoreTransaction.lastVisibleTimestamp].
+     *
+     * @return The value associated with the given [key] at the given [timestamp] plus additional details.
+     */
+    fun getAtTimestampWithDetails(key: Bytes, timestamp: Timestamp): GetResult
+
+    /**
+     * Opens a new [Cursor] on the latest visible version of the store.
      *
      * Important notes:
      *
@@ -154,7 +157,7 @@ interface TransactionBoundStore {
     }
 
     /**
-     * Opens a new [Cursor] on the [store], reading the data at the given [timestamp].
+     * Opens a new [Cursor] on the store, reading the data at the given [timestamp].
      *
      * Important notes:
      *
@@ -178,28 +181,14 @@ interface TransactionBoundStore {
     fun openCursorAtTimestamp(timestamp: Timestamp): Cursor<Bytes, Bytes>
 
     /**
-     * Deletes the [store].
-     *
-     * The deletion on disk will not be carried out immediately; it will eventually be deleted once all
-     * concurrent transactions have been completed. However, the store will immediately be terminated,
-     * i.e. any further data changes to the store (including by this transaction) will be rejected with
-     * an exception.
-     *
-     * Please note that versioned stores will continue to exist even after they have been deleted in
-     * order to preserve the history.
-     */
-    fun deleteStore()
-
-    /**
-     * Returns `true` if the [transaction] is still open, or `false` if it has been [committed][ChronoStoreTransaction.commit] or [rolled back][ChronoStoreTransaction.rollback].
+     * Returns `true` if the owning transaction is still open, or `false` if it has been [committed][ChronoStoreTransaction.commit] or [rolled back][ChronoStoreTransaction.rollback].
      */
     val isOpen: Boolean
-        get() = this.transaction.isOpen
 
     companion object {
 
         /**
-         * Opens a new [Cursor] on the latest visible version of the [store], executes the [action] on it, and closes the cursor again.
+         * Opens a new [Cursor] on the latest visible version of the store, executes the [action] on it, and closes the cursor again.
          *
          * The returned cursor **will** contain the (uncommitted) modifications of the current transaction. Modifications applied after opening the cursor will be ignored.
          *
@@ -207,13 +196,13 @@ interface TransactionBoundStore {
          *
          * @return The result of calling the given [action].
          */
-        inline fun <T> TransactionBoundStore.withCursorOnLatest(action: (Cursor<Bytes, Bytes>) -> T): T {
+        inline fun <T> TransactionalStore.withCursorOnLatest(action: (Cursor<Bytes, Bytes>) -> T): T {
             return this.openCursorOnLatest().use(action)
         }
 
 
         /**
-         * Opens a new [Cursor] on the [store], reading the data at the given [timestamp]. The given [action] is executed, then the cursor is closed again.
+         * Opens a new [Cursor] on the store, reading the data at the given [timestamp]. The given [action] is executed, then the cursor is closed again.
          *
          * Important notes:
          *
@@ -224,7 +213,7 @@ interface TransactionBoundStore {
          *
          * @return The result of calling the [action] on the cursor.
          */
-        inline fun <T> TransactionBoundStore.withCursorAtTimestamp(timestamp: Timestamp, action: (Cursor<Bytes, Bytes>)->T): T {
+        inline fun <T> TransactionalStore.withCursorAtTimestamp(timestamp: Timestamp, action: (Cursor<Bytes, Bytes>)->T): T {
             return this.openCursorAtTimestamp(timestamp).use(action)
         }
 
