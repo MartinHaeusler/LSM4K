@@ -36,7 +36,7 @@ class InMemoryVirtualDirectory : VirtualDirectory, InMemoryVirtualFileSystemElem
 
     override fun listElements(): List<VirtualFileSystemElement> {
         return this.list().map {
-            if (this.fileSystem.isFile(this.path + "/" + it)) {
+            if (this.fileSystem.isFile("${this.path}${File.separator}$it")) {
                 this.file(it)
             } else {
                 this.directory(it)

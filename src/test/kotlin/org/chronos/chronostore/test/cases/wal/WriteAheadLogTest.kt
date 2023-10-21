@@ -197,7 +197,7 @@ class WriteAheadLogTest {
             // here we simulate truncation of the file at EVERY byte of the transaction. We must be able
             // to detect cut-offs at *any* point of the file content and act accordingly.
             for (bytesToKeep in ((bytesCommit2 - 1).downTo(bytesCommit1 + 1))) {
-                println("Truncating WAL file to ${bytesToKeep} bytes...")
+                println("Truncating WAL file containing ${originalWalFileBytes.size} bytes to ${bytesToKeep} bytes...")
 
                 // reset the file
                 walFile.withOverWriter { overwriter ->

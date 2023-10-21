@@ -64,9 +64,10 @@ class ChronoStoreImpl(
     private val transactionManager: TransactionManager
 
     init {
-        val walFile = this.vfs.directory(ChronoStoreStructure.WRITE_AHEAD_LOG_DIR_NAME)
-        this.writeAheadLog = WriteAheadLog2(walFile, this.configuration.compressionAlgorithm, this.configuration.maxWriteAheadLogFileSize.bytes)
-        val currentTimestamp = if (!walFile.exists()) {
+        val walDirectory = this.vfs.directory(ChronoStoreStructure.WRITE_AHEAD_LOG_DIR_NAME)
+        val isEmptyDatabase = !walDirectory.exists()
+        this.writeAheadLog = WriteAheadLog2(walDirectory, this.configuration.compressionAlgorithm, this.configuration.maxWriteAheadLogFileSize.bytes)
+        val currentTimestamp = if (isEmptyDatabase) {
             // The WAL file doesn't exist. It's a new, empty database.
             // We don't need a recovery, but we have to "set up camp".
             this.createNewEmptyDatabase()
