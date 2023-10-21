@@ -25,13 +25,13 @@ class DiskBasedVirtualReadWriteFile(
 
     val overwriteFile = File(file.path + ".tmp")
 
-    override fun create() {
+    override fun create(): VirtualReadWriteFile {
         if (this.exists()) {
-            return
+            return this
         }
         this.parent?.mkdirs()
         this.file.createNewFile()
-
+        return this
     }
 
     override fun delete() {

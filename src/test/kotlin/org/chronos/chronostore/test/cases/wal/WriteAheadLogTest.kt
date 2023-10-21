@@ -2,6 +2,7 @@ package org.chronos.chronostore.test.cases.wal
 
 import com.google.common.io.CountingOutputStream
 import org.chronos.chronostore.io.format.CompressionAlgorithm
+import org.chronos.chronostore.io.structure.ChronoStoreStructure
 import org.chronos.chronostore.io.structure.ChronoStoreStructure.WRITE_AHEAD_LOG_FILE_PREFIX
 import org.chronos.chronostore.io.structure.ChronoStoreStructure.WRITE_AHEAD_LOG_FILE_SUFFIX
 import org.chronos.chronostore.io.vfs.VirtualReadWriteFile.Companion.withOverWriter
@@ -13,11 +14,9 @@ import org.chronos.chronostore.util.StoreId
 import org.chronos.chronostore.util.bytes.BasicBytes
 import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.unit.MiB
-import org.chronos.chronostore.wal.WriteAheadLog
-import org.chronos.chronostore.wal.WriteAheadLogEntry
 import org.chronos.chronostore.wal.WriteAheadLogTransaction
-import org.chronos.chronostore.wal2.WriteAheadLog2
-import org.chronos.chronostore.wal2.WriteAheadLogFormat
+import org.chronos.chronostore.wal.WriteAheadLog
+import org.chronos.chronostore.wal.WriteAheadLogFormat
 import strikt.api.expectThat
 import strikt.assertions.*
 import java.util.*
@@ -27,7 +26,7 @@ class WriteAheadLogTest {
     @VirtualFileSystemTest
     fun canWriteAndReadTransactions(vfsMode: VFSMode) {
         vfsMode.withVFS { vfs ->
-            val wal = WriteAheadLog2(vfs.directory("wal"), CompressionAlgorithm.SNAPPY, 128.MiB.bytes)
+            val wal = WriteAheadLog(vfs.directory("wal"), CompressionAlgorithm.SNAPPY, 128.MiB.bytes)
 
             val tx1Id = UUID.randomUUID()
             val tx2Id = UUID.randomUUID()
@@ -197,8 +196,6 @@ class WriteAheadLogTest {
             // here we simulate truncation of the file at EVERY byte of the transaction. We must be able
             // to detect cut-offs at *any* point of the file content and act accordingly.
             for (bytesToKeep in ((bytesCommit2 - 1).downTo(bytesCommit1 + 1))) {
-                println("Truncating WAL file containing ${originalWalFileBytes.size} bytes to ${bytesToKeep} bytes...")
-
                 // reset the file
                 walFile.withOverWriter { overwriter ->
                     overwriter.outputStream.write(originalWalFileBytes)
@@ -210,7 +207,7 @@ class WriteAheadLogTest {
 
                 expectThat(walFile).get { this.length }.isEqualTo(bytesToKeep)
 
-                val wal = WriteAheadLog2(walDirectory, CompressionAlgorithm.SNAPPY, 128.MiB.bytes)
+                val wal = WriteAheadLog(walDirectory, CompressionAlgorithm.SNAPPY, 128.MiB.bytes)
                 // this should truncate our WAL file and get rid of the second commit (which is incomplete)
                 wal.performStartupRecoveryCleanup { commitTimestamp1 }
 
@@ -244,69 +241,34 @@ class WriteAheadLogTest {
     }
 
     @VirtualFileSystemTest
-    fun canCompactWAL(vfsMode: VFSMode) {
+    fun canShortenWAL(vfsMode: VFSMode) {
         vfsMode.withVFS { vfs ->
-            val walFile = vfs.file("test.wal")
+            val walDirectory = vfs.directory(ChronoStoreStructure.WRITE_AHEAD_LOG_DIR_NAME)
+            walDirectory.mkdirs()
 
-            // TODO: Rewrite to WalV2 and get rid of WALV1!
+            walDirectory.file("${WRITE_AHEAD_LOG_FILE_PREFIX}1234${WRITE_AHEAD_LOG_FILE_SUFFIX}").create()
+            walDirectory.file("${WRITE_AHEAD_LOG_FILE_PREFIX}1875${WRITE_AHEAD_LOG_FILE_SUFFIX}").create()
+            walDirectory.file("${WRITE_AHEAD_LOG_FILE_PREFIX}1999${WRITE_AHEAD_LOG_FILE_SUFFIX}").create()
+            walDirectory.file("${WRITE_AHEAD_LOG_FILE_PREFIX}2001${WRITE_AHEAD_LOG_FILE_SUFFIX}").create()
 
+            val wal = WriteAheadLog(walDirectory, CompressionAlgorithm.SNAPPY, 128.MiB.bytes)
 
-            val tx1Id = UUID.fromString("d5215e86-d787-4c50-8dea-a8da76771a03")
-            val tx2Id = UUID.fromString("60fe702f-c0f2-44b6-8216-d67a6256d4ed")
-            val tx3Id = UUID.fromString("996c8fb9-b659-4307-b574-36e7a3c21bd0")
+            wal.shorten(lowWatermarkTimestamp = 2000)
 
-            val storeId = StoreId.of("6d529fdd-1553-4cf4-9f97-e3d1a52cef3e")
+            // for a low watermark of 2000:
+            // - The file 1234 can safely be deleted, because the next-higher file has timestamp 1999 (less than low watermark)
+            // - The file 1875 can safely be deleted, because the next-higher file has timestamp 1999 (less than low watermark)
+            // - The file 1999 can not be deleted, because the next-higher file has timestamp 2001 (higher than low watermark) so our file might contain data after 2000.
+            // - The file 2001 cannot be deleted because it's timestamp is higher than the low watermark.
 
-            walFile.withOverWriter { overWriter ->
-                val outputStream = overWriter.outputStream
-                WriteAheadLogEntry.beginTransaction(tx1Id).writeTo(outputStream)
-                WriteAheadLogEntry.put(tx1Id, storeId, BasicBytes("foo"), BasicBytes("bar")).writeTo(outputStream)
-                WriteAheadLogEntry.put(tx1Id, storeId, BasicBytes("hello"), BasicBytes("world")).writeTo(outputStream)
-                WriteAheadLogEntry.commit(tx1Id, 123456, Bytes.EMPTY).writeTo(outputStream)
-
-                WriteAheadLogEntry.beginTransaction(tx2Id).writeTo(outputStream)
-                WriteAheadLogEntry.put(tx2Id, storeId, BasicBytes("foo"), BasicBytes("baz")).writeTo(outputStream)
-                WriteAheadLogEntry.commit(tx2Id, 555555, Bytes.EMPTY).writeTo(outputStream)
-
-                WriteAheadLogEntry.beginTransaction(tx3Id).writeTo(outputStream)
-                WriteAheadLogEntry.put(tx3Id, storeId, BasicBytes("lorem"), BasicBytes("ipsum")).writeTo(outputStream)
-                WriteAheadLogEntry.commit(tx3Id, 777777, Bytes.EMPTY).writeTo(outputStream)
-                overWriter.commit()
-            }
-
-            val wal = WriteAheadLog(walFile)
-
-            wal.compactWal { tx ->
-                tx.transactionId != tx2Id
-            }
-
-            val transactions = wal.allTransactions
-
-            expectThat(transactions).single().and {
-                get { this.transactionId }.isEqualTo(tx2Id)
-                get { this.commitMetadata }.isEqualTo(Bytes.EMPTY)
-                get { this.storeIdToCommands.entries }.single().and {
-                    get { this.key }.isEqualTo(storeId)
-                    get { this.value }.single().and {
-                        get { this.key }.isEqualTo(BasicBytes("foo"))
-                        get { this.value }.isEqualTo(BasicBytes("baz"))
-                        get { this.opCode }.isEqualTo(Command.OpCode.PUT)
-                        get { this.timestamp }.isEqualTo(555555)
-                    }
-                }
-            }
+            expectThat(walDirectory).get { this.list() }.containsExactlyInAnyOrder(
+                "${WRITE_AHEAD_LOG_FILE_PREFIX}1999${WRITE_AHEAD_LOG_FILE_SUFFIX}",
+                "${WRITE_AHEAD_LOG_FILE_PREFIX}2001${WRITE_AHEAD_LOG_FILE_SUFFIX}"
+            )
         }
     }
 
-
     private val WriteAheadLog.allTransactions: List<WriteAheadLogTransaction>
-        get() {
-            val transactions = mutableListOf<WriteAheadLogTransaction>()
-            readWal { transactions += it }
-            return transactions
-        }
-
-    private val WriteAheadLog2.allTransactions: List<WriteAheadLogTransaction>
         get() {
             val transactions = mutableListOf<WriteAheadLogTransaction>()
             readWalStreaming { transactions += it }

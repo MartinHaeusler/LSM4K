@@ -13,7 +13,7 @@ import org.chronos.chronostore.util.StoreId
 import org.chronos.chronostore.util.Timestamp
 import org.chronos.chronostore.util.TransactionId
 import org.chronos.chronostore.util.bytes.Bytes
-import org.chronos.chronostore.wal2.WriteAheadLog2
+import org.chronos.chronostore.wal.WriteAheadLog
 import java.util.concurrent.locks.ReentrantLock
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.concurrent.read
@@ -23,7 +23,7 @@ import kotlin.concurrent.write
 class TransactionManager(
     val storeManager: StoreManager,
     val timeManager: TimeManager,
-    val writeAheadLog: WriteAheadLog2,
+    val writeAheadLog: WriteAheadLog,
 ) : AutoCloseable {
 
     companion object {

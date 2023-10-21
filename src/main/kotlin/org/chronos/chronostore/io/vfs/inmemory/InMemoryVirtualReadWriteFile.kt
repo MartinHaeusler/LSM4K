@@ -21,11 +21,12 @@ class InMemoryVirtualReadWriteFile(
         return this.fileSystem.openAppendOutputStream(this.path).use(action)
     }
 
-    override fun create() {
+    override fun create(): VirtualReadWriteFile {
         if (this.exists()) {
-            return
+            return this
         }
         this.fileSystem.createNewFile(this.path)
+        return this
     }
 
     override fun delete() {

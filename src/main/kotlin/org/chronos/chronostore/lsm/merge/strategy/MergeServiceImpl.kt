@@ -13,9 +13,7 @@ import org.chronos.chronostore.lsm.garbagecollector.tasks.GarbageCollectorTask
 import org.chronos.chronostore.lsm.merge.tasks.CompactionTask
 import org.chronos.chronostore.lsm.merge.tasks.FlushInMemoryTreeToDiskTask
 import org.chronos.chronostore.lsm.merge.tasks.WALCompactionTask
-import org.chronos.chronostore.util.unit.Bytes
 import org.chronos.chronostore.wal.WriteAheadLog
-import org.chronos.chronostore.wal2.WriteAheadLog2
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -32,12 +30,12 @@ class MergeServiceImpl(
 
     private var initialized: Boolean = false
     private lateinit var compactionTask: CompactionTask
-    private lateinit var writeAheadLog: WriteAheadLog2
+    private lateinit var writeAheadLog: WriteAheadLog
     private lateinit var walCompactionTask: WALCompactionTask
     private lateinit var garbageCollectorTask: GarbageCollectorTask
     private lateinit var storeManager: StoreManager
 
-    override fun initialize(storeManager: StoreManager, writeAheadLog: WriteAheadLog2) {
+    override fun initialize(storeManager: StoreManager, writeAheadLog: WriteAheadLog) {
         this.writeAheadLog = writeAheadLog
         this.compactionTask = CompactionTask(storeManager, this.storeConfig.mergeStrategy)
         val timeBetweenExecutions = this.storeConfig.mergeInterval

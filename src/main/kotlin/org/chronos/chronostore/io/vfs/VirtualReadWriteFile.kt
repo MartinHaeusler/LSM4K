@@ -16,7 +16,7 @@ interface VirtualReadWriteFile : VirtualFile {
 
     fun delete()
 
-    fun create()
+    fun create(): VirtualReadWriteFile
 
     fun createOverWriter(): OverWriter
 

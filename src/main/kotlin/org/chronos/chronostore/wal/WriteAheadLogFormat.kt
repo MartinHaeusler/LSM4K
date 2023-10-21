@@ -1,4 +1,4 @@
-package org.chronos.chronostore.wal2
+package org.chronos.chronostore.wal
 
 import org.chronos.chronostore.api.exceptions.TruncatedInputException
 import org.chronos.chronostore.api.exceptions.WriteAheadLogEntryCorruptedException
@@ -18,7 +18,6 @@ import org.chronos.chronostore.util.UUIDExtensions.readUUIDFrom
 import org.chronos.chronostore.util.UUIDExtensions.toBytes
 import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.bytes.Bytes.Companion.writeBytesWithoutSize
-import org.chronos.chronostore.wal.WriteAheadLogTransaction
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.io.OutputStream

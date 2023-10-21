@@ -4,15 +4,14 @@ import org.chronos.chronostore.api.Store
 import org.chronos.chronostore.api.StoreManager
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor
 import org.chronos.chronostore.async.tasks.AsyncTask
-import org.chronos.chronostore.impl.StoreManagerImpl
 import org.chronos.chronostore.impl.store.StoreImpl
 import org.chronos.chronostore.lsm.LSMTree
 import org.chronos.chronostore.util.StoreId
 import org.chronos.chronostore.wal.WriteAheadLogTransaction
-import org.chronos.chronostore.wal2.WriteAheadLog2
+import org.chronos.chronostore.wal.WriteAheadLog
 
 class WALCompactionTask(
-    private val writeAheadLog: WriteAheadLog2,
+    private val writeAheadLog: WriteAheadLog,
     private val storeManager: StoreManager,
 ) : AsyncTask {
 
@@ -22,7 +21,7 @@ class WALCompactionTask(
     override fun run(monitor: TaskMonitor) {
         monitor.reportStarted("WAL Compaction")
         val lowWatermark = this.storeManager.getLowWatermarkTimestamp()
-        this.writeAheadLog.compactWal(lowWatermark)
+        this.writeAheadLog.shorten(lowWatermark)
         monitor.reportDone()
     }
 
