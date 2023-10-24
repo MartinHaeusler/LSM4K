@@ -26,7 +26,7 @@ class WriteAheadLogTest {
     @VirtualFileSystemTest
     fun canWriteAndReadTransactions(vfsMode: VFSMode) {
         vfsMode.withVFS { vfs ->
-            val wal = WriteAheadLog(vfs.directory("wal"), CompressionAlgorithm.SNAPPY, 128.MiB.bytes)
+            val wal = WriteAheadLog(vfs.directory("wal"))
 
             val tx1Id = UUID.randomUUID()
             val tx2Id = UUID.randomUUID()
@@ -207,7 +207,7 @@ class WriteAheadLogTest {
 
                 expectThat(walFile).get { this.length }.isEqualTo(bytesToKeep)
 
-                val wal = WriteAheadLog(walDirectory, CompressionAlgorithm.SNAPPY, 128.MiB.bytes)
+                val wal = WriteAheadLog(walDirectory)
                 // this should truncate our WAL file and get rid of the second commit (which is incomplete)
                 wal.performStartupRecoveryCleanup { commitTimestamp1 }
 
@@ -251,7 +251,7 @@ class WriteAheadLogTest {
             walDirectory.file("${WRITE_AHEAD_LOG_FILE_PREFIX}1999${WRITE_AHEAD_LOG_FILE_SUFFIX}").create()
             walDirectory.file("${WRITE_AHEAD_LOG_FILE_PREFIX}2001${WRITE_AHEAD_LOG_FILE_SUFFIX}").create()
 
-            val wal = WriteAheadLog(walDirectory, CompressionAlgorithm.SNAPPY, 128.MiB.bytes)
+            val wal = WriteAheadLog(walDirectory)
 
             wal.shorten(lowWatermarkTimestamp = 2000)
 

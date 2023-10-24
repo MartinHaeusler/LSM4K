@@ -1,13 +1,23 @@
 package org.chronos.chronostore.async.executor
 
+import com.cronutils.model.Cron
+import mu.KotlinLogging
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor
 import org.chronos.chronostore.async.tasks.AsyncTask
+import org.chronos.chronostore.util.cron.CronUtils.isValid
+import org.chronos.chronostore.util.cron.CronUtils.nextExecution
 import java.util.concurrent.*
 import kotlin.time.Duration
 
 class AsyncTaskManagerImpl(
     private val executorService: ScheduledExecutorService,
 ) : AsyncTaskManager {
+
+    companion object {
+
+        private val log = KotlinLogging.logger {}
+
+    }
 
     override fun executeAsync(task: AsyncTask): Future<TaskExecutionResult> {
         return this.executorService.submit(createCallableForTask(task))
@@ -27,6 +37,22 @@ class AsyncTaskManagerImpl(
             /* period = */ delayBetweenExecutions.inWholeMilliseconds,
             /* unit = */ TimeUnit.MILLISECONDS
         )
+    }
+
+    override fun scheduleRecurringWithCron(task: AsyncTask, cron: Cron) {
+        require(cron.isValid()) { "Cron expression '${cron}' is invalid!" }
+        val recurringTask = RecurringCronTask(task, cron, this.executorService)
+        val nextExecution = recurringTask.cron.nextExecution()
+        if (nextExecution == null) {
+            // don't execute
+            log.warn { "Cannot schedule task '${task.name}' with cron '${cron.asString()}' because the cron expression has no next execution date!" }
+            return
+        }
+        log.debug {
+            "[SCHEDULING] Scheduling of task '${task.name}' has been initialized with cron '${cron.asString()}'." +
+                " First execution will be at: ${nextExecution.nextDateTime} (delay: ${nextExecution.delayInMillis}ms)"
+        }
+        this.executorService.schedule(createCallableForTask(recurringTask), nextExecution.delayInMillis, TimeUnit.MILLISECONDS)
     }
 
     private fun createCallableForTask(task: AsyncTask): Callable<TaskExecutionResult> {
@@ -57,5 +83,42 @@ class AsyncTaskManagerImpl(
 
     override fun close() {
         this.executorService.shutdownNow()
+    }
+
+
+    // =================================================================================================================
+    // INNER CLASSES
+    // =================================================================================================================
+
+    inner class RecurringCronTask(
+        val task: AsyncTask,
+        val cron: Cron,
+        private val executorService: ScheduledExecutorService,
+    ) : AsyncTask {
+
+        override val name: String
+            get() = this.task.name
+
+        override fun run(monitor: TaskMonitor) {
+            try {
+                this.task.run(monitor)
+            } finally {
+                // the task has been executed, reschedule it
+                val next = cron.nextExecution()
+                if (next != null) {
+                    // only execute again if we have a non-null, non-negative duration towards the next execution.
+                    log.debug { "[SCHEDULING] Task '${this.name}' has been executed. Rescheduling for cron '${this.cron.asString()}'. Next execution will be at: ${next.nextDateTime}" }
+                    val newCallable = createCallableForTask(this)
+                    this.executorService.schedule(newCallable, next.delayInMillis, TimeUnit.MILLISECONDS)
+                } else {
+                    // the cron expression produced no next execution date. This means we can never execute this task again!
+                    log.warn { "[SCHEDULING] Task '${this.name}' has been executed. Rescheduling for cron '${this.cron.asString()}' produced no next execution date; no further executions will be performed!" }
+                }
+            }
+        }
+
+        override fun toString(): String {
+            return "CronTask[${this.name}, ${this.cron}]"
+        }
     }
 }

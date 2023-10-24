@@ -15,6 +15,7 @@ import org.chronos.chronostore.util.StreamExtensions.hasNext
 import org.chronos.chronostore.util.Timestamp
 import org.chronos.chronostore.util.iterator.IteratorExtensions.peekOrNull
 import org.chronos.chronostore.util.iterator.IteratorExtensions.toPeekingIterator
+import org.chronos.chronostore.util.unit.MiB
 import java.io.InputStream
 import java.io.OutputStream
 import java.io.PushbackInputStream
@@ -53,8 +54,9 @@ import kotlin.concurrent.write
  */
 class WriteAheadLog(
     private val directory: VirtualDirectory,
-    private val compressionAlgorithm: CompressionAlgorithm,
-    private val maxWalFileSizeBytes: Long,
+    private val compressionAlgorithm: CompressionAlgorithm = CompressionAlgorithm.SNAPPY,
+    private val maxWalFileSizeBytes: Long = 128.MiB.bytes,
+    private val minNumberOfFiles: Int = 1,
 ) {
 
     companion object {
@@ -71,6 +73,7 @@ class WriteAheadLog(
 
     init {
         require(maxWalFileSizeBytes > 0) { "Argument 'maxWalFileSizeBytes' (${maxWalFileSizeBytes}) must be positive!" }
+        require(minNumberOfFiles > 0) { "Argument 'minNumberOfFiles' (${minNumberOfFiles}) must be positive!" }
         if (!this.directory.exists()) {
             this.directory.mkdirs()
         }
@@ -156,6 +159,15 @@ class WriteAheadLog(
     }
 
     /**
+     * Checks if the WAL has more than the configured minimum number of files.
+     *
+     * @return `true` if there are too many files and the WAL should be [shortened][shorten], otherwise `false`.
+     */
+    fun needsToBeShortened(): Boolean {
+        return this.lock.read { this.walFiles.size > this.minNumberOfFiles }
+    }
+
+    /**
      * Attempts to reduce the size of the write-ahead-log file by discarding fully persisted transactions.
      *
      * By "fully persisted transactions" we mean transactions for which no parts reside
@@ -167,12 +179,17 @@ class WriteAheadLog(
      * to complete; it should be used with care and only during periods of low database utilization, because
      * no commits will be permitted until this method has been completed.
      *
+     * Please note that calling this method has no effect if [needsToBeShortened] returns `false`.
+     *
      * @param lowWatermarkTimestamp The maximum timestamp for which it is guaranteed that *all* stores have
      *                              persistently stored the results of *all* transactions with commit timestamps
      *                              less than or equal to the watermark.
      */
     fun shorten(lowWatermarkTimestamp: Timestamp) {
         this.lock.write {
+            if (!this.needsToBeShortened()) {
+                return
+            }
             val iterator = this.walFiles.iterator().toPeekingIterator()
             val filesToDelete = mutableSetOf<WALFile>()
             while (iterator.hasNext()) {

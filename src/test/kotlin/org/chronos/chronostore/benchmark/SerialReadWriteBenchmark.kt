@@ -1,5 +1,6 @@
 package org.chronos.chronostore.benchmark
 
+import mu.KotlinLogging
 import org.chronos.chronostore.api.ChronoStoreConfiguration
 import org.chronos.chronostore.test.util.ChronoStoreMode
 import org.chronos.chronostore.util.bytes.BasicBytes
@@ -11,6 +12,7 @@ import kotlin.system.measureTimeMillis
 
 object SerialReadWriteBenchmark {
 
+    private val log = KotlinLogging.logger {}
 
     private const val NUMBER_OF_COMMITS = 10_000
     private const val WRITES_PER_COMMIT = 100
@@ -22,9 +24,10 @@ object SerialReadWriteBenchmark {
 
     @JvmStatic
     fun main(args: Array<String>) {
-        println("ATTACH PROFILER NOW!!")
-        Thread.sleep(10_000)
-        println("RUNNING")
+        println("PRESS ENTER TO START")
+        System.`in`.read()
+        println("STARTING BENCHMARK")
+
 
         val random = Random(System.currentTimeMillis())
         val uniqueKeys = (0 until NUMBER_OF_UNIQUE_KEYS).map { "key#${it}" }
@@ -40,7 +43,7 @@ object SerialReadWriteBenchmark {
 
             val startTime = System.currentTimeMillis()
 
-            println("Starting writer.")
+            log.info { "Starting writer." }
             measureTimeMillis {
                 repeat(NUMBER_OF_COMMITS) { c ->
                     chronoStore.transaction { tx ->
@@ -60,22 +63,22 @@ object SerialReadWriteBenchmark {
                         val runtime = System.currentTimeMillis() - startTime
                         val stallTime = ChronoStoreStatistics.TOTAL_WRITE_STALL_TIME_MILLIS.get()
                         val stallTimePercent = (stallTime / runtime.toDouble()) * 100
-                        println("${Thread.currentThread().name} :: Commit #${c} successful. Stall time: ${stallTime}ms (${stallTimePercent}%).")
+                        log.info { "Commit #${c} successful. Stall time: ${stallTime}ms (${stallTimePercent}%)." }
                     }
                 }
-            }.let { println("Writer completed in ${it}ms.") }
+            }.let { log.info { "Writer completed in ${it}ms." } }
 
-            println("Flushing changes to disk")
+            log.info { "Flushing changes to disk" }
             measureTimeMillis {
                 chronoStore.mergeService.flushAllInMemoryStoresToDisk()
-            }.let { println("Flushed changes to disk in ${it}ms.") }
+            }.let { log.info { "Flushed changes to disk in ${it}ms." } }
 
-            println("Performing major compaction")
+            log.info { "Performing major compaction" }
             measureTimeMillis {
                 chronoStore.mergeService.performMajorCompaction()
-            }.let { println("Major compaction took ${it}ms.") }
+            }.let { log.info { "Major compaction took ${it}ms." } }
 
-            println("root path: ${chronoStore.rootPath}")
+            log.info { "root path: ${chronoStore.rootPath}" }
 
             var totalSize = 0L
             measureTimeMillis {
@@ -102,9 +105,9 @@ object SerialReadWriteBenchmark {
                         }
                     }
                 }
-            }.let { println("Read complete. Time: ${it}ms, Total data read: ${Bytes.formatSize(totalSize)}") }
+            }.let { log.info { "Read complete. Time: ${it}ms, Total data read: ${Bytes.formatSize(totalSize)}" } }
 
-            println("FINAL STATISTICS")
+            log.info { "FINAL STATISTICS" }
             println(ChronoStoreStatistics.snapshot().prettyPrint())
         }
     }

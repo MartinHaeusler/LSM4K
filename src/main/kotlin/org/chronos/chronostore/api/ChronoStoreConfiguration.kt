@@ -1,8 +1,11 @@
 package org.chronos.chronostore.api
 
+import com.cronutils.model.Cron
 import org.chronos.chronostore.io.fileaccess.FileChannelDriver
 import org.chronos.chronostore.io.fileaccess.RandomFileAccessDriverFactory
 import org.chronos.chronostore.io.format.CompressionAlgorithm
+import org.chronos.chronostore.util.cron.CronUtils.cron
+import org.chronos.chronostore.util.cron.CronUtils.isValid
 import org.chronos.chronostore.util.unit.BinarySize
 import org.chronos.chronostore.util.unit.Bytes
 import org.chronos.chronostore.util.unit.MiB
@@ -40,8 +43,7 @@ class ChronoStoreConfiguration {
      * can lead to very large WAL files, slow database restart/recovery and increased
      * disk footprint!
      */
-    // TODO[Feature]: use cron expression instead
-    var writeAheadLogCompactionTimeOfDay: TimeOfDay? = TimeOfDay.parse("00:00")
+    var writeAheadLogCompactionCron: Cron? = cron("0 0 * * * *")
 
     /**
      * The time of day at which old store files should be garbage collected.
@@ -110,11 +112,17 @@ class ChronoStoreConfiguration {
      */
     var maxWriteAheadLogFileSize: BinarySize = 128.MiB
 
+    /**
+     * The minimum number of Write-Ahead-Log (WAL) files to keep.
+     *
+     * If the number of WAL files is less than or equal to this setting,
+     * WAL shortening will be skipped.
+     */
+    var minNumberOfWriteAheadLogFiles: Int = 3
 
     init {
-        require(this.maxWriteAheadLogFileSize.bytes > 0) {
-            "Cannot use a negative value for 'maxWriteAheadLogFileSize'!"
-        }
+        require(this.maxWriteAheadLogFileSize.bytes > 0) { "Cannot use a negative value for 'maxWriteAheadLogFileSize'!" }
+        require(this.writeAheadLogCompactionCron?.isValid() ?: true) { "The cron expression for 'writeAheadLogCompactionCron' is invalid: ${this.writeAheadLogCompactionCron}" }
     }
 
 }

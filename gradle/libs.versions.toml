@@ -20,6 +20,9 @@ lz4J = { group = "org.lz4", name = "lz4-java", version = "1.8.0" }
 
 pcollections = { group = "org.pcollections", name = "pcollections", version = "4.0.1" }
 
+# CRON expression handling
+cronUtils = { group = "com.cronutils", name = "cron-utils", version = "9.2.1" }
+
 # Testing
 junit-jupiter = { group = "org.junit.jupiter", name = "junit-jupiter", version.ref = "junit5" }
 junit-engine = { group = "org.junit.jupiter", name = "junit-jupiter-engine", version.ref = "junit5" }

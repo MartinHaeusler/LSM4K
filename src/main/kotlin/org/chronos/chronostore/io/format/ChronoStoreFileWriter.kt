@@ -152,6 +152,7 @@ class ChronoStoreFileWriter : AutoCloseable {
         while (commands.hasNext()) {
             val minKeyAndTimestamp = commands.peek().keyAndTimestamp
             blockIndexToStartPositionAndMinKey += Triple(blockSequenceNumber, this.outputStream.position, minKeyAndTimestamp)
+            println("Writing block ${blockSequenceNumber}")
             writeBlock(commands, blockSequenceNumber)
             blockSequenceNumber++
         }

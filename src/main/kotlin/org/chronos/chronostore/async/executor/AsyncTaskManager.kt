@@ -1,5 +1,6 @@
 package org.chronos.chronostore.async.executor
 
+import com.cronutils.model.Cron
 import org.chronos.chronostore.async.tasks.AsyncTask
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.Future
@@ -12,5 +13,7 @@ interface AsyncTaskManager : AutoCloseable {
     fun scheduleRecurringWithTimeBetweenExecutions(task: AsyncTask, timeBetweenExecutions: Duration)
 
     fun scheduleRecurringWithFixedRate(task: AsyncTask, initialDelay: Duration, delayBetweenExecutions: Duration)
+
+    fun scheduleRecurringWithCron(task: AsyncTask, cron: Cron)
 
 }

@@ -49,10 +49,9 @@ class MergeServiceImpl(
         }
 
         this.walCompactionTask = WALCompactionTask(this.writeAheadLog, storeManager)
-        val walCompactionTimeOfDay = this.storeConfig.writeAheadLogCompactionTimeOfDay
-        if (walCompactionTimeOfDay != null) {
-            val startDelay = walCompactionTimeOfDay.nextOccurrence
-            this.taskManager.scheduleRecurringWithFixedRate(this.walCompactionTask, startDelay.milliseconds, 24.hours)
+        val walCompactionCron = this.storeConfig.writeAheadLogCompactionCron
+        if (walCompactionCron != null) {
+            this.taskManager.scheduleRecurringWithCron(this.walCompactionTask, walCompactionCron)
         }
 
         this.garbageCollectorTask = GarbageCollectorTask(storeManager)
