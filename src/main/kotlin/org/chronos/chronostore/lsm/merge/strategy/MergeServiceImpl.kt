@@ -12,7 +12,7 @@ import org.chronos.chronostore.lsm.event.LsmCursorClosedEvent
 import org.chronos.chronostore.lsm.garbagecollector.tasks.GarbageCollectorTask
 import org.chronos.chronostore.lsm.merge.tasks.CompactionTask
 import org.chronos.chronostore.lsm.merge.tasks.FlushInMemoryTreeToDiskTask
-import org.chronos.chronostore.lsm.merge.tasks.WALCompactionTask
+import org.chronos.chronostore.lsm.merge.tasks.WALShorteningTask
 import org.chronos.chronostore.wal.WriteAheadLog
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.milliseconds
@@ -31,7 +31,7 @@ class MergeServiceImpl(
     private var initialized: Boolean = false
     private lateinit var compactionTask: CompactionTask
     private lateinit var writeAheadLog: WriteAheadLog
-    private lateinit var walCompactionTask: WALCompactionTask
+    private lateinit var walShorteningTask: WALShorteningTask
     private lateinit var garbageCollectorTask: GarbageCollectorTask
     private lateinit var storeManager: StoreManager
 
@@ -48,17 +48,17 @@ class MergeServiceImpl(
             }
         }
 
-        this.walCompactionTask = WALCompactionTask(this.writeAheadLog, storeManager)
+        this.walShorteningTask = WALShorteningTask(this.writeAheadLog, storeManager)
         val walCompactionCron = this.storeConfig.writeAheadLogCompactionCron
         if (walCompactionCron != null) {
-            this.taskManager.scheduleRecurringWithCron(this.walCompactionTask, walCompactionCron)
+            this.taskManager.scheduleRecurringWithCron(this.walShorteningTask, walCompactionCron)
         }
 
         this.garbageCollectorTask = GarbageCollectorTask(storeManager)
         val garbageCollectionTimeOfDay = this.storeConfig.garbageCollectionTimeOfDay
         if (garbageCollectionTimeOfDay != null) {
             val startDelay = garbageCollectionTimeOfDay.nextOccurrence
-            this.taskManager.scheduleRecurringWithFixedRate(this.walCompactionTask, startDelay.milliseconds, 24.hours)
+            this.taskManager.scheduleRecurringWithFixedRate(this.walShorteningTask, startDelay.milliseconds, 24.hours)
         }
 
         this.storeManager = storeManager

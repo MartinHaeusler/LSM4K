@@ -5,7 +5,7 @@ import org.chronos.chronostore.async.taskmonitor.TaskMonitor
 import org.chronos.chronostore.async.tasks.AsyncTask
 import org.chronos.chronostore.wal.WriteAheadLog
 
-class WALCompactionTask(
+class WALShorteningTask(
     private val writeAheadLog: WriteAheadLog,
     private val storeManager: StoreManager,
 ) : AsyncTask {

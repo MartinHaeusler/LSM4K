@@ -6,7 +6,6 @@ import org.chronos.chronostore.io.fileaccess.RandomFileAccessDriver
 import org.chronos.chronostore.io.format.BlockMetaData
 import org.chronos.chronostore.util.cursor.Cursor
 import org.chronos.chronostore.util.cursor.EmptyCursor
-import org.chronos.chronostore.util.cursor.IndexBasedCursor
 import org.chronos.chronostore.util.cursor.NavigableMapCursor
 import java.util.*
 
@@ -14,6 +13,12 @@ class EagerDataBlock(
     override val metaData: BlockMetaData,
     private val data: NavigableMap<KeyAndTimestamp, Command>,
 ) : DataBlock {
+
+    override val byteSize: Long
+        get() {
+            // add 10% overhead to the data size for the navigable map data structure
+            return (this.metaData.uncompressedDataSize * 1.10).toLong() + metaData.byteSize
+        }
 
     override fun isEmpty(): Boolean {
         return this.data.isEmpty()

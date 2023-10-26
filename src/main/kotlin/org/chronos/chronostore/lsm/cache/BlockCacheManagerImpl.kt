@@ -8,12 +8,13 @@ import org.chronos.chronostore.util.unit.BinarySize
 import java.util.*
 
 class BlockCacheManagerImpl(
-    val maxSize: BinarySize
+    val maxSize: BinarySize,
 ) : BlockCacheManager {
 
     private val cache: Cache<CacheKey, DataBlock> = CacheBuilder.newBuilder()
         .maximumWeight(maxSize.bytes)
         .weigher(this::computeBlockCacheWeight)
+        .removalListener<CacheKey, DataBlock> { println("Evicting block ${it.key} from the cache!") }
         .build()
 
     private fun computeBlockCacheWeight(
@@ -21,9 +22,15 @@ class BlockCacheManagerImpl(
         // If we remove this parameter here, we couldn't use this method as
         // a method reference for the cache loader.
         @Suppress("UNUSED_PARAMETER") key: CacheKey,
-        value: DataBlock
+        value: DataBlock,
     ): Int {
-        return value.metaData.byteSize
+        val weight = value.byteSize
+        println("Weight of block ${value.metaData}: ${weight} bytes")
+        return if (weight > Int.MAX_VALUE) {
+            Int.MAX_VALUE
+        } else {
+            weight.toInt()
+        }
     }
 
     override fun getBlockCache(storeId: StoreId): LocalBlockCache {
@@ -31,7 +38,7 @@ class BlockCacheManagerImpl(
     }
 
     private inner class LocalBlockCacheImpl(
-        override val storeId: StoreId
+        override val storeId: StoreId,
     ) : LocalBlockCache {
 
 
@@ -47,7 +54,7 @@ class BlockCacheManagerImpl(
     private data class CacheKey(
         val storeId: StoreId,
         val fileId: UUID,
-        val blockIndex: Int
+        val blockIndex: Int,
     )
 
 }

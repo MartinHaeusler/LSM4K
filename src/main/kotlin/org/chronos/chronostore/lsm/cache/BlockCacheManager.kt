@@ -17,6 +17,7 @@ sealed interface BlockCacheManager {
                 log.warn { "Block Cache has been disabled in ChronoStore configuration. This may lead to poor read performance - do not use in production!" }
                 NoBlockCacheManager
             } else {
+                log.info { "Block Cache: ${maxSize.toHumanReadableString()}" }
                 BlockCacheManagerImpl(maxSize)
             }
         }

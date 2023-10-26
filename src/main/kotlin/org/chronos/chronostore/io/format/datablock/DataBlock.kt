@@ -19,6 +19,8 @@ interface DataBlock {
 
     val metaData: BlockMetaData
 
+    val byteSize: Long
+
     fun isEmpty(): Boolean
 
     /**
@@ -101,7 +103,7 @@ interface DataBlock {
 
             return EagerDataBlock(
                 metaData = blockMetaData,
-                data = commands
+                data = commands,
             )
 
         }
@@ -150,7 +152,7 @@ interface DataBlock {
 
             return EagerDataBlock(
                 metaData = blockMetaData,
-                data = commands
+                data = commands,
             )
         }
 
