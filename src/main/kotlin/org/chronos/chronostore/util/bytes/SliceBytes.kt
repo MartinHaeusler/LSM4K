@@ -32,6 +32,10 @@ class SliceBytes(
         return sharedArray
     }
 
+    override fun own(): Bytes {
+        return BasicBytes(this.toSharedArray())
+    }
+
     override fun slice(start: Int, size: Int): Bytes {
         require(start >= 0) { "Argument 'start' (${start}) must not be negative!" }
         require(start in 0..this.lastIndex) { "Argument 'start' (${start}) is outside the expected range [0..${this.lastIndex}]!" }

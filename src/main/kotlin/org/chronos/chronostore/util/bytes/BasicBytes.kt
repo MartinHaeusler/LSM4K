@@ -99,4 +99,11 @@ class BasicBytes(
         return this.array
     }
 
+    override fun own(): Bytes {
+        // owning makes no difference for basic bytes,
+        // because their backing storage is always exactly
+        // as big as it needs to be.
+        return this
+    }
+
 }

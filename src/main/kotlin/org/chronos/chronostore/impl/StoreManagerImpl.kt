@@ -254,7 +254,7 @@ class StoreManagerImpl(
         this.lock.read {
             monitor.forEachWithMonitor(1.0, "Cleaning up old files", this.storesByName.values.toList()) { taskMonitor, store ->
                 store as StoreImpl
-                store.tree.performGarbageCollection(store.storeId, taskMonitor)
+                store.tree.performGarbageCollection(taskMonitor)
             }
         }
         monitor.reportDone()

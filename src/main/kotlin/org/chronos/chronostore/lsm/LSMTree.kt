@@ -315,8 +315,8 @@ class LSMTree(
         }
     }
 
-    fun performGarbageCollection(storeId: StoreId, taskMonitor: TaskMonitor) {
-        taskMonitor.reportStarted("Collecting Garbage in '${storeId}'")
+    fun performGarbageCollection(taskMonitor: TaskMonitor) {
+        taskMonitor.reportStarted("Collecting Garbage in '${this.path}'")
         val deleted = mutableSetOf<String>()
         taskMonitor.forEach(1.0, "Deleting old files", this.garbageFileManager.garbageFiles) { fileName ->
             if (this.cursorManager.hasOpenCursorOnFile(fileName)) {
@@ -411,6 +411,9 @@ class LSMTree(
                     }
                     resultFileFromLastBatch = mergedLsmTreeFile
                 }
+
+                // after each batch, perform garbage collection in an attempt to free disk space
+                this.performGarbageCollection(TaskMonitor.create())
             }
         }
     }

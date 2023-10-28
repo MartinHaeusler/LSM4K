@@ -150,7 +150,16 @@ class ChronoStoreFileWriter : AutoCloseable {
 
         var blockSequenceNumber = 0
         while (commands.hasNext()) {
-            val minKeyAndTimestamp = commands.peek().keyAndTimestamp
+            val nextCommand = commands.peek()
+            val minKeyAndTimestamp = KeyAndTimestamp(
+                // It is ESSENTIAL That we call ".own()" on the key here.
+                // If we don't do that, we keep the whole backing array
+                // of EVERY page in memory. This will eventually lead to
+                // out-of-memory issues if the file we're writing has
+                // enough blocks in it.
+                nextCommand.key.own(),
+                nextCommand.timestamp
+            )
             blockIndexToStartPositionAndMinKey += Triple(blockSequenceNumber, this.outputStream.position, minKeyAndTimestamp)
             println("Writing block ${blockSequenceNumber}")
             writeBlock(commands, blockSequenceNumber)

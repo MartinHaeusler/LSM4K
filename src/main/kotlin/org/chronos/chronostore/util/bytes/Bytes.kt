@@ -301,4 +301,12 @@ sealed interface Bytes :
         return this.size - other.size
     }
 
+    /**
+     * Creates an "owned" copy of this [Bytes] object.
+     *
+     * This guarantees that the backing storage will contain exactly the required bytes,
+     * and no other bytes. This is mostly relevant for [SliceBytes].
+     */
+    fun own(): Bytes
+
 }
