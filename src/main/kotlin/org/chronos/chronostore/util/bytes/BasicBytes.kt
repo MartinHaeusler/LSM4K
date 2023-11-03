@@ -50,7 +50,12 @@ class BasicBytes(
         return this.array.indexOf(element)
     }
 
+    override fun writeWithoutSizeTo(outputStream: OutputStream) {
+        outputStream.write(this.array)
+    }
+
     override fun createInputStream(): InputStream {
+        // override for slightly better performance
         return ByteArrayInputStream(this.array)
     }
 

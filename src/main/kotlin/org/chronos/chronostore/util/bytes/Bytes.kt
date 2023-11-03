@@ -80,17 +80,7 @@ sealed interface Bytes :
         }
 
         fun OutputStream.writeBytesWithoutSize(bytes: Bytes) {
-            // we assume here that the output stream is somehow
-            // buffered. If it is buffered, it's more efficient
-            // to put in the bytes one by one as it avoids
-            // creating the byte array.
-            if (bytes is BasicBytes) {
-                this.write(bytes.toSharedArray())
-            } else {
-                for (byte in bytes) {
-                    this.write(byte.toInt())
-                }
-            }
+            bytes.writeWithoutSizeTo(this)
         }
 
         fun Bytes.compressWith(algorithm: CompressionAlgorithm): Bytes {
@@ -225,7 +215,7 @@ sealed interface Bytes :
      * @return The slice, a view on this object within the given boundaries.
      */
     fun slice(range: IntRange): Bytes {
-        return slice(range.first, range.last - range.first)
+        return slice(range.first, range.last - range.first + 1)
     }
 
     /**
@@ -274,6 +264,16 @@ sealed interface Bytes :
     override fun isEmpty(): Boolean {
         return !this.iterator().hasNext()
     }
+
+    /**
+     * Writes the contents of this [Bytes] object to the given output stream.
+     *
+     * This writes occurs in verbatim, i.e. there is no prefixing with a size
+     * or any other modification. It's a direct copy process.
+     *
+     * If this object [isEmpty], no bytes will be written at all.
+     */
+    fun writeWithoutSizeTo(outputStream: OutputStream)
 
     /**
      * Creates an [InputStream] which delivers all [Byte]s in this object.

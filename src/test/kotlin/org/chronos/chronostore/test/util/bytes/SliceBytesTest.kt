@@ -2,6 +2,7 @@ package org.chronos.chronostore.test.util.bytes
 
 import org.chronos.chronostore.util.IOExtensions.readByte
 import org.chronos.chronostore.util.IOExtensions.withInputStream
+import org.chronos.chronostore.util.PrefixIO
 import org.chronos.chronostore.util.bytes.BasicBytes
 import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.bytes.SliceBytes
@@ -10,6 +11,7 @@ import strikt.api.expect
 import strikt.api.expectThat
 import strikt.assertions.containsExactly
 import strikt.assertions.isEqualTo
+import java.io.ByteArrayOutputStream
 import java.util.*
 
 class SliceBytesTest {
@@ -113,8 +115,23 @@ class SliceBytesTest {
                 }
             }
         }
+    }
 
+    @Test
+    fun canWriteSliceToOutputStream(){
+        val rawBytes = BasicBytes("hello world")
+        val slice = rawBytes.slice(2..7)
+        val writtenBytes = ByteArrayOutputStream().use { baos ->
+            PrefixIO.writeBytes(baos, slice)
+            baos.flush()
+            baos.toByteArray()
+        }
 
+        val readBytes = writtenBytes.inputStream().use { bais ->
+            PrefixIO.readBytes(bais)
+        }
+
+        expectThat(readBytes.asString()).isEqualTo("llo wo")
     }
 
     private fun Byte.toCharacter(): Char {

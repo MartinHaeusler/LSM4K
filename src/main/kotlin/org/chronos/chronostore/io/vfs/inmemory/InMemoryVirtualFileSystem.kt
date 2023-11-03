@@ -261,6 +261,14 @@ class InMemoryVirtualFileSystem : VirtualFileSystem {
             this.onChange()
         }
 
+        override fun write(b: ByteArray) {
+            this.outputStream.write(b)
+        }
+
+        override fun write(b: ByteArray, off: Int, len: Int) {
+            this.outputStream.write(b, off, len)
+        }
+
         override fun write(b: Int) {
             this.outputStream.write(b)
         }

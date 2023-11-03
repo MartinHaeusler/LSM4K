@@ -3,6 +3,7 @@ package org.chronos.chronostore.util.bytes
 import com.google.common.collect.Iterators
 import org.chronos.chronostore.util.ByteArrayExtensions.hex
 import org.chronos.chronostore.util.unit.Bytes
+import java.io.OutputStream
 import kotlin.math.min
 
 class SliceBytes(
@@ -36,6 +37,10 @@ class SliceBytes(
         return BasicBytes(this.toSharedArray())
     }
 
+    override fun writeWithoutSizeTo(outputStream: OutputStream) {
+        outputStream.write(this.array, this.startInclusive, this.size)
+    }
+
     override fun slice(start: Int, size: Int): Bytes {
         require(start >= 0) { "Argument 'start' (${start}) must not be negative!" }
         require(start in 0..this.lastIndex) { "Argument 'start' (${start}) is outside the expected range [0..${this.lastIndex}]!" }
@@ -48,7 +53,6 @@ class SliceBytes(
             // "whole" slice
             return this
         }
-
 
         // Note that we're not doing "slice of slice" here.
         // Instead, we're creating a (smaller) slice of the original byte array.
