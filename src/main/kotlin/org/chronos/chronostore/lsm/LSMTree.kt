@@ -21,9 +21,8 @@ import org.chronos.chronostore.lsm.event.LsmCursorClosedEvent
 import org.chronos.chronostore.lsm.merge.strategy.MergeService
 import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.model.command.KeyAndTimestamp
-import org.chronos.chronostore.util.StoreId
-import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.Timestamp
+import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.cursor.*
 import org.chronos.chronostore.util.iterator.IteratorExtensions.checkOrdered
 import org.chronos.chronostore.util.iterator.IteratorExtensions.filter
@@ -340,79 +339,65 @@ class LSMTree(
         log.debug { "TASK: merge files: ${fileIndices.sorted().joinToString(prefix = "[", separator = ", ", postfix = "]")}" }
         this.performAsyncWriteTask(monitor) {
             monitor.reportStarted("Merging ${fileIndices.size} files")
-            val allFilesToMerge = this.getFilesToMerge(fileIndices)
+            val filesToMerge = this.getFilesToMerge(fileIndices)
 
-            if (allFilesToMerge.size < 2) {
+            if (filesToMerge.size < 2) {
                 monitor.reportDone()
                 return
             }
+            // get the file index we're going to use (nobody else will get the same index, because of the AtomicInteger used here)
+            val targetFileIndex = this.nextFreeFileIndex.getAndIncrement()
 
-            var resultFileFromLastBatch: LSMTreeFile? = null
+            // this is the file we're going to write to
+            val targetFile = this.directory.file(this.createFileNameForIndex(targetFileIndex))
+            val maxMerge = filesToMerge.maxOfOrNull { it.header.metaData.numberOfMerges } ?: 0
 
-            for ((batchIndex, filesInBatch) in allFilesToMerge.chunked(3).withIndex()) {
-                println("Batch ${batchIndex}")
-                // get the file index we're going to use (nobody else will get the same index, because of the AtomicInteger used here)
-                val targetFileIndex = this.nextFreeFileIndex.getAndIncrement()
-
-                // this is the file we're going to write to
-                val targetFile = this.directory.file(this.createFileNameForIndex(targetFileIndex))
-
-                val filesToMerge = if(resultFileFromLastBatch != null){
-                    filesInBatch + listOf(resultFileFromLastBatch)
-                }else{
-                    filesInBatch
-                }
-
-                val maxMerge = filesToMerge.maxOfOrNull { it.header.metaData.numberOfMerges } ?: 0
-
-                targetFile.deleteOverWriterFileIfExists()
-                targetFile.createOverWriter().use { overWriter ->
-                    val cursors = filesToMerge.map { it.cursor() }
-                    try {
-                        val iterators = cursors.mapNotNull {
-                            if (it.first()) {
-                                it.ascendingValueSequenceFromHere().iterator()
-                            } else {
-                                null
-                            }
-                        }.toList()
-                        val commands = Iterators.mergeSorted(iterators, Comparator.naturalOrder())
-                        // ensure ordering and remove duplicates (which is cheap and lazy for ordered iterators)
-                        val basicIterator = commands.checkOrdered(strict = false).orderedDistinct()
-
-                        val finalIterator = if (retainOldVersions) {
-                            basicIterator
+            targetFile.deleteOverWriterFileIfExists()
+            targetFile.createOverWriter().use { overWriter ->
+                val cursors = filesToMerge.map { it.cursor() }
+                try {
+                    val iterators = cursors.mapNotNull {
+                        if (it.first()) {
+                            it.ascendingValueSequenceFromHere().iterator()
                         } else {
-                            // we have to drop old versions...
-                            basicIterator.latestVersionOnly()
-                                // ...and if the latest version happens to be a DELETE, we ignore the key.
-                                .filter { it.opCode != Command.OpCode.DEL }
+                            null
                         }
+                    }.toList()
+                    val commands = Iterators.mergeSorted(iterators, Comparator.naturalOrder())
+                    // ensure ordering and remove duplicates (which is cheap and lazy for ordered iterators)
+                    val basicIterator = commands.checkOrdered(strict = false).orderedDistinct()
 
-                        ChronoStoreFileWriter(
-                            outputStream = overWriter.outputStream,
-                            settings = this.newFileSettings,
-                            metadata = emptyMap()
-                        ).use { writer ->
-                            writer.writeFile(numberOfMerges = maxMerge + 1, orderedCommands = finalIterator)
-                        }
-                    } finally {
-                        for (cursor in cursors) {
-                            cursor.close()
-                        }
+                    val finalIterator = if (retainOldVersions) {
+                        basicIterator
+                    } else {
+                        // we have to drop old versions...
+                        basicIterator.latestVersionOnly()
+                            // ...and if the latest version happens to be a DELETE, we ignore the key.
+                            .filter { it.opCode != Command.OpCode.DEL }
                     }
-                    // prepare the new LSM file outside the lock (we don't need the lock, and opening the file can take a few seconds)
-                    val mergedLsmTreeFile = this.createLsmTreeFile(targetFile)
-                    this.lock.write {
-                        overWriter.commit()
-                        this.garbageFileManager.addAll(filesToMerge.map { it.virtualFile.name })
-                        this.fileList.removeAll(filesToMerge.toSet())
-                        this.fileList.add(mergedLsmTreeFile)
+
+                    ChronoStoreFileWriter(
+                        outputStream = overWriter.outputStream,
+                        settings = this.newFileSettings,
+                        metadata = emptyMap()
+                    ).use { writer ->
+                        writer.writeFile(numberOfMerges = maxMerge + 1, orderedCommands = finalIterator)
                     }
-                    resultFileFromLastBatch = mergedLsmTreeFile
+                } finally {
+                    for (cursor in cursors) {
+                        cursor.close()
+                    }
+                }
+                // prepare the new LSM file outside the lock (we don't need the lock, and opening the file can take a few seconds)
+                val mergedLsmTreeFile = this.createLsmTreeFile(targetFile)
+                this.lock.write {
+                    overWriter.commit()
+                    this.garbageFileManager.addAll(filesToMerge.map { it.virtualFile.name })
+                    this.fileList.removeAll(filesToMerge.toSet())
+                    this.fileList.add(mergedLsmTreeFile)
                 }
 
-                // after each batch, perform garbage collection in an attempt to free disk space
+                // perform garbage collection in an attempt to free disk space
                 this.performGarbageCollection(TaskMonitor.create())
             }
         }
