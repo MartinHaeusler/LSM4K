@@ -7,6 +7,7 @@ import org.chronos.chronostore.util.bytes.BasicBytes
 import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.statistics.ChronoStoreStatistics
 import org.chronos.chronostore.util.unit.GiB
+import org.chronos.chronostore.util.unit.MiB
 import kotlin.random.Random
 import kotlin.system.measureTimeMillis
 
@@ -34,6 +35,7 @@ object SerialReadWriteBenchmark {
 
         val config = ChronoStoreConfiguration()
         config.maxForestSize = 1.GiB
+        config.maxBlockSize = 32.MiB
 
         ChronoStoreMode.ONDISK.withChronoStore(config) { chronoStore ->
             chronoStore.transaction { tx ->

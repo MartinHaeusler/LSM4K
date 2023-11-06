@@ -2,22 +2,13 @@ package org.chronos.chronostore.io.vfs.disk
 
 import mu.KotlinLogging
 import org.chronos.chronostore.io.vfs.VirtualReadWriteFile
-import org.chronos.chronostore.util.IOExtensions.sync
-import org.chronos.chronostore.util.IOExtensions.withInputStream
 import org.chronos.chronostore.util.stream.UnclosableOutputStream.Companion.unclosable
 import java.io.File
-import java.io.FileDescriptor
 import java.io.FileOutputStream
 import java.io.IOException
 import java.io.OutputStream
-import java.nio.channels.AsynchronousFileChannel
-import java.nio.channels.Channels
-import java.nio.channels.FileChannel
 import java.nio.file.Files
-import java.nio.file.OpenOption
 import java.nio.file.StandardCopyOption
-import java.nio.file.StandardOpenOption
-import kotlin.math.min
 
 class DiskBasedVirtualReadWriteFile(
     parent: DiskBasedVirtualDirectory?,
@@ -50,14 +41,14 @@ class DiskBasedVirtualReadWriteFile(
     }
 
     override fun <T> append(action: (OutputStream) -> T): T {
-        return this.vfs.settings.fileSyncMode.performWriteAppend(this.file, action)
+        return this.vfs.settings.fileSyncMode.writeAppend(this.file, action)
     }
 
     override fun createOverWriter(): VirtualReadWriteFile.OverWriter {
         if (this.overwriteFile.exists()) {
             throw IOException("File Overwrite temp path '${this.overwriteFile.absolutePath}' already exists")
         }
-        return FileOverWriter(this.overwriteFile)
+        return FileOverWriter(this.overwriteFile, this.vfs.settings)
     }
 
     override fun deleteOverWriterFileIfExists() {
@@ -79,12 +70,17 @@ class DiskBasedVirtualReadWriteFile(
         }
     }
 
-    private inner class FileOverWriter(private val tempFile: File) : VirtualReadWriteFile.OverWriter {
+    private inner class FileOverWriter(
+        private val tempFile: File,
+        private val settings: DiskBasedVirtualFileSystemSettings,
+    ) : VirtualReadWriteFile.OverWriter {
 
         private var inProgress = true
 
-        private val fileOutputStream: FileOutputStream = this.tempFile.outputStream()
-        private val stream = fileOutputStream.buffered()
+        private val internalOutputStream: OutputStream = this.settings.fileSyncMode.createOutputStream(
+            target = this.tempFile,
+            append = false
+        )
 
         override val outputStream: OutputStream
             get() {
@@ -92,7 +88,7 @@ class DiskBasedVirtualReadWriteFile(
                 // only expose unclosable variants of the stream to
                 // the "outside world". We want to have control over
                 // when this stream gets closed inside this class.
-                return stream.unclosable()
+                return internalOutputStream.unclosable()
             }
 
         private fun assertNotClosed() {
@@ -104,11 +100,8 @@ class DiskBasedVirtualReadWriteFile(
             log.trace { "Committing writing $file" }
             inProgress = false
             try {
-                this.stream.flush()
-                this.fileOutputStream.flush()
-                this.fileOutputStream.sync(this.tempFile)
-                this.stream.close()
-                this.fileOutputStream.close()
+                this.internalOutputStream.flush()
+                this.internalOutputStream.close()
                 Files.move(tempFile.toPath(), file.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
             } catch (e: IOException) {
                 rollback()
@@ -123,7 +116,7 @@ class DiskBasedVirtualReadWriteFile(
             inProgress = false
             log.trace { "Aborting writing $file" }
             try {
-                this.stream.close()
+                this.internalOutputStream.close()
             } catch (e: Exception) {
                 log.warn(e) { "Ignoring error in closing file" }
             } finally {

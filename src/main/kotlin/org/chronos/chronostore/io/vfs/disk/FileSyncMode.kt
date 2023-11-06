@@ -1,7 +1,7 @@
 package org.chronos.chronostore.io.vfs.disk
 
 import org.chronos.chronostore.util.IOExtensions.sync
-import org.chronos.chronostore.util.stream.UnclosableOutputStream.Companion.unclosable
+import org.chronos.chronostore.util.stream.CloseHandlerOutputStream.Companion.onClose
 import java.io.File
 import java.io.FileOutputStream
 import java.io.OutputStream
@@ -9,6 +9,9 @@ import java.nio.channels.Channels
 import java.nio.channels.FileChannel
 import java.nio.file.StandardOpenOption
 
+/**
+ * The [FileSyncMode] determines how the data that is being written to a file is synced to disk.
+ */
 enum class FileSyncMode {
 
     /**
@@ -21,8 +24,8 @@ enum class FileSyncMode {
      */
     NO_SYNC {
 
-        override fun <T> performWriteAppend(target: File, action: (OutputStream) -> T): T {
-            return FileOutputStream(target, true).use(action)
+        override fun createOutputStream(target: File, append: Boolean): OutputStream {
+            return FileOutputStream(target, append).buffered()
         }
 
     },
@@ -30,15 +33,11 @@ enum class FileSyncMode {
     /** Uses `fsync()` to flush writes to disk. Slowest method, but should be supported on all file systems. */
     FULL_FSYNC {
 
-        override fun <T> performWriteAppend(target: File, action: (OutputStream) -> T): T {
-            val outputStream = FileOutputStream(target, true)
-            try {
-                val bufferedOutputStream = outputStream.unclosable().buffered()
-                val result = action(bufferedOutputStream)
-                bufferedOutputStream.flush()
-                return result
-            } finally {
-                outputStream.flush()
+        override fun createOutputStream(target: File, append: Boolean): OutputStream {
+            val outputStream = FileOutputStream(target, append)
+            val bufferedStream = outputStream.buffered()
+            return bufferedStream.onClose {
+                bufferedStream.flush()
                 outputStream.sync(target)
                 outputStream.close()
             }
@@ -49,21 +48,18 @@ enum class FileSyncMode {
     /** Uses [StandardOpenOption.SYNC] to flush writes to disk. Faster than [FULL_FSYNC], but may not be available on all file systems. */
     CHANNEL_SYNC {
 
-        override fun <T> performWriteAppend(target: File, action: (OutputStream) -> T): T {
-            FileChannel.open(
-                target.toPath(),
-                StandardOpenOption.CREATE,
-                StandardOpenOption.APPEND,
-                StandardOpenOption.WRITE,
-                StandardOpenOption.SYNC,
-            ).use { channel ->
-                channel.force(false)
-                Channels.newOutputStream(channel).buffered().use { outputStream ->
-                    val result = action(outputStream)
-                    outputStream.flush()
-                    return result
-                }
+        private val writeSettings = arrayOf(StandardOpenOption.CREATE, StandardOpenOption.WRITE, StandardOpenOption.SYNC)
+        private val appendSettings = arrayOf(*writeSettings, StandardOpenOption.APPEND)
+
+        override fun createOutputStream(target: File, append: Boolean): OutputStream {
+            val settings = if (append) {
+                appendSettings
+            } else {
+                writeSettings
             }
+
+            val channel = FileChannel.open(target.toPath(), *settings)
+            return Channels.newOutputStream(channel).buffered()
         }
 
     },
@@ -71,28 +67,37 @@ enum class FileSyncMode {
     /** Uses [StandardOpenOption.DSYNC] to flush writes to disk. Faster than [CHANNEL_SYNC], but may not be available on all file systems. */
     CHANNEL_DATASYNC {
 
-        override fun <T> performWriteAppend(target: File, action: (OutputStream) -> T): T {
-            FileChannel.open(
-                target.toPath(),
-                StandardOpenOption.CREATE,
-                StandardOpenOption.APPEND,
-                StandardOpenOption.WRITE,
-                StandardOpenOption.DSYNC,
-            ).use { channel ->
-                channel.force(false)
-                Channels.newOutputStream(channel).buffered().use { outputStream ->
-                    val result = action(outputStream)
-                    outputStream.flush()
-                    return result
-                }
+
+        private val writeSettings = arrayOf(StandardOpenOption.CREATE, StandardOpenOption.WRITE, StandardOpenOption.DSYNC)
+        private val appendSettings = arrayOf(*writeSettings, StandardOpenOption.APPEND)
+
+        override fun createOutputStream(target: File, append: Boolean): OutputStream {
+            val settings = if (append) {
+                appendSettings
+            } else {
+                writeSettings
             }
+
+            val channel = FileChannel.open(target.toPath(), *settings)
+            return Channels.newOutputStream(channel).buffered()
         }
 
     },
 
     ;
 
-    abstract fun <T> performWriteAppend(target: File, action: (OutputStream) -> T): T
+    fun <T> writeAppend(target: File, action: (OutputStream) -> T): T {
+        return this.createOutputStream(target, append = true).use(action)
+    }
 
+    /**
+     * Creates an [OutputStream] that carries out the write operations according to the [FileSyncMode].
+     *
+     * Users may assume that the returned stream is already buffered; no further buffering is necessary.
+     *
+     * @param target The file which should receive the data. If it doesn't exist yet, it will be created.
+     * @param append Use `true` to append new data to the existing file. Use `false` to overwrite the existing data.
+     */
+    abstract fun createOutputStream(target: File, append: Boolean): OutputStream
 
 }
