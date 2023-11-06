@@ -9,6 +9,7 @@ import java.nio.file.Files
 class DiskBasedVirtualDirectory(
     override val parent: DiskBasedVirtualDirectory?,
     private val file: File,
+    private val vfs: DiskBasedVirtualFileSystem,
 ) : VirtualDirectory {
 
 
@@ -19,9 +20,9 @@ class DiskBasedVirtualDirectory(
     override fun listElements(): List<VirtualFileSystemElement> {
         return this.file.listFiles()?.map {
             if (it.isFile) {
-                DiskBasedVirtualReadWriteFile(this, it)
+                DiskBasedVirtualReadWriteFile(this, it, this.vfs)
             } else {
-                DiskBasedVirtualDirectory(this, it)
+                DiskBasedVirtualDirectory(this, it, this.vfs)
             }
         } ?: emptyList()
     }
@@ -43,11 +44,11 @@ class DiskBasedVirtualDirectory(
     }
 
     override fun file(name: String): VirtualReadWriteFile {
-        return DiskBasedVirtualReadWriteFile(this, File(file, name))
+        return DiskBasedVirtualReadWriteFile(this, File(file, name), this.vfs)
     }
 
     override fun directory(name: String): VirtualDirectory {
-        return DiskBasedVirtualDirectory(this, File(this.file, name))
+        return DiskBasedVirtualDirectory(this, File(this.file, name), this.vfs)
     }
 
     override val name: String

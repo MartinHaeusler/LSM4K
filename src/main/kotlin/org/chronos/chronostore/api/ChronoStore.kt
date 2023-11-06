@@ -3,6 +3,7 @@ package org.chronos.chronostore.api
 import org.chronos.chronostore.impl.ChronoStoreImpl
 import org.chronos.chronostore.io.vfs.VirtualFileSystem
 import org.chronos.chronostore.io.vfs.disk.DiskBasedVirtualFileSystem
+import org.chronos.chronostore.io.vfs.disk.DiskBasedVirtualFileSystemSettings
 import org.chronos.chronostore.io.vfs.inmemory.InMemoryVirtualFileSystem
 import java.io.File
 
@@ -15,7 +16,8 @@ interface ChronoStore : AutoCloseable {
             require(directory.exists() && directory.isDirectory) {
                 "Argument 'directory' either doesn't exist or is not a directory: ${directory.absolutePath}"
             }
-            val vfs = DiskBasedVirtualFileSystem(directory)
+            val vfsConfig = configuration.createVirtualFileSystemConfiguration()
+            val vfs = DiskBasedVirtualFileSystem(directory, vfsConfig)
             return openOnVirtualFileSystem(vfs, configuration)
         }
 

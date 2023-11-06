@@ -8,6 +8,7 @@ import java.io.InputStream
 open class DiskBasedVirtualFile(
     override val parent: DiskBasedVirtualDirectory?,
     protected val file: File,
+    protected val vfs: DiskBasedVirtualFileSystem,
 ) : VirtualFile {
 
 

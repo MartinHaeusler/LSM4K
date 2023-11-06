@@ -3,6 +3,7 @@ package org.chronos.chronostore.benchmark.comparative.chronostore
 import org.chronos.chronostore.io.fileaccess.FileChannelDriver
 import org.chronos.chronostore.io.format.ChronoStoreFileReader
 import org.chronos.chronostore.io.vfs.disk.DiskBasedVirtualFileSystem
+import org.chronos.chronostore.io.vfs.disk.DiskBasedVirtualFileSystemSettings
 import org.chronos.chronostore.lsm.cache.LocalBlockCache
 import org.chronos.chronostore.util.statistics.ChronoStoreStatistics
 import org.xerial.snappy.Snappy
@@ -26,7 +27,7 @@ object TaxonomyDataReaderBenchmark {
 
         println("STARTING BENCHMARK")
 
-        val vfs = DiskBasedVirtualFileSystem(inputDir)
+        val vfs = DiskBasedVirtualFileSystem(inputDir, DiskBasedVirtualFileSystemSettings())
         val inputFile = vfs.file(inputFileName)
 
 

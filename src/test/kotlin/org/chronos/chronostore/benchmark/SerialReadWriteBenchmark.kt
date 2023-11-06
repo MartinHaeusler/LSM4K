@@ -30,7 +30,7 @@ object SerialReadWriteBenchmark {
 
 
         val random = Random(System.currentTimeMillis())
-        val uniqueKeys = (0 until NUMBER_OF_UNIQUE_KEYS).map { "key#${it}" }
+        val uniqueKeys = (0..<NUMBER_OF_UNIQUE_KEYS).map { "key#${it}" }
 
         val config = ChronoStoreConfiguration()
         config.maxForestSize = 1.GiB
@@ -98,8 +98,8 @@ object SerialReadWriteBenchmark {
                             } else {
                                 0
                             }
-                            if (r % 1000 == 0 && r > 0) {
-                                println("${Thread.currentThread().name} :: Read #${r} successful.")
+                            if (r % 10 == 0 && r > 0) {
+                                log.info { "Read #${r} successful." }
                             }
                             sum
                         }

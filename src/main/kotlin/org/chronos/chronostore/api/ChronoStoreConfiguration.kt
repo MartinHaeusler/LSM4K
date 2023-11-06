@@ -4,6 +4,8 @@ import com.cronutils.model.Cron
 import org.chronos.chronostore.io.fileaccess.FileChannelDriver
 import org.chronos.chronostore.io.fileaccess.RandomFileAccessDriverFactory
 import org.chronos.chronostore.io.format.CompressionAlgorithm
+import org.chronos.chronostore.io.vfs.disk.DiskBasedVirtualFileSystemSettings
+import org.chronos.chronostore.io.vfs.disk.FileSyncMode
 import org.chronos.chronostore.util.cron.CronUtils.cron
 import org.chronos.chronostore.util.cron.CronUtils.isValid
 import org.chronos.chronostore.util.unit.BinarySize
@@ -113,6 +115,16 @@ class ChronoStoreConfiguration {
     var maxWriteAheadLogFileSize: BinarySize = 128.MiB
 
     /**
+     * The sync mode for files.
+     *
+     * This mode determines how the files produced by the store are synced to disk.
+     * Please refer to the individual enum values for details.
+     *
+     * This setting will only take effect if disk-based persistence is used.
+     */
+    val fileSyncMode: FileSyncMode = FileSyncMode.CHANNEL_DATASYNC
+
+    /**
      * The minimum number of Write-Ahead-Log (WAL) files to keep.
      *
      * If the number of WAL files is less than or equal to this setting,
@@ -123,6 +135,12 @@ class ChronoStoreConfiguration {
     init {
         require(this.maxWriteAheadLogFileSize.bytes > 0) { "Cannot use a negative value for 'maxWriteAheadLogFileSize'!" }
         require(this.writeAheadLogCompactionCron?.isValid() ?: true) { "The cron expression for 'writeAheadLogCompactionCron' is invalid: ${this.writeAheadLogCompactionCron}" }
+    }
+
+    fun createVirtualFileSystemConfiguration(): DiskBasedVirtualFileSystemSettings {
+        return DiskBasedVirtualFileSystemSettings(
+            fileSyncMode = this.fileSyncMode
+        )
     }
 
 }

@@ -29,7 +29,7 @@ enum class ChronoStoreMode {
         override fun <T> withChronoStore(config: ChronoStoreConfiguration, action: (ChronoStoreImpl, VirtualFileSystem) -> T): T {
             val testDir = Files.createTempDirectory("chronostoreTest").toFile()
             try {
-                val vfs = DiskBasedVirtualFileSystem(testDir)
+                val vfs = DiskBasedVirtualFileSystem(testDir, config.createVirtualFileSystemConfiguration())
                 val chronoStore = ChronoStore.openOnVirtualFileSystem(vfs, config) as ChronoStoreImpl
                 return chronoStore.use { store ->
                     action(store, vfs)

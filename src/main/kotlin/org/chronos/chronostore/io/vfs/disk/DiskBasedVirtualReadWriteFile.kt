@@ -3,19 +3,27 @@ package org.chronos.chronostore.io.vfs.disk
 import mu.KotlinLogging
 import org.chronos.chronostore.io.vfs.VirtualReadWriteFile
 import org.chronos.chronostore.util.IOExtensions.sync
+import org.chronos.chronostore.util.IOExtensions.withInputStream
 import org.chronos.chronostore.util.stream.UnclosableOutputStream.Companion.unclosable
 import java.io.File
+import java.io.FileDescriptor
 import java.io.FileOutputStream
 import java.io.IOException
 import java.io.OutputStream
+import java.nio.channels.AsynchronousFileChannel
+import java.nio.channels.Channels
+import java.nio.channels.FileChannel
 import java.nio.file.Files
+import java.nio.file.OpenOption
 import java.nio.file.StandardCopyOption
+import java.nio.file.StandardOpenOption
 import kotlin.math.min
 
 class DiskBasedVirtualReadWriteFile(
     parent: DiskBasedVirtualDirectory?,
     file: File,
-) : DiskBasedVirtualFile(parent, file), VirtualReadWriteFile {
+    vfs: DiskBasedVirtualFileSystem,
+) : DiskBasedVirtualFile(parent, file, vfs), VirtualReadWriteFile {
 
     companion object {
 
@@ -42,17 +50,7 @@ class DiskBasedVirtualReadWriteFile(
     }
 
     override fun <T> append(action: (OutputStream) -> T): T {
-        val outputStream = FileOutputStream(file, true)
-        try {
-            val bufferedOutputStream = outputStream.unclosable().buffered()
-            val result = action(bufferedOutputStream)
-            bufferedOutputStream.flush()
-            return result
-        } finally {
-            outputStream.flush()
-            outputStream.sync(file)
-            outputStream.close()
-        }
+        return this.vfs.settings.fileSyncMode.performWriteAppend(this.file, action)
     }
 
     override fun createOverWriter(): VirtualReadWriteFile.OverWriter {
@@ -70,7 +68,7 @@ class DiskBasedVirtualReadWriteFile(
     override fun truncateAfter(bytesToKeep: Long) {
         require(bytesToKeep >= 0) { "Argument 'bytesToKeep' (${bytesToKeep}) must not be negative!" }
         check(this.exists()) { "Cannot truncate file '${this.path}' because it doesn't exist!" }
-        if(bytesToKeep >= this.length){
+        if (bytesToKeep >= this.length) {
             // nothing to truncate
             return
         }

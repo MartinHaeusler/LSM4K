@@ -7,7 +7,8 @@ import org.chronos.chronostore.io.vfs.VirtualReadWriteFile
 import java.io.File
 
 class DiskBasedVirtualFileSystem(
-    val rootDir: File
+    val rootDir: File,
+    val settings: DiskBasedVirtualFileSystemSettings,
 ) : VirtualFileSystem {
 
     init {
@@ -22,19 +23,35 @@ class DiskBasedVirtualFileSystem(
         val files = this.rootDir.listFiles() ?: emptyArray()
         return files.map {
             if (it.isFile) {
-                DiskBasedVirtualReadWriteFile(parent = null, it)
+                DiskBasedVirtualReadWriteFile(
+                    parent = null,
+                    file = it,
+                    vfs = this
+                )
             } else {
-                DiskBasedVirtualDirectory(parent = null, it)
+                DiskBasedVirtualDirectory(
+                    parent = null,
+                    file = it,
+                    vfs = this
+                )
             }
         }
     }
 
     override fun directory(name: String): VirtualDirectory {
-        return DiskBasedVirtualDirectory(parent = null, File(this.rootDir, name))
+        return DiskBasedVirtualDirectory(
+            parent = null,
+            file = File(this.rootDir, name),
+            vfs = this
+        )
     }
 
     override fun file(name: String): VirtualReadWriteFile {
-        return DiskBasedVirtualReadWriteFile(parent = null, File(this.rootDir, name))
+        return DiskBasedVirtualReadWriteFile(
+            parent = null,
+            file = File(this.rootDir, name),
+            vfs = this
+        )
     }
 
     override fun toString(): String {
