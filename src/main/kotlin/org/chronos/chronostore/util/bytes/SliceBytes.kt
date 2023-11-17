@@ -105,11 +105,11 @@ class SliceBytes(
         }
     }
 
-    override fun iterator(): Iterator<Byte> {
+    override fun iterator(): ByteIterator {
         return SliceBytesIterator()
     }
 
-    private inner class SliceBytesIterator : Iterator<Byte> {
+    private inner class SliceBytesIterator : ByteIterator() {
 
         var current = this@SliceBytes.startInclusive
 
@@ -117,7 +117,7 @@ class SliceBytes(
             return current <= endInclusive
         }
 
-        override fun next(): Byte {
+        override fun nextByte(): Byte {
             if (current > endInclusive) {
                 throw NoSuchElementException("Iterator has no more elements!")
             }

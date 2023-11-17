@@ -38,7 +38,7 @@ class BasicBytes(
         return this.array.isEmpty()
     }
 
-    override fun iterator(): Iterator<Byte> {
+    override fun iterator(): ByteIterator {
         return this.array.iterator()
     }
 

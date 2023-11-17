@@ -265,6 +265,8 @@ sealed interface Bytes :
         return !this.iterator().hasNext()
     }
 
+    override fun iterator(): ByteIterator
+
     /**
      * Writes the contents of this [Bytes] object to the given output stream.
      *

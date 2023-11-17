@@ -3,7 +3,7 @@ package org.chronos.chronostore.util.bytes
 import java.io.InputStream
 
 class BytesInputStream(
-    private val iterator: Iterator<Byte>
+    private val iterator: ByteIterator
 ) : InputStream() {
 
     override fun read(): Int {
@@ -14,7 +14,7 @@ class BytesInputStream(
         // integers, we perform the "and 0xff". If we
         // don't do this, we get negative integers, which
         // is not what we want.
-        return this.iterator.next().toInt() and 0xff
+        return this.iterator.nextByte().toInt() and 0xff
     }
 
 

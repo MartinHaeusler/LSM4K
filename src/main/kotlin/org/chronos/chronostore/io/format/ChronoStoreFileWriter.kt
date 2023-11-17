@@ -161,7 +161,6 @@ class ChronoStoreFileWriter : AutoCloseable {
                 nextCommand.timestamp
             )
             blockIndexToStartPositionAndMinKey += Triple(blockSequenceNumber, this.outputStream.position, minKeyAndTimestamp)
-            println("Writing block ${blockSequenceNumber}")
             writeBlock(commands, blockSequenceNumber)
             blockSequenceNumber++
         }
