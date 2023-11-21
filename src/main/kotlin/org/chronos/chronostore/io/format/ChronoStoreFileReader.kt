@@ -1,5 +1,6 @@
 package org.chronos.chronostore.io.format
 
+import org.chronos.chronostore.api.exceptions.ChronoStoreBlockReadException
 import org.chronos.chronostore.io.fileaccess.RandomFileAccessDriver
 import org.chronos.chronostore.io.format.datablock.DataBlock
 import org.chronos.chronostore.lsm.cache.LocalBlockCache
@@ -103,7 +104,15 @@ class ChronoStoreFileReader : AutoCloseable {
             )
         val blockBytes = this.driver.readBytes(startPosition, length)
         val compressionAlgorithm = this.fileHeader.metaData.settings.compression
-        return DataBlock.loadBlock(blockBytes, compressionAlgorithm)
+        try {
+            return DataBlock.loadBlock(blockBytes, compressionAlgorithm)
+        } catch (e: Exception) {
+            throw ChronoStoreBlockReadException(
+                message = "Failed to read block #${blockIndex} of file '${this.driver.filePath}'." +
+                    " This file is potentially corrupted! Cause: ${e}",
+                cause = e
+            )
+        }
     }
 
     fun openCursor(): Cursor<KeyAndTimestamp, Command> {

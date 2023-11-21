@@ -1,18 +1,13 @@
 package org.chronos.chronostore.benchmark.comparative.chronostore
 
-import jetbrains.exodus.ArrayByteIterable
 import jetbrains.exodus.ByteIterable
 import jetbrains.exodus.ByteIterator
-import jetbrains.exodus.env.Environments
-import jetbrains.exodus.env.StoreConfig
 import org.chronos.chronostore.api.ChronoStore
-import org.chronos.chronostore.benchmark.comparative.xodus.XodusUtils.toBytes
 import org.chronos.chronostore.benchmark.util.Statistics.Companion.statistics
 import org.chronos.chronostore.util.bytes.BasicBytes
 import org.chronos.chronostore.util.bytes.Bytes
 import java.io.File
 import java.io.InputStream
-import java.util.ArrayList
 import kotlin.system.measureTimeMillis
 
 object ChronoStoreTaxonomyDataRandomReadBenchmark {
