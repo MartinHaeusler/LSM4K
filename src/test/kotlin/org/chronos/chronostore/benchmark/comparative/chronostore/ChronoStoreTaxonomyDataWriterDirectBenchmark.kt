@@ -12,7 +12,7 @@ import org.chronos.chronostore.util.unit.Bytes
 import org.chronos.chronostore.util.unit.MiB
 import java.io.File
 
-object TaxonomyDataWriterBenchmark {
+object ChronoStoreTaxonomyDataWriterDirectBenchmark {
 
     val compressionAlgorithm = CompressionAlgorithm.NONE
     val blockSize = 16.MiB

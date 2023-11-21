@@ -9,7 +9,7 @@ import org.chronos.chronostore.model.command.KeyAndTimestamp
 import java.io.File
 import java.io.InputStream
 
-object XodusTaxonomyDataReadBenchmark {
+object XodusTaxonomyDataFullTableScanBenchmark {
 
     @JvmStatic
     fun main(args: Array<String>) {
@@ -37,6 +37,7 @@ object XodusTaxonomyDataReadBenchmark {
         }
         val timeAfterRead = System.currentTimeMillis()
         println("Read all ${commandCount} in Xodus directory '${inputDir.absolutePath}' in ${timeAfterRead - timeBeforeRead}ms.")
+        println("Black hole: ${blackHole}")
     }
 
     private class XodusByteInputStream(

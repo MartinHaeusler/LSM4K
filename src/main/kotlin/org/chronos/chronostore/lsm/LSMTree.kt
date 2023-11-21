@@ -15,9 +15,6 @@ import org.chronos.chronostore.io.vfs.VirtualReadWriteFile.Companion.withOverWri
 import org.chronos.chronostore.lsm.LSMTreeFile.Companion.FILE_EXTENSION
 import org.chronos.chronostore.lsm.cache.FileHeaderCache
 import org.chronos.chronostore.lsm.cache.LocalBlockCache
-import org.chronos.chronostore.lsm.event.InMemoryLsmFlushEvent
-import org.chronos.chronostore.lsm.event.InMemoryLsmInsertEvent
-import org.chronos.chronostore.lsm.event.LsmCursorClosedEvent
 import org.chronos.chronostore.lsm.merge.strategy.MergeService
 import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.model.command.KeyAndTimestamp
@@ -43,7 +40,6 @@ import kotlin.system.measureTimeMillis
 class LSMTree(
     private val forest: LSMForestMemoryManager,
     private val directory: VirtualDirectory,
-    private val mergeService: MergeService,
     private val blockCache: LocalBlockCache,
     private val fileHeaderCache: FileHeaderCache,
     private val driverFactory: RandomFileAccessDriverFactory,
@@ -176,7 +172,7 @@ class LSMTree(
 
     fun openCursor(transaction: ChronoStoreTransaction, timestamp: Timestamp): Cursor<Bytes, Command> {
         require(timestamp <= transaction.lastVisibleTimestamp) { "Cannot open cursor on timestamp ${timestamp}, because the last visible timestamp in the transaction is ${transaction.lastVisibleTimestamp}!" }
-        val rawCursor = this.lock.read {
+        this.lock.read {
             val inMemoryDataMap = this.inMemoryTree
             val inMemoryCursor = if (inMemoryDataMap.isEmpty()) {
                 EmptyCursor { "In-Memory Cursor" }
@@ -190,18 +186,14 @@ class LSMTree(
             if (inMemoryCursor !is EmptyCursor) {
                 fileCursors.add(inMemoryCursor)
             }
-            val cursor = fileCursors.asSequence()
+            return fileCursors.asSequence()
                 .map { VersioningCursor(it, timestamp, includeDeletions = true) }
                 .reduce(::OverlayCursor)
-            cursor
-        }
-        return rawCursor.onClose {
-            this.mergeService.handleCursorClosedEvent(LsmCursorClosedEvent(this))
         }
     }
 
     fun put(commands: Iterable<Command>) {
-        val event = this.lock.write {
+        this.lock.write {
             val containedEntry = commands.asSequence().map { it.keyAndTimestamp }.firstOrNull(this.inMemoryTree::containsKey)
             require(containedEntry == null) {
                 "The key-and-timestamp ${containedEntry} is already contained in in-memory LSM tree!"
@@ -216,30 +208,12 @@ class LSMTree(
             // to claim more and more RAM until we eventually run into an OutOfMemoryError.
             this.waitUntilInMemoryTreeHasCapacity(bytesToInsert)
 
-            // capture this value within the lock in order to avoid concurrency issues which
-            // might cause "treeSizeBefore" to be greater than "treeSizeAfter"
-            val treeSizeBefore = this.inMemorySize
-            val treeCountBefore = this.inMemoryTree.size
-
             this.inMemoryTree = this.inMemoryTree.plusAll(keyAndTimestampToCommand)
             this.inMemoryTreeSizeInBytes.getAndAdd(bytesToInsert)
 
-            val treeCountAfter = this.inMemoryTree.size
-            val treeSizeAfter = this.inMemorySize
-
             // the in-memory tree size has changed, notify listeners
             this.treeSizeChangedCondition.signalAll()
-
-            InMemoryLsmInsertEvent(
-                lsmTree = this,
-                inMemoryElementCountBefore = treeCountBefore,
-                inMemoryElementCountAfter = treeCountAfter,
-                inMemorySizeBefore = treeSizeBefore,
-                inMemorySizeAfter = treeSizeAfter,
-            )
         }
-        // let the merge strategy know what happened
-        this.mergeService.handleInMemoryInsertEvent(event)
     }
 
     private fun waitUntilInMemoryTreeHasCapacity(bytesToInsert: Long) {
@@ -290,7 +264,7 @@ class LSMTree(
                 }
             }
             log.trace(LogMarkers.PERF) { "Flush into index file ${newFileIndex} completed in ${flushTime}ms. Redirecting traffic to new data file for LSM tree ${this.path}" }
-            val event = monitor.subTask(0.1, "Redirecting traffic to file") {
+            monitor.subTask(0.1, "Redirecting traffic to file") {
                 this.lock.write {
                     this.fileList.add(this.createLsmTreeFile(file))
                     log.trace(LogMarkers.PERF) { "Removing ${commands.keys.size} keys from the in-memory tree (which has ${this.inMemoryTree.size} keys)..." }
@@ -300,15 +274,9 @@ class LSMTree(
 
                     // the in-memory tree size has changed, notify listeners
                     this.forest.onInMemoryFlush(this)
-
-                    InMemoryLsmFlushEvent(
-                        lsmTree = this,
-                        flushedEntryCount = commands.size
-                    )
                 }
             }
 
-            this.mergeService.handleInMemoryFlushEvent(event)
             monitor.reportDone()
             return file.length
         }

@@ -66,6 +66,14 @@ class ChronoStoreImpl(
     init {
         val walDirectory = this.vfs.directory(ChronoStoreStructure.WRITE_AHEAD_LOG_DIR_NAME)
         val isEmptyDatabase = !walDirectory.exists()
+        if (isEmptyDatabase) {
+            // If there is no WAL directory, we're going to set up a completely new database.
+            // To avoid any trouble with existing files, we demand that our working directory
+            // must be empty.
+            if (this.vfs.listRootLevelElements().isNotEmpty()) {
+                throw IllegalArgumentException("Cannot create new database in '${vfs.rootPath}': the directory is not empty!")
+            }
+        }
         this.writeAheadLog = WriteAheadLog(
             directory = walDirectory,
             compressionAlgorithm = this.configuration.compressionAlgorithm,

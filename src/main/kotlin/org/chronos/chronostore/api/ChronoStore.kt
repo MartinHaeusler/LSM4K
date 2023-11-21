@@ -12,7 +12,8 @@ interface ChronoStore : AutoCloseable {
     companion object {
 
         @JvmStatic
-        fun openOnDirectory(directory: File, configuration: ChronoStoreConfiguration): ChronoStore {
+        @JvmOverloads
+        fun openOnDirectory(directory: File, configuration: ChronoStoreConfiguration = ChronoStoreConfiguration()): ChronoStore {
             require(directory.exists() && directory.isDirectory) {
                 "Argument 'directory' either doesn't exist or is not a directory: ${directory.absolutePath}"
             }
@@ -22,7 +23,8 @@ interface ChronoStore : AutoCloseable {
         }
 
         @JvmStatic
-        fun openInMemory(configuration: ChronoStoreConfiguration): ChronoStore {
+        @JvmOverloads
+        fun openInMemory(configuration: ChronoStoreConfiguration = ChronoStoreConfiguration()): ChronoStore {
             val vfs = InMemoryVirtualFileSystem()
             return openOnVirtualFileSystem(vfs, configuration)
         }

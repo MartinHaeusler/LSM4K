@@ -9,7 +9,7 @@ import org.chronos.chronostore.util.statistics.ChronoStoreStatistics
 import org.xerial.snappy.Snappy
 import java.io.File
 
-object TaxonomyDataReaderBenchmark {
+object ChronoStoreTaxonomyDataReaderDirectBenchmark {
 
     val inputDir = File("/home/martin/Documents/chronostore-test")
     val inputFileName = "taxonomy_snappy.chronostore"

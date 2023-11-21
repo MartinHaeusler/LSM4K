@@ -65,7 +65,8 @@ class StoreManagerImpl(
                 // read the store infos from the JSON file
                 val storeInfos = this.readStoreInfoFromJson()
                 for (storeInfo in storeInfos) {
-                    val storeDirectory = getStoreDirectory(storeInfo.storeId)
+                    val storeId = StoreId.of(storeInfo.storeId)
+                    val storeDirectory = getStoreDirectory(storeId)
                     val store = createStore(storeInfo, storeDirectory)
                     this.registerStoreInCaches(store)
                 }
@@ -93,16 +94,16 @@ class StoreManagerImpl(
     }
 
     private fun createStore(storeInfo: StoreInfo, directory: VirtualDirectory): StoreImpl {
+        val storeId = StoreId.of(storeInfo.storeId)
         return StoreImpl(
-            storeId = storeInfo.storeId,
+            storeId = storeId,
             retainOldVersions = storeInfo.retainOldVersions,
             validFrom = storeInfo.validFrom,
             validTo = storeInfo.validTo,
             createdByTransactionId = storeInfo.createdByTransactionId,
             directory = directory,
             forest = this.forest,
-            mergeService = this.mergeService,
-            blockCache = this.blockCacheManager.getBlockCache(storeInfo.storeId),
+            blockCache = this.blockCacheManager.getBlockCache(storeId),
             fileHeaderCache = this.fileHeaderCache,
             driverFactory = this.driverFactory,
             newFileSettings = this.newFileSettings,
@@ -121,22 +122,22 @@ class StoreManagerImpl(
         }
     }
 
-    override fun createNewStore(transaction: ChronoStoreTransaction, storeId: StoreId, versioned: Boolean, validFrom: Timestamp): Store {
+    override fun createNewStore(transaction: ChronoStoreTransaction, name: StoreId, versioned: Boolean, validFrom: Timestamp): Store {
         check(this.isOpen) { DB_ALREADY_CLOSED }
         check(transaction.isOpen) { "Argument 'transaction' must refer to an open transaction, but the given transaction has already been closed!" }
         require(validFrom >= transaction.lastVisibleTimestamp) { "Argument 'validFrom' (${validFrom}) must not be smaller than the transaction timestamp (${transaction.lastVisibleTimestamp})!" }
         this.lock.write {
             assertInitialized()
-            require(!storeId.isSystemInternal) { "Store names must not start with '_' (reserved for internal purposes)!" }
-            require(!this.storesByName.containsKey(storeId)) { "There already exists a store with StoreID '${storeId}'!" }
+            require(!name.isSystemInternal) { "Store names must not start with '_' (reserved for internal purposes)!" }
+            require(!this.storesByName.containsKey(name)) { "There already exists a store with StoreID '${name}'!" }
             // ensure that stores are not becoming nested.
             val allStores = this.getAllStoresInternal()
-            val offendingStore = allStores.firstOrNull { storeId.collidesWith(it.storeId) }
-            require(offendingStore == null){
-                "The given StoreID '${storeId}' collides with existing StoreID '${offendingStore}' - StoreID paths must not be prefixes of one another (Stores cannot be 'nested')!"
+            val offendingStore = allStores.firstOrNull { name.collidesWith(it.storeId) }
+            require(offendingStore == null) {
+                "The given StoreID '${name}' collides with existing StoreID '${offendingStore}' - StoreID paths must not be prefixes of one another (Stores cannot be 'nested')!"
             }
             val transactionId = transaction.id
-            return createAndRegisterStoreInternal(storeId, versioned, validFrom, transactionId)
+            return createAndRegisterStoreInternal(name, versioned, validFrom, transactionId)
         }
     }
 
@@ -155,7 +156,7 @@ class StoreManagerImpl(
         val storeInfoList = mutableListOf<StoreInfo>()
         this.storesByName.values.asSequence().map { it.storeInfo }.toCollection(storeInfoList)
         val newStoreInfo = StoreInfo(
-            storeId = storeId,
+            storeId = storeId.toString(),
             retainOldVersions = versioned,
             validFrom = validFrom,
             validTo = null,
@@ -300,7 +301,7 @@ class StoreManagerImpl(
     private fun readStoreInfoFromJson(): List<StoreInfo> {
         this.lock.read {
             this.storeInfoFile.withInputStream { input ->
-                return JsonUtil.readJsonAsObject(input)
+                return JsonUtil.readJsonAsObject<List<StoreInfo>>(input)
             }
         }
     }
@@ -317,7 +318,7 @@ class StoreManagerImpl(
 
     private val Store.storeInfo: StoreInfo
         get() = StoreInfo(
-            storeId = storeId,
+            storeId = storeId.toString(),
             retainOldVersions = retainOldVersions,
             validFrom = validFrom,
             validTo = validTo,
@@ -333,15 +334,15 @@ class StoreManagerImpl(
     }
 
     private fun StoreId.collidesWith(other: StoreId): Boolean {
-        if(this == other){
+        if (this == other) {
             return true
         }
         val thisIterator = this.path.iterator()
         val otherIterator = other.path.iterator()
-        while(thisIterator.hasNext() && otherIterator.hasNext()){
+        while (thisIterator.hasNext() && otherIterator.hasNext()) {
             val thisElement = thisIterator.next()
             val otherElement = otherIterator.next()
-            if(thisElement != otherElement){
+            if (thisElement != otherElement) {
                 return false
             }
         }
@@ -350,7 +351,7 @@ class StoreManagerImpl(
     }
 
     private data class StoreInfo(
-        val storeId: StoreId,
+        val storeId: String,
         val retainOldVersions: Boolean,
         val validFrom: Timestamp,
         val validTo: Timestamp?,

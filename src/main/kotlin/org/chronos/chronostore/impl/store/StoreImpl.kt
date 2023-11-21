@@ -21,7 +21,6 @@ class StoreImpl(
     override val createdByTransactionId: TransactionId,
     override val directory: VirtualDirectory,
     forest: LSMForestMemoryManager,
-    mergeService: MergeService,
     blockCache: LocalBlockCache,
     fileHeaderCache: FileHeaderCache,
     driverFactory: RandomFileAccessDriverFactory,
@@ -31,7 +30,6 @@ class StoreImpl(
     val tree = LSMTree(
         forest = forest,
         directory = this.directory,
-        mergeService = mergeService,
         blockCache = blockCache,
         driverFactory = driverFactory,
         newFileSettings = newFileSettings,
