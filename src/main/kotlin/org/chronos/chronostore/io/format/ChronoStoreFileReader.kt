@@ -73,7 +73,7 @@ class ChronoStoreFileReader : AutoCloseable {
         while (true) {
             val dataBlock = this.getBlockForIndex(blockIndex)
                 ?: return matchingCommandFromPreviousBlock
-            val (command, isLastInBlock) = dataBlock.get(keyAndTimestamp, this.driver)
+            val (command, isLastInBlock) = dataBlock.get(keyAndTimestamp)
                 ?: return matchingCommandFromPreviousBlock
             if (!isLastInBlock) {
                 return command
@@ -103,7 +103,7 @@ class ChronoStoreFileReader : AutoCloseable {
             )
         val blockBytes = this.driver.readBytes(startPosition, length)
         val compressionAlgorithm = this.fileHeader.metaData.settings.compression
-        return DataBlock.createEagerLoadingInMemoryBlock(blockBytes, compressionAlgorithm)
+        return DataBlock.loadBlock(blockBytes, compressionAlgorithm)
     }
 
     fun openCursor(): Cursor<KeyAndTimestamp, Command> {
@@ -179,7 +179,7 @@ class ChronoStoreFileReader : AutoCloseable {
                 return false
             }
             this.currentBlock = firstBlock
-            val cursor = firstBlock.cursor(this.driver)
+            val cursor = firstBlock.cursor()
             this.currentCursor = cursor
             // the block isn't empty, so we have a first element.
             cursor.firstOrThrow()
@@ -198,7 +198,7 @@ class ChronoStoreFileReader : AutoCloseable {
                 return false
             }
             this.currentBlock = lastBlock
-            val cursor = lastBlock.cursor(this.driver)
+            val cursor = lastBlock.cursor()
             this.currentCursor = cursor
             // the block isn't empty, so we have a last element.
             cursor.lastOrThrow()
@@ -230,7 +230,7 @@ class ChronoStoreFileReader : AutoCloseable {
             }
             val newBlock = getBlockForIndex(nextBlockIndex)
                 ?: throw IllegalStateException("Could not get block with index ${nextBlockIndex} in file '${driver.filePath}'!")
-            val newCursor = newBlock.cursor(this.driver)
+            val newCursor = newBlock.cursor()
             newCursor.firstOrThrow()
             this.currentBlock = newBlock
             this.currentCursor = newCursor
@@ -261,7 +261,7 @@ class ChronoStoreFileReader : AutoCloseable {
             }
             val newBlock = getBlockForIndex(previousBlockIndex)
                 ?: throw IllegalStateException("Could not get block with index ${previousBlockIndex} in file '${driver.filePath}'!")
-            val newCursor = newBlock.cursor(this.driver)
+            val newCursor = newBlock.cursor()
             newCursor.lastOrThrow()
             this.currentBlock = newBlock
             this.currentCursor = newCursor
@@ -340,7 +340,7 @@ class ChronoStoreFileReader : AutoCloseable {
                 ?: return false
             val block = getBlockForIndex(blockIndex)
                 ?: return false
-            val cursor = block.cursor(this.driver)
+            val cursor = block.cursor()
 
             if (!cursor.seekExactlyOrNext(key)) {
                 cursor.close()
@@ -364,7 +364,7 @@ class ChronoStoreFileReader : AutoCloseable {
                 ?: return false
             val block = getBlockForIndex(blockIndex)
                 ?: return false
-            val cursor = block.cursor(this.driver)
+            val cursor = block.cursor()
             if (!cursor.seekExactlyOrPrevious(key)) {
                 cursor.close()
                 return false

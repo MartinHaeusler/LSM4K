@@ -1,57 +1,32 @@
 package org.chronos.chronostore.io.format.datablock
 
+import org.chronos.chronostore.model.command.Command
+import org.chronos.chronostore.model.command.KeyAndTimestamp
 import org.chronos.chronostore.io.fileaccess.RandomFileAccessDriver
 import org.chronos.chronostore.io.format.BlockMetaData
 import org.chronos.chronostore.io.format.ChronoStoreFileFormat
 import org.chronos.chronostore.io.format.CompressionAlgorithm
-import org.chronos.chronostore.model.command.Command
-import org.chronos.chronostore.model.command.KeyAndTimestamp
-import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.LittleEndianExtensions.readLittleEndianInt
 import org.chronos.chronostore.util.TreeMapUtils
+import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.bytes.BytesBuffer
 import org.chronos.chronostore.util.cursor.Cursor
+import org.chronos.chronostore.util.cursor.EmptyCursor
+import org.chronos.chronostore.util.cursor.NavigableMapCursor
 import java.io.ByteArrayInputStream
 import java.io.InputStream
+import java.util.*
 
-
-interface DataBlock {
-
-    val metaData: BlockMetaData
-
-    val byteSize: Long
-
-    fun isEmpty(): Boolean
-
-    /**
-     * Attempts to get the value for the given [key] from this block.
-     *
-     * @param key The key-and-timestamp to get from the block.
-     *
-     * @return Either the successful result, or `null` if the key wasn't found at all.
-     *         If the key was found, a pair is returned. The command is the command
-     *         associated with the largest key in the block which is less than or equal
-     *         to the requested key. The value is a boolean which indicates if the
-     *         returned key is the **last** key in the block. If this happens to be
-     *         the case, the next data block needs to be consulted as well, because
-     *         the entry we returned may not be the **latest** entry for the key.
-     */
-    fun get(key: KeyAndTimestamp, driver: RandomFileAccessDriver): Pair<Command, Boolean>?
-
-    /**
-     * Opens a new cursor on this block.
-     *
-     * The cursor needs to be closed explicitly.
-     *
-     * @return the new cursor.
-     */
-    fun cursor(driver: RandomFileAccessDriver): Cursor<KeyAndTimestamp, Command>
+class DataBlock(
+    val metaData: BlockMetaData,
+    private val data: NavigableMap<KeyAndTimestamp, Command>,
+) {
 
     companion object {
 
         @JvmStatic
         @Suppress("UNCHECKED_CAST")
-        fun createEagerLoadingInMemoryBlock(
+        fun loadBlock(
             input: Bytes,
             compressionAlgorithm: CompressionAlgorithm
         ): DataBlock {
@@ -101,7 +76,7 @@ interface DataBlock {
             // all commands from the block, we will have filled every spot in the array with a non-NULL command.
             val commands = TreeMapUtils.treeMapFromSortedList(commandsArray.asList() as List<Map.Entry<KeyAndTimestamp, Command>>)
 
-            return EagerDataBlock(
+            return DataBlock(
                 metaData = blockMetaData,
                 data = commands,
             )
@@ -109,7 +84,7 @@ interface DataBlock {
         }
 
         @JvmStatic
-        fun createEagerLoadingInMemoryBlock(
+        fun loadBlock(
             inputStream: InputStream,
             compressionAlgorithm: CompressionAlgorithm
         ): DataBlock {
@@ -150,7 +125,7 @@ interface DataBlock {
 
             val commands = TreeMapUtils.treeMapFromSortedList(commandsList)
 
-            return EagerDataBlock(
+            return DataBlock(
                 metaData = blockMetaData,
                 data = commands,
             )
@@ -163,5 +138,73 @@ interface DataBlock {
         override val key: K,
         override val value: V,
     ) : Map.Entry<K, V>
+
+    /**
+     * Returns the size of this block (metadata + data) in bytes.
+     */
+    val byteSize: Long
+        get() {
+            // add 10% overhead to the data size for the navigable map data structure
+            return (this.metaData.uncompressedDataSize * 1.10).toLong() + metaData.byteSize
+        }
+
+    /**
+     * Checks if there is any data in this block.
+     *
+     * @return `true` if the block is empty, otherwise `false`.
+     */
+    fun isEmpty(): Boolean {
+        return this.data.isEmpty()
+    }
+
+    /**
+     * Attempts to get the value for the given [key] from this block.
+     *
+     * @param key The key-and-timestamp to get from the block.
+     *
+     * @return Either the successful result, or `null` if the key wasn't found at all.
+     *         If the key was found, a pair is returned. The command is the command
+     *         associated with the largest key in the block which is less than or equal
+     *         to the requested key. The value is a boolean which indicates if the
+     *         returned key is the **last** key in the block. If this happens to be
+     *         the case, the next data block needs to be consulted as well, because
+     *         the entry we returned may not be the **latest** entry for the key.
+     */
+    fun get(key: KeyAndTimestamp): Pair<Command, Boolean>? {
+        if (key.key !in metaData.minKey..metaData.maxKey) {
+            return null
+        }
+        if (key.timestamp < metaData.minTimestamp) {
+            return null
+        }
+        val (foundKeyAndTimestamp, foundCommand) = data.floorEntry(key)
+            ?: return null // request key is too small
+
+        // did we hit the same key?
+        return if (foundKeyAndTimestamp.key == key.key) {
+            // key is the same -> this is the entry we're looking for.
+            Pair(foundCommand, data.lastKey() == foundKeyAndTimestamp)
+        } else {
+            // key is different -> the key we wanted doesn't exist.
+            null
+        }
+    }
+
+    /**
+     * Opens a new cursor on this block.
+     *
+     * The cursor needs to be closed explicitly.
+     *
+     * @return the new cursor.
+     */
+    fun cursor(): Cursor<KeyAndTimestamp, Command> {
+        return if (this.data.isEmpty()) {
+            EmptyCursor(
+                getCursorName = { "Data Block #${this.metaData.blockSequenceNumber}" }
+            )
+        } else {
+            NavigableMapCursor(this.data)
+        }
+    }
 
 }
