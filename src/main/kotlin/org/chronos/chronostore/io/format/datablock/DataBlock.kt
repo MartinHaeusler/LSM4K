@@ -1,5 +1,7 @@
 package org.chronos.chronostore.io.format.datablock
 
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.model.command.KeyAndTimestamp
 import org.chronos.chronostore.io.fileaccess.RandomFileAccessDriver
@@ -62,13 +64,32 @@ class DataBlock(
             val commandsArray = arrayOfNulls<Map.Entry<KeyAndTimestamp, Command>>(blockMetaData.commandCount)
             val decompressedBuffer = BytesBuffer(decompressedData)
 
+            val om = jacksonObjectMapper()
+
             for (i in 0..commandsArray.lastIndex) {
-                val command = Command.readFromBytesBuffer(decompressedBuffer)
-                    ?: throw IllegalStateException(
-                        "Could not read command at index ${i} from the decompressed buffer -" +
-                            " expected ${blockMetaData.commandCount} commands to be in the buffer!"
+                try {
+                    val command = Command.readFromBytesBuffer(decompressedBuffer)
+                        ?: throw IllegalStateException(
+                            "Could not read command at index ${i} from the decompressed buffer -" +
+                                " expected ${blockMetaData.commandCount} commands to be in the buffer!"
+                        )
+
+
+                    // DEBUG START
+//                    println("CMD #${i}: ${command.opCode} ${command.key.asString()}@${command.timestamp}: [${command.value.size}]")
+
+                    if (command.value.isNotEmpty()) {
+                        om.readTree(command.value.asString())
+                    }
+                    // DEBUG END
+
+                    commandsArray[i] = ImmutableEntry(command.keyAndTimestamp, command)
+                } catch (e: Exception) {
+                    throw IllegalStateException(
+                        "Could not read command at index ${i} (of ${blockMetaData.commandCount-1} total) from the decompressed buffer! Cause: ${e}",
+                        e
                     )
-                commandsArray[i] = ImmutableEntry(command.keyAndTimestamp, command)
+                }
             }
 
             // this cast is 100% safe!

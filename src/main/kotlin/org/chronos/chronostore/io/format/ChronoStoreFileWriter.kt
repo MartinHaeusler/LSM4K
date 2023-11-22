@@ -37,6 +37,8 @@ class ChronoStoreFileWriter : AutoCloseable {
         /** The format version of the file. */
         val FILE_FORMAT_VERSION: ChronoStoreFileFormat.Version = ChronoStoreFileFormat.Version.V_1_0_0
 
+        /** We allow 1% of false positives in the bloom filters. */
+        private const val BLOOM_FILTER_FALSE_POSITIVE_PROBABILITY = 0.01
     }
 
     /**
@@ -194,7 +196,9 @@ class ChronoStoreFileWriter : AutoCloseable {
         // in order to create an appropriately sized bloom filter for the block later on,
         // we must keep track of all keys within the block.
         val allKeysInBlock = mutableListOf<Bytes>()
-        while (commands.hasNext() && (blockPositionTrackingStream.position + commands.peek().byteSize) < this.settings.maxBlockSize.bytes) {
+        // fill the block with commands:
+        // While we have more commands (and the block didn't get too big yet), write more commands to the block.
+        while (commands.hasNext() && blockPositionTrackingStream.position < this.settings.maxBlockSize.bytes) {
             val command = commands.next()
             command.writeToStream(blockPositionTrackingStream)
             minTimestamp = min(minTimestamp, command.timestamp)
@@ -259,7 +263,7 @@ class ChronoStoreFileWriter : AutoCloseable {
         val bloomFilter = BloomFilter.create(
             /* funnel = */ Funnels.byteArrayFunnel(),
             /* expectedInsertions = */ allKeysInBlock.size,
-            /* fpp = */ 0.01
+            /* fpp = */ BLOOM_FILTER_FALSE_POSITIVE_PROBABILITY
         )
 
         // add all entries to the bloom filter
