@@ -18,6 +18,12 @@ object PrefixIO {
 
     fun readBytes(inputStream: InputStream): Bytes {
         val length = inputStream.readLittleEndianInt()
+        if(length <= 0){
+            // don't attempt to read anything if the length is zero,
+            // this may throw an exception if the zero-length is the
+            // last byte in the stream!
+            return Bytes.EMPTY
+        }
         val array = inputStream.readNBytes(length)
         if(array.size < length){
             // not enough bytes in the stream
@@ -28,6 +34,12 @@ object PrefixIO {
 
     fun readBytes(buffer: BytesBuffer): Bytes {
         val length = buffer.takeLittleEndianInt()
+        if(length <= 0){
+            // don't attempt to read anything if the length is zero,
+            // this may throw an exception if the zero-length is the
+            // last byte in the buffer!
+            return Bytes.EMPTY
+        }
         return buffer.takeBytes(length)
     }
 

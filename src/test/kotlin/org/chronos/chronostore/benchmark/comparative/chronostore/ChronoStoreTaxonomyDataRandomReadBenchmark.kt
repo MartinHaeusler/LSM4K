@@ -55,6 +55,7 @@ object ChronoStoreTaxonomyDataRandomReadBenchmark {
                         }
                     }
                 }.let(dataPoints::add)
+                println(repetitionIndex)
             }
         }
 

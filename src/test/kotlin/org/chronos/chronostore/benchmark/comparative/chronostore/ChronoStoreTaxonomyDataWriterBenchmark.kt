@@ -5,6 +5,8 @@ import org.chronos.chronostore.api.ChronoStoreConfiguration
 import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.util.IOExtensions.size
 import org.chronos.chronostore.util.bytes.Bytes
+import org.chronos.chronostore.util.unit.KiB
+import org.chronos.chronostore.util.unit.MiB
 import org.xerial.snappy.Snappy
 import java.io.File
 
@@ -19,8 +21,8 @@ object ChronoStoreTaxonomyDataWriterBenchmark {
         // This only happens once per JVM restart and we don't want to include it in the benchmark.
         Snappy.getNativeLibraryVersion()
 
-        println("Attach profiler now! Press any key to continue")
-        System.`in`.read()
+//        println("Attach profiler now! Press any key to continue")
+//        System.`in`.read()
 
         println("STARTING BENCHMARK")
 
@@ -29,7 +31,9 @@ object ChronoStoreTaxonomyDataWriterBenchmark {
         }
         storeDir.mkdirs()
 
-        ChronoStore.openOnDirectory(this.storeDir, ChronoStoreConfiguration()).use { chronoStore ->
+        val configuration = ChronoStoreConfiguration()
+
+        ChronoStore.openOnDirectory(this.storeDir, configuration).use { chronoStore ->
             inputFile.inputStream().buffered().use { input ->
                 val commandSequence = generateSequence {
                     Command.readFromStreamOrNull(input)

@@ -4,7 +4,8 @@ class BytesBuffer(
     private val bytes: Bytes
 ) {
 
-    private var position = 0
+    var position = 0
+        private set
 
     val remaining: Int
         get() = bytes.size - position

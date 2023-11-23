@@ -18,6 +18,7 @@ import org.chronos.chronostore.util.cursor.NavigableMapCursor
 import java.io.ByteArrayInputStream
 import java.io.InputStream
 import java.util.*
+import kotlin.system.exitProcess
 
 class DataBlock(
     val metaData: BlockMetaData,
@@ -64,8 +65,6 @@ class DataBlock(
             val commandsArray = arrayOfNulls<Map.Entry<KeyAndTimestamp, Command>>(blockMetaData.commandCount)
             val decompressedBuffer = BytesBuffer(decompressedData)
 
-            val om = jacksonObjectMapper()
-
             for (i in 0..commandsArray.lastIndex) {
                 try {
                     val command = Command.readFromBytesBuffer(decompressedBuffer)
@@ -73,23 +72,20 @@ class DataBlock(
                             "Could not read command at index ${i} from the decompressed buffer -" +
                                 " expected ${blockMetaData.commandCount} commands to be in the buffer!"
                         )
-
-
-                    // DEBUG START
-//                    println("CMD #${i}: ${command.opCode} ${command.key.asString()}@${command.timestamp}: [${command.value.size}]")
-
-                    if (command.value.isNotEmpty()) {
-                        om.readTree(command.value.asString())
-                    }
-                    // DEBUG END
-
                     commandsArray[i] = ImmutableEntry(command.keyAndTimestamp, command)
                 } catch (e: Exception) {
                     throw IllegalStateException(
-                        "Could not read command at index ${i} (of ${blockMetaData.commandCount-1} total) from the decompressed buffer! Cause: ${e}",
+                        "Could not read command at index ${i} (of ${blockMetaData.commandCount - 1} total) from the decompressed buffer! Cause: ${e}",
                         e
                     )
                 }
+            }
+
+            if (decompressedBuffer.remaining > 0) {
+                throw IllegalStateException(
+                    "Failed to read data block: read all ${blockMetaData.commandCount} commands," +
+                        " but there are ${decompressedBuffer.remaining} bytes left in the input buffer!"
+                )
             }
 
             // this cast is 100% safe!

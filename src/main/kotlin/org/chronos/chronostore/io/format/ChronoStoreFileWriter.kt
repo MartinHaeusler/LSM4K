@@ -7,13 +7,13 @@ import com.google.common.hash.Funnels
 import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.model.command.KeyAndTimestamp
 import org.chronos.chronostore.util.BloomFilterExtensions.toBytes
-import org.chronos.chronostore.util.bytes.Bytes
-import org.chronos.chronostore.util.bytes.Bytes.Companion.put
-import org.chronos.chronostore.util.bytes.Bytes.Companion.writeBytesWithoutSize
 import org.chronos.chronostore.util.LittleEndianExtensions.writeLittleEndianInt
 import org.chronos.chronostore.util.LittleEndianExtensions.writeLittleEndianLong
 import org.chronos.chronostore.util.PositionTrackingStream
 import org.chronos.chronostore.util.Timestamp
+import org.chronos.chronostore.util.bytes.Bytes
+import org.chronos.chronostore.util.bytes.Bytes.Companion.put
+import org.chronos.chronostore.util.bytes.Bytes.Companion.writeBytesWithoutSize
 import org.chronos.chronostore.util.iterator.IteratorExtensions.checkOrdered
 import java.io.ByteArrayOutputStream
 import java.io.OutputStream
@@ -163,7 +163,17 @@ class ChronoStoreFileWriter : AutoCloseable {
                 nextCommand.timestamp
             )
             blockIndexToStartPositionAndMinKey += Triple(blockSequenceNumber, this.outputStream.position, minKeyAndTimestamp)
-            writeBlock(commands, blockSequenceNumber)
+
+            // for debugging purposes, we write the block into a byte array first
+            val blockBytes =  ByteArrayOutputStream().use { baos ->
+                writeBlock(commands, blockSequenceNumber, baos)
+                baos.flush()
+                baos.toByteArray()
+            }
+
+            this.outputStream.write(blockBytes)
+
+            // writeBlock(commands, blockSequenceNumber, this.outputStream)
             blockSequenceNumber++
         }
 
@@ -179,7 +189,11 @@ class ChronoStoreFileWriter : AutoCloseable {
         )
     }
 
-    private fun writeBlock(commands: PeekingIterator<Command>, blockSequenceNumber: Int) {
+    private fun writeBlock(
+        commands: PeekingIterator<Command>,
+        blockSequenceNumber: Int,
+        outputStream: OutputStream,
+    ) {
         if (!commands.hasNext()) {
             // no commands -> no need to start a block.
             return
@@ -193,14 +207,28 @@ class ChronoStoreFileWriter : AutoCloseable {
         var commandCount = 0
         var minTimestamp = Timestamp.MAX_VALUE
         var maxTimestamp = 0L
+
         // in order to create an appropriately sized bloom filter for the block later on,
         // we must keep track of all keys within the block.
         val allKeysInBlock = mutableListOf<Bytes>()
         // fill the block with commands:
         // While we have more commands (and the block didn't get too big yet), write more commands to the block.
-        while (commands.hasNext() && blockPositionTrackingStream.position < this.settings.maxBlockSize.bytes) {
+        while (commands.hasNext()) {
+            // determine what the block size would be if we add the next entry to it.
+            val blockSizeIncludingNextEntry = blockPositionTrackingStream.position + commands.peek().byteSize
+            // we have a curious issue here: if *one* single entry is bigger than the block size, we
+            // must allow it to go somewhere. To account for this, we say: if the current block is empty,
+            // we allow the first entry to be of arbitrary size (even larger than the block size). If
+            // the current block is *not* empty, we demand that the next entry still fits into the block;
+            // if it doesn't, we close the current block and let the data flow into the next block instead.
+            if (allKeysInBlock.isNotEmpty() && blockSizeIncludingNextEntry >= this.settings.maxBlockSize.bytes) {
+                // this block is full, don't continue writing.
+                break
+            }
+
             val command = commands.next()
             command.writeToStream(blockPositionTrackingStream)
+
             minTimestamp = min(minTimestamp, command.timestamp)
             maxTimestamp = max(maxTimestamp, command.timestamp)
             allKeysInBlock += command.keyAndTimestamp.key
@@ -215,6 +243,7 @@ class ChronoStoreFileWriter : AutoCloseable {
         val blockDataArrayRaw = blockDataOutputStream.toByteArray()
         // compress the data
         val blockDataArrayCompressed = this.settings.compression.compress(blockDataArrayRaw)
+
         // record the sizes
         val uncompressedSize = blockDataArrayRaw.size
         val compressedSize = blockDataArrayCompressed.size
@@ -235,26 +264,26 @@ class ChronoStoreFileWriter : AutoCloseable {
         )
 
         // write the "magic bytes" that demarcate the beginning of a block
-        this.outputStream.writeBytesWithoutSize(ChronoStoreFileFormat.BLOCK_MAGIC_BYTES)
+        outputStream.writeBytesWithoutSize(ChronoStoreFileFormat.BLOCK_MAGIC_BYTES)
         // write the total size of the block
         val computedTotalBlockSize = computeTotalBlockSize(
             blockMetaDataSize = blockMetaData.byteSize,
             bloomFilterBytes = bloomFilterBytes.size,
             blockDataArrayCompressedSize = blockDataArrayCompressed.size
         )
-        this.outputStream.writeLittleEndianInt(computedTotalBlockSize)
+        outputStream.writeLittleEndianInt(computedTotalBlockSize)
         // write the size of the block metadata
-        this.outputStream.writeLittleEndianInt(blockMetaData.byteSize)
+        outputStream.writeLittleEndianInt(blockMetaData.byteSize)
         // write the metadata of the block
-        blockMetaData.writeTo(this.outputStream)
+        blockMetaData.writeTo(outputStream)
         // write the size of the bloom filter
-        this.outputStream.writeLittleEndianInt(bloomFilterBytes.size)
+        outputStream.writeLittleEndianInt(bloomFilterBytes.size)
         // write the content of the bloom filter
-        this.outputStream.writeBytesWithoutSize(bloomFilterBytes)
+        outputStream.writeBytesWithoutSize(bloomFilterBytes)
         // write the compressed size of the block
-        this.outputStream.writeLittleEndianInt(compressedSize)
+        outputStream.writeLittleEndianInt(compressedSize)
         // write the compressed block bytes
-        this.outputStream.write(blockDataArrayCompressed)
+        outputStream.write(blockDataArrayCompressed)
     }
 
     @Suppress("UnstableApiUsage")
