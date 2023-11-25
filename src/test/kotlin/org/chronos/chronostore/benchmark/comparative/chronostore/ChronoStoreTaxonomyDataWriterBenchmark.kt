@@ -5,7 +5,6 @@ import org.chronos.chronostore.api.ChronoStoreConfiguration
 import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.util.IOExtensions.size
 import org.chronos.chronostore.util.bytes.Bytes
-import org.chronos.chronostore.util.unit.KiB
 import org.chronos.chronostore.util.unit.MiB
 import org.xerial.snappy.Snappy
 import java.io.File
@@ -32,6 +31,7 @@ object ChronoStoreTaxonomyDataWriterBenchmark {
         storeDir.mkdirs()
 
         val configuration = ChronoStoreConfiguration()
+        configuration.maxBlockSize = 16.MiB
 
         ChronoStore.openOnDirectory(this.storeDir, configuration).use { chronoStore ->
             inputFile.inputStream().buffered().use { input ->
@@ -45,17 +45,22 @@ object ChronoStoreTaxonomyDataWriterBenchmark {
                     tx.commit()
                 }
 
+                var entries = 0
+
+                var transactionCount = 0
                 commandSequence.chunked(10_000).forEach { chunk ->
                     chronoStore.transaction { tx ->
                         val store = tx.getStore("data")
                         for (entry in chunk) {
-                            store.put(entry.key, entry.value)
+                            store.put(entry.keyAndTimestamp.toBytes(), entry.value)
+                            entries++
                         }
+                        transactionCount++
                         tx.commit()
                     }
                 }
                 val timeAfter = System.currentTimeMillis()
-                println("Wrote entries into ${storeDir.path} with ${Bytes.formatSize(storeDir.size)} in ${timeAfter - timeBefore}ms.")
+                println("Wrote ${entries} entries into ${storeDir.path} with ${Bytes.formatSize(storeDir.size)} in ${timeAfter - timeBefore}ms. ${transactionCount} transactions were committed.")
             }
         }
     }

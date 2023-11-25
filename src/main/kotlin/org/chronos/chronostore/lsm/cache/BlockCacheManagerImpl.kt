@@ -14,6 +14,9 @@ class BlockCacheManagerImpl(
     private val cache: Cache<CacheKey, DataBlock> = CacheBuilder.newBuilder()
         .maximumWeight(maxSize.bytes)
         .weigher(this::computeBlockCacheWeight)
+        // .removalListener<CacheKey, DataBlock> { (key, _) ->
+        //     println("EVICTING ${key?.storeId} block #${key?.blockIndex}")
+        // }
         .build()
 
     private fun computeBlockCacheWeight(

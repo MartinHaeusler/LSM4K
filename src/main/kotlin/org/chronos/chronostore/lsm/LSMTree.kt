@@ -18,6 +18,7 @@ import org.chronos.chronostore.lsm.cache.LocalBlockCache
 import org.chronos.chronostore.lsm.merge.strategy.MergeService
 import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.model.command.KeyAndTimestamp
+import org.chronos.chronostore.util.StoreId
 import org.chronos.chronostore.util.Timestamp
 import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.cursor.*
@@ -38,6 +39,7 @@ import kotlin.concurrent.write
 import kotlin.system.measureTimeMillis
 
 class LSMTree(
+    val storeId: StoreId,
     private val forest: LSMForestMemoryManager,
     private val directory: VirtualDirectory,
     private val blockCache: LocalBlockCache,
@@ -421,5 +423,9 @@ class LSMTree(
         // In other words: you can sort the files in the file explorer and
         // will get the proper order.
         return fileIndex.toString().padStart(10, '0') + FILE_EXTENSION
+    }
+
+    override fun toString(): String {
+        return "LSMTree[${this.storeId}]"
     }
 }

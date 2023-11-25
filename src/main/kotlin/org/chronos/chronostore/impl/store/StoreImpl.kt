@@ -28,6 +28,7 @@ class StoreImpl(
 ) : Store {
 
     val tree = LSMTree(
+        storeId = this.storeId,
         forest = forest,
         directory = this.directory,
         blockCache = blockCache,
