@@ -3,6 +3,7 @@ package org.chronos.chronostore.lsm
 import com.google.common.collect.Iterators
 import mu.KotlinLogging
 import org.chronos.chronostore.api.ChronoStoreTransaction
+import org.chronos.chronostore.api.exceptions.ChronoStoreFlushException
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.forEach
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.subTask
@@ -15,7 +16,6 @@ import org.chronos.chronostore.io.vfs.VirtualReadWriteFile.Companion.withOverWri
 import org.chronos.chronostore.lsm.LSMTreeFile.Companion.FILE_EXTENSION
 import org.chronos.chronostore.lsm.cache.FileHeaderCache
 import org.chronos.chronostore.lsm.cache.LocalBlockCache
-import org.chronos.chronostore.lsm.merge.strategy.MergeService
 import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.model.command.KeyAndTimestamp
 import org.chronos.chronostore.util.StoreId
@@ -136,7 +136,7 @@ class LSMTree(
             this.lock.read {
                 // first, check if we have commits in memory.
                 val latestInMemoryCommitTimestamp = this.inMemoryTree.keys.maxOfOrNull { it.timestamp }
-                if(latestInMemoryCommitTimestamp != null){
+                if (latestInMemoryCommitTimestamp != null) {
                     return latestInMemoryCommitTimestamp
                 }
                 // we have no in-memory changes, so we have
@@ -231,56 +231,60 @@ class LSMTree(
     fun flushInMemoryDataToDisk(minFlushSize: BinarySize, monitor: TaskMonitor): Long {
         log.trace(LogMarkers.PERF) { "TASK: Flush in-memory data to disk" }
         this.performAsyncWriteTask(monitor) {
-            monitor.reportStarted("Flushing Data to Disk")
-            if (this.inMemoryTree.isEmpty() || this.inMemorySize < minFlushSize) {
-                // flush not necessary
-                monitor.reportDone()
-                return -1L
-            }
-            log.trace(LogMarkers.PERF) { "Flushing LSM Tree '${this.directory}'!" }
-            val commands = monitor.subTask(0.1, "Collecting Entries to flush") {
-                this.inMemoryTree
-            }
-            val newFileIndex = this.nextFreeFileIndex.getAndIncrement()
-            log.trace(LogMarkers.PERF) { "Target file index ${newFileIndex} will be used for flush of tree ${this.path}" }
-            val file = this.directory.file(this.createFileNameForIndex(newFileIndex))
-            val flushTime = measureTimeMillis {
-                monitor.subTask(0.8, "Writing File") {
-                    file.deleteOverWriterFileIfExists()
-                    file.withOverWriter { overWriter ->
-                        ChronoStoreFileWriter(
-                            outputStream = overWriter.outputStream,
-                            settings = this.newFileSettings,
-                            metadata = emptyMap()
-                        ).use { writer ->
-                            log.trace(LogMarkers.PERF) { "Flushing ${commands.size} commands from in-memory segment into '${file.path}'." }
-                            writer.writeFile(
-                                // we're flushing this file from in-memory,
-                                // so the resulting file has never been merged.
-                                numberOfMerges = 0,
-                                orderedCommands = commands.values.iterator()
-                            )
+            try {
+                monitor.reportStarted("Flushing Data to Disk")
+                if (this.inMemoryTree.isEmpty() || this.inMemorySize < minFlushSize) {
+                    // flush not necessary
+                    monitor.reportDone()
+                    return -1L
+                }
+                log.trace(LogMarkers.PERF) { "Flushing LSM Tree '${this.directory}'!" }
+                val commands = monitor.subTask(0.1, "Collecting Entries to flush") {
+                    this.inMemoryTree
+                }
+                val newFileIndex = this.nextFreeFileIndex.getAndIncrement()
+                log.trace(LogMarkers.PERF) { "Target file index ${newFileIndex} will be used for flush of tree ${this.path}" }
+                val file = this.directory.file(this.createFileNameForIndex(newFileIndex))
+                val flushTime = measureTimeMillis {
+                    monitor.subTask(0.8, "Writing File") {
+                        file.deleteOverWriterFileIfExists()
+                        file.withOverWriter { overWriter ->
+                            ChronoStoreFileWriter(
+                                outputStream = overWriter.outputStream,
+                                settings = this.newFileSettings,
+                                metadata = emptyMap()
+                            ).use { writer ->
+                                log.trace(LogMarkers.PERF) { "Flushing ${commands.size} commands from in-memory segment into '${file.path}'." }
+                                writer.writeFile(
+                                    // we're flushing this file from in-memory,
+                                    // so the resulting file has never been merged.
+                                    numberOfMerges = 0,
+                                    orderedCommands = commands.values.iterator()
+                                )
+                            }
+                            overWriter.commit()
                         }
-                        overWriter.commit()
                     }
                 }
-            }
-            log.trace(LogMarkers.PERF) { "Flush into index file ${newFileIndex} completed in ${flushTime}ms. Redirecting traffic to new data file for LSM tree ${this.path}" }
-            monitor.subTask(0.1, "Redirecting traffic to file") {
-                this.lock.write {
-                    this.fileList.add(this.createLsmTreeFile(file))
-                    log.trace(LogMarkers.PERF) { "Removing ${commands.keys.size} keys from the in-memory tree (which has ${this.inMemoryTree.size} keys)..." }
-                    this.inMemoryTree = this.inMemoryTree.minusAll(commands.keys)
-                    log.trace(LogMarkers.PERF) { "${inMemoryTree.size} entries remaining in-memory after flush of tree ${this.path}" }
-                    this.inMemoryTreeSizeInBytes.addAndGet(commands.values.sumOf { it.byteSize } * -1L)
+                log.trace(LogMarkers.PERF) { "Flush into index file ${newFileIndex} completed in ${flushTime}ms. Redirecting traffic to new data file for LSM tree ${this.path}" }
+                monitor.subTask(0.1, "Redirecting traffic to file") {
+                    this.lock.write {
+                        this.fileList.add(this.createLsmTreeFile(file))
+                        log.trace(LogMarkers.PERF) { "Removing ${commands.keys.size} keys from the in-memory tree (which has ${this.inMemoryTree.size} keys)..." }
+                        this.inMemoryTree = this.inMemoryTree.minusAll(commands.keys)
+                        log.trace(LogMarkers.PERF) { "${inMemoryTree.size} entries remaining in-memory after flush of tree ${this.path}" }
+                        this.inMemoryTreeSizeInBytes.addAndGet(commands.values.sumOf { it.byteSize } * -1L)
 
-                    // the in-memory tree size has changed, notify listeners
-                    this.forest.onInMemoryFlush(this)
+                        // the in-memory tree size has changed, notify listeners
+                        this.forest.onInMemoryFlush(this)
+                    }
                 }
-            }
 
-            monitor.reportDone()
-            return file.length
+                monitor.reportDone()
+                return file.length
+            } catch (e: Exception) {
+                throw ChronoStoreFlushException("An exception occurred during flush task on '${storeId}': ${e}", e)
+            }
         }
     }
 

@@ -23,7 +23,7 @@ class FlushInMemoryTreeToDiskTask(
     private val index = counter.getAndIncrement()
 
     init {
-        log.trace { "Created flush task ${index}" }
+        println("Created flush task ${index}")
     }
 
     override val name: String

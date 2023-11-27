@@ -9,6 +9,7 @@ import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.forEach
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.forEachWithMonitor
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.mainTask
 import org.chronos.chronostore.lsm.merge.tasks.FlushInMemoryTreeToDiskTask
+import org.chronos.chronostore.util.StoreId
 import org.chronos.chronostore.util.log.LogMarkers
 import org.chronos.chronostore.util.statistics.ChronoStoreStatistics
 import java.util.concurrent.Future
@@ -126,6 +127,10 @@ class LSMForestMemoryManager(
             while (this.virtualForestSize >= this.flushThresholdSize) {
                 // schedule a flush task for the largest tree
                 val (largestTree, largestTreeStats) = this.treeStats.entries.maxBy { it.key.inMemorySize }
+                if(largestTreeStats.virtualTreeSize <= 0){
+                    // all trees have a flush task scheduled, we just have to wait
+                    break
+                }
                 val flushTask = FlushInMemoryTreeToDiskTask(largestTree)
                 this.asyncTaskManager.executeAsync(flushTask)
                 // we assume here that the tree will have 0 bytes in-memory after the flush.
