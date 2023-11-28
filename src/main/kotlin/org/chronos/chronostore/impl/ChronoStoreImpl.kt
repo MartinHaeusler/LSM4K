@@ -33,13 +33,19 @@ class ChronoStoreImpl(
 
     }
 
-    @Transient
+    @Volatile
     private var isOpen = true
+
+    @Volatile
+    private var state: ChronoStoreState = ChronoStoreState.STARTING
 
     private val timeManager: TimeManager
     private val blockCacheManager = BlockCacheManager.create(configuration.blockCacheSize)
     private val fileHeaderCache = FileHeaderCache.create(configuration.fileHeaderCacheSize)
-    private val taskManager = AsyncTaskManagerImpl(Executors.newScheduledThreadPool(configuration.maxWriterThreads))
+    private val taskManager = AsyncTaskManagerImpl(
+        executorService = Executors.newScheduledThreadPool(configuration.maxWriterThreads),
+        getChronoStoreState = this::state,
+    )
 
     @VisibleForTesting
     val mergeService: MergeService = MergeServiceImpl(this.taskManager, this.configuration)
@@ -105,6 +111,7 @@ class ChronoStoreImpl(
             writeAheadLog = this.writeAheadLog
         )
         this.mergeService.initialize(this.storeManager, writeAheadLog)
+        this.state = ChronoStoreState.RUNNING
     }
 
     private fun createNewEmptyDatabase(): Timestamp {
@@ -180,6 +187,7 @@ class ChronoStoreImpl(
         }
         isOpen = false
         log.info { "Initiating shut-down of ChronoStore at '${this.vfs}'." }
+        this.state = ChronoStoreState.SHUTTING_DOWN
         this.transactionManager.close()
         this.taskManager.close()
         this.storeManager.close()

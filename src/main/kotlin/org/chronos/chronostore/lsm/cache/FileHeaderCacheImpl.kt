@@ -4,6 +4,7 @@ import com.google.common.cache.Cache
 import com.google.common.cache.CacheBuilder
 import org.chronos.chronostore.io.format.FileHeader
 import org.chronos.chronostore.io.vfs.VirtualFile
+import org.chronos.chronostore.util.statistics.ChronoStoreStatistics
 import org.chronos.chronostore.util.unit.BinarySize
 
 class FileHeaderCacheImpl(
@@ -13,6 +14,7 @@ class FileHeaderCacheImpl(
     private val cache: Cache<VirtualFile, FileHeader> = CacheBuilder.newBuilder()
         .maximumWeight(maxSize.bytes)
         .weigher(this::computeHeaderWeight)
+        .removalListener<VirtualFile, FileHeader> { ChronoStoreStatistics.FILE_HEADER_CACHE_EVICTIONS.incrementAndGet() }
         .build()
 
     private fun computeHeaderWeight(
@@ -33,7 +35,11 @@ class FileHeaderCacheImpl(
     }
 
     override fun getFileHeader(file: VirtualFile, load: () -> FileHeader): FileHeader {
-        return this.cache.get(file, load)
+        ChronoStoreStatistics.FILE_HEADER_CACHE_REQUESTS.incrementAndGet()
+        return this.cache.get(file) {
+            ChronoStoreStatistics.FILE_HEADER_CACHE_MISSES.incrementAndGet()
+            load()
+        }
     }
 
 }

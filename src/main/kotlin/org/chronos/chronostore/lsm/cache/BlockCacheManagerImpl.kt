@@ -4,6 +4,7 @@ import com.google.common.cache.Cache
 import com.google.common.cache.CacheBuilder
 import org.chronos.chronostore.io.format.datablock.DataBlock
 import org.chronos.chronostore.util.StoreId
+import org.chronos.chronostore.util.statistics.ChronoStoreStatistics
 import org.chronos.chronostore.util.unit.BinarySize
 import java.util.*
 
@@ -14,9 +15,7 @@ class BlockCacheManagerImpl(
     private val cache: Cache<CacheKey, DataBlock> = CacheBuilder.newBuilder()
         .maximumWeight(maxSize.bytes)
         .weigher(this::computeBlockCacheWeight)
-        // .removalListener<CacheKey, DataBlock> { (key, _) ->
-        //     println("EVICTING ${key?.storeId} block #${key?.blockIndex}")
-        // }
+        .removalListener<CacheKey, DataBlock> { ChronoStoreStatistics.BLOCK_CACHE_EVICTIONS.incrementAndGet() }
         .build()
 
     private fun computeBlockCacheWeight(
@@ -44,8 +43,10 @@ class BlockCacheManagerImpl(
 
 
         override fun getBlock(fileId: UUID, blockIndex: Int, loader: (Int) -> DataBlock?): DataBlock? {
+            ChronoStoreStatistics.BLOCK_CACHE_REQUESTS.incrementAndGet()
             val cacheKey = CacheKey(storeId, fileId, blockIndex)
             return this@BlockCacheManagerImpl.cache.get(cacheKey) {
+                ChronoStoreStatistics.BLOCK_CACHE_MISSES.incrementAndGet()
                 loader(blockIndex)
             }
         }

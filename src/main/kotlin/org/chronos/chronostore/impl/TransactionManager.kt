@@ -1,5 +1,6 @@
 package org.chronos.chronostore.impl
 
+import com.google.common.collect.MapMaker
 import mu.KotlinLogging
 import org.chronos.chronostore.api.ChronoStoreTransaction
 import org.chronos.chronostore.api.Store
@@ -13,6 +14,7 @@ import org.chronos.chronostore.util.StoreId
 import org.chronos.chronostore.util.Timestamp
 import org.chronos.chronostore.util.TransactionId
 import org.chronos.chronostore.util.bytes.Bytes
+import org.chronos.chronostore.util.statistics.ChronoStoreStatistics
 import org.chronos.chronostore.wal.WriteAheadLog
 import java.util.concurrent.locks.ReentrantLock
 import java.util.concurrent.locks.ReentrantReadWriteLock
@@ -35,7 +37,7 @@ class TransactionManager(
     }
 
     private val openTransactionsLock = ReentrantReadWriteLock(true)
-    private val openTransactions = mutableMapOf<TransactionId, ChronoStoreTransaction>()
+    private val openTransactions = MapMaker().weakValues().makeMap<TransactionId, ChronoStoreTransaction>()
 
     private val commitLock = ReentrantLock(true)
 
@@ -44,6 +46,7 @@ class TransactionManager(
 
     fun createNewTransaction(): ChronoStoreTransaction {
         check(this.isOpen) { DB_ALREADY_CLOSED }
+        ChronoStoreStatistics.TRANSACTIONS.incrementAndGet()
         this.openTransactionsLock.write {
             val newTx = ChronoStoreTransactionImpl(
                 id = TransactionId.randomUUID(),
@@ -104,6 +107,7 @@ class TransactionManager(
             }
             log.trace { "Performed commit of transaction ${tx.id}. Transaction timestamp: ${tx.lastVisibleTimestamp}, commit timestamp: ${commitTimestamp}." }
             this.closeTransaction(tx)
+            ChronoStoreStatistics.TRANSACTION_COMMITS.incrementAndGet()
             return commitTimestamp
         }
     }

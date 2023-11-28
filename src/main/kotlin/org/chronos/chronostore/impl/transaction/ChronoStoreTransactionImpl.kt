@@ -7,6 +7,7 @@ import org.chronos.chronostore.util.StoreId
 import org.chronos.chronostore.util.Timestamp
 import org.chronos.chronostore.util.TransactionId
 import org.chronos.chronostore.util.bytes.Bytes
+import org.chronos.chronostore.util.statistics.ChronoStoreStatistics
 import org.chronos.chronostore.wal.WriteAheadLogTransaction
 
 class ChronoStoreTransactionImpl(
@@ -97,6 +98,7 @@ class ChronoStoreTransactionImpl(
         }
         this.isOpen = false
         log.trace { "Rolled back transaction ${this.id}." }
+        ChronoStoreStatistics.TRANSACTION_ROLLBACKS.incrementAndGet()
     }
 
     private fun bindStore(store: Store): TransactionalStoreImpl {
@@ -105,4 +107,19 @@ class ChronoStoreTransactionImpl(
         return txBoundStore
     }
 
+    protected fun finalize() {
+        // This is the object finalizer which is called by the JVM garbage collector.
+        // If the Garbage Collector encounters a transaction which is no longer referenced but is still
+        // open, it means that the programmer who's using the ChronoStore API made some sort of mistake
+        // in handling the transactions. Warn them about it.
+        if (this.isOpen) {
+            log.warn {
+                "Dangling transaction (left open, but no longer referenced) was detected and will be rolled back." +
+                    " Please ensure that you commit() or rollback() your transactions after using them." +
+                    " Use ChronoStore#transaction{ ... } to automate the process."
+            }
+            ChronoStoreStatistics.TRANSACTION_DANGLING.incrementAndGet()
+            this.rollback()
+        }
+    }
 }

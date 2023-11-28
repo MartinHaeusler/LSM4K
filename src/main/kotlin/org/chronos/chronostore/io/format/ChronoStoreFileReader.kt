@@ -17,7 +17,6 @@ class ChronoStoreFileReader : AutoCloseable {
 
         @JvmStatic
         fun loadFileHeader(driver: RandomFileAccessDriver): FileHeader {
-            ChronoStoreStatistics.FILE_HEADER_LOADS_FROM_DISK.incrementAndGet()
             // read and validate the magic bytes
             val magicBytesAndVersion = driver.readBytes(0, ChronoStoreFileFormat.FILE_MAGIC_BYTES.size + Int.SIZE_BYTES)
             val magicBytes = magicBytesAndVersion.slice(0, ChronoStoreFileFormat.FILE_MAGIC_BYTES.size)
@@ -96,7 +95,6 @@ class ChronoStoreFileReader : AutoCloseable {
     }
 
     private fun getBlockForIndexUncached(blockIndex: Int): DataBlock {
-        ChronoStoreStatistics.PAGE_LOADS_FROM_DISK.incrementAndGet()
         val (startPosition, length) = this.fileHeader.indexOfBlocks.getBlockStartPositionAndLengthOrNull(blockIndex)
             ?: throw IllegalStateException(
                 "Could not fetch block #${blockIndex} from Store '${this.blockCache.storeId}' (file: '${this.fileHeader.metaData.fileUUID}')!" +

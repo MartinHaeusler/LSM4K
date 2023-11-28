@@ -1,8 +1,10 @@
 package org.chronos.chronostore.util.statistics
 
+import org.chronos.chronostore.lsm.cache.FileHeaderCache
 import org.chronos.chronostore.util.Timestamp
 import org.chronos.chronostore.util.cursor.OverlayCursor
 import org.chronos.chronostore.util.cursor.VersioningCursor
+import java.util.*
 import java.util.concurrent.atomic.AtomicLong
 
 class ChronoStoreStatistics(
@@ -14,14 +16,22 @@ class ChronoStoreStatistics(
     val overlayCursorStatistics: CursorStatistics,
     /** Statistics on cursors which perform version resolution.*/
     val versioningCursorStatistics: CursorStatistics,
-    /** How many pages needed to be loaded from disk? */
-    val pageLoadsFromDisk: Long,
-    /** How many times did we have to load a file header from disk?  */
-    val fileHeaderLoadsFromDisk: Long,
+    /** Statistics on the block cache. */
+    val blockCache: CacheStatistics,
+    /** Statistics on the file header cache.  */
+    val fileHeaderCache: CacheStatistics,
     /** How long have writer threads been stalled because of full in-memory trees? */
     val totalWriteStallTimeMillis: Long,
     /** How many times have writer threads been stalled because of full in-memory trees? */
     val writeStallEvents: Long,
+    /** The total number of transactions. */
+    val transactionsOpened: Long,
+    /** How many transactions have been committed? */
+    val transactionsCommitted: Long,
+    /** How many transactions have been rolled back? */
+    val transactionsRolledBack: Long,
+    /** How many transactions have been opened but then left open and forgotten? */
+    val transactionsDangling: Long,
 ) {
 
     companion object {
@@ -92,17 +102,41 @@ class ChronoStoreStatistics(
         /** How many times has "cursor.previous()" been called on a [VersioningCursor]? */
         val VERSIONING_CURSOR_PREVIOUS_SEEKS = AtomicLong(0L)
 
-        /** How many pages needed to be loaded from disk? */
-        val PAGE_LOADS_FROM_DISK = AtomicLong(0L)
+        /** How many blocks have been evicted from the cache? */
+        val BLOCK_CACHE_REQUESTS = AtomicLong(0L)
 
-        /** How many times did we have to load a file header from disk?  */
-        val FILE_HEADER_LOADS_FROM_DISK = AtomicLong(0L)
+        /** How many cache misses have occurred in the block cache? */
+        val BLOCK_CACHE_MISSES = AtomicLong(0L)
+
+        /** How many cache evictions have occurred in the block cache? */
+        val BLOCK_CACHE_EVICTIONS = AtomicLong(0L)
+
+        /** How many file headers have been evicted from the cache?  */
+        val FILE_HEADER_CACHE_EVICTIONS = AtomicLong(0L)
+
+        /** How many cache hits have occurred in the file header cache? */
+        val FILE_HEADER_CACHE_REQUESTS = AtomicLong(0L)
+
+        /** How many cache misses have occurred in the file header cache? */
+        val FILE_HEADER_CACHE_MISSES = AtomicLong(0L)
 
         /** How long have writer threads been stalled because of full in-memory trees? */
         val TOTAL_WRITE_STALL_TIME_MILLIS = AtomicLong(0L)
 
         /** How many times have writer threads been stalled because of full in-memory trees? */
         val WRITE_STALL_EVENTS = AtomicLong(0L)
+
+        /** How many transactions have been opened? */
+        val TRANSACTIONS = AtomicLong(0L)
+
+        /** How many transactions have been committed? */
+        val TRANSACTION_COMMITS = AtomicLong(0L)
+
+        /** How many transactions have been rolled back? */
+        val TRANSACTION_ROLLBACKS = AtomicLong(0L)
+
+        /** How many transactions have been left open and forgotten? */
+        val TRANSACTION_DANGLING = AtomicLong(0L)
 
         /**
          * Retrieves an immutable snapshot of all statistics at the current point in time.
@@ -140,10 +174,27 @@ class ChronoStoreStatistics(
                     cursorNextSeeks = VERSIONING_CURSOR_NEXT_SEEKS.get(),
                     cursorPreviousSeeks = VERSIONING_CURSOR_PREVIOUS_SEEKS.get(),
                 ),
-                pageLoadsFromDisk = PAGE_LOADS_FROM_DISK.get(),
-                fileHeaderLoadsFromDisk = FILE_HEADER_LOADS_FROM_DISK.get(),
+
+                blockCache = CacheStatistics(
+                    cacheName = "Block Cache",
+                    evictions = BLOCK_CACHE_EVICTIONS.get(),
+                    misses = BLOCK_CACHE_MISSES.get(),
+                    requests = BLOCK_CACHE_REQUESTS.get(),
+                ),
+
+                fileHeaderCache = CacheStatistics(
+                    cacheName = "File Header Cache",
+                    evictions = FILE_HEADER_CACHE_EVICTIONS.get(),
+                    misses = FILE_HEADER_CACHE_MISSES.get(),
+                    requests = FILE_HEADER_CACHE_REQUESTS.get(),
+                ),
+
                 totalWriteStallTimeMillis = TOTAL_WRITE_STALL_TIME_MILLIS.get(),
                 writeStallEvents = WRITE_STALL_EVENTS.get(),
+                transactionsOpened = TRANSACTIONS.get(),
+                transactionsCommitted =  TRANSACTION_COMMITS.get(),
+                transactionsRolledBack = TRANSACTION_ROLLBACKS.get(),
+                transactionsDangling = TRANSACTION_DANGLING.get(),
             )
         }
 
@@ -155,6 +206,7 @@ class ChronoStoreStatistics(
          */
         fun reset() {
             TRACKING_START.set(System.currentTimeMillis())
+
             FILE_CURSORS.set(0L)
             FILE_CURSOR_EXACTLY_OR_NEXT_SEEKS.set(0L)
             FILE_CURSOR_EXACTLY_OR_PREVIOUS_SEEKS.set(0L)
@@ -162,6 +214,7 @@ class ChronoStoreStatistics(
             FILE_CURSOR_LAST_SEEKS.set(0L)
             FILE_CURSOR_NEXT_SEEKS.set(0L)
             FILE_CURSOR_PREVIOUS_SEEKS.set(0L)
+
             OVERLAY_CURSORS.set(0L)
             OVERLAY_CURSOR_EXACTLY_OR_NEXT_SEEKS.set(0L)
             OVERLAY_CURSOR_EXACTLY_OR_PREVIOUS_SEEKS.set(0L)
@@ -169,6 +222,7 @@ class ChronoStoreStatistics(
             OVERLAY_CURSOR_LAST_SEEKS.set(0L)
             OVERLAY_CURSOR_NEXT_SEEKS.set(0L)
             OVERLAY_CURSOR_PREVIOUS_SEEKS.set(0L)
+
             VERSIONING_CURSORS.set(0L)
             VERSIONING_CURSOR_EXACTLY_OR_NEXT_SEEKS.set(0L)
             VERSIONING_CURSOR_EXACTLY_OR_PREVIOUS_SEEKS.set(0L)
@@ -176,10 +230,22 @@ class ChronoStoreStatistics(
             VERSIONING_CURSOR_LAST_SEEKS.set(0L)
             VERSIONING_CURSOR_NEXT_SEEKS.set(0L)
             VERSIONING_CURSOR_PREVIOUS_SEEKS.set(0L)
-            PAGE_LOADS_FROM_DISK.set(0L)
-            FILE_HEADER_LOADS_FROM_DISK.set(0L)
+
+            BLOCK_CACHE_MISSES.set(0L)
+            BLOCK_CACHE_EVICTIONS.set(0L)
+            BLOCK_CACHE_REQUESTS.set(0L)
+
+            FILE_HEADER_CACHE_EVICTIONS.set(0L)
+            FILE_HEADER_CACHE_REQUESTS.set(0L)
+            FILE_HEADER_CACHE_MISSES.set(0L)
+
             TOTAL_WRITE_STALL_TIME_MILLIS.set(0L)
             WRITE_STALL_EVENTS.set(0L)
+
+            TRANSACTIONS.set(0L)
+            TRANSACTION_COMMITS.set(0L)
+            TRANSACTION_ROLLBACKS.set(0L)
+            TRANSACTION_DANGLING.set(0L)
         }
     }
 
@@ -192,6 +258,7 @@ class ChronoStoreStatistics(
 
     fun prettyPrint(): String {
         return """ChronoStore Statistics
+            | Tracking Start: ${Date(this.trackingStartedAt)} (Timestamp: ${this.trackingStartedAt})
             | All Cursors: ${this.allCursorStatistics.cursors}
             |     Seeks: ${this.allCursorStatistics.totalSeeks}
             |         Moves: ${this.allCursorStatistics.totalMoves}
@@ -236,10 +303,27 @@ class ChronoStoreStatistics(
             |         Random: ${this.versioningCursorStatistics.totalRandomSeek}
             |             Higher: ${this.versioningCursorStatistics.cursorExactlyOrNextSeeks}
             |              Lower: ${this.versioningCursorStatistics.cursorExactlyOrPreviousSeeks}
-            | 
-            | Header Loads: ${this.fileHeaderLoadsFromDisk}
-            | Page Loads: ${this.pageLoadsFromDisk}
-            | Write Stall Time: ${this.totalWriteStallTimeMillis}ms
+            | Caches:
+            |     Block Cache:
+            |            Requests: ${this.blockCache.requests}
+            |                Hits: ${this.blockCache.hits}
+            |              Misses: ${this.blockCache.misses}
+            |            Hit Rate: ${"%.2f".format(this.blockCache.hitRate)}%
+            |           Evictions: ${this.blockCache.evictions}
+            |     Header Cache:
+            |            Requests: ${this.fileHeaderCache.requests}
+            |                Hits: ${this.fileHeaderCache.hits}
+            |              Misses: ${this.fileHeaderCache.misses}
+            |            Hit Rate: ${"%.2f".format(this.fileHeaderCache.hitRate)}%
+            |           Evictions: ${this.fileHeaderCache.evictions}
+            | Write Stalling:
+            |    Total Stall Time: ${this.totalWriteStallTimeMillis}ms
+            |        Stall Events: ${this.writeStallEvents}
+            | Transactions:
+            |         Opened: ${this.transactionsOpened}
+            |      Committed: ${this.transactionsCommitted}
+            |    Rolled back: ${this.transactionsRolledBack}
+            |       Dangling: ${this.transactionsDangling}
         """.trimMargin()
     }
 
@@ -308,6 +392,38 @@ class ChronoStoreStatistics(
                 cursorPreviousSeeks = this.cursorPreviousSeeks,
             )
         }
+
+    }
+
+    class CacheStatistics(
+        /** The name of the cache. */
+        val cacheName: String,
+        /** The number of times an entry has been evicted (invalidated) from the cache. */
+        val evictions: Long,
+        /** The number of cache misses that have occurred. */
+        val misses: Long,
+        /** The total number of requests recorded for this cache. */
+        val requests: Long,
+    ) {
+
+        /** The number of cache hits that have occurred. */
+        val hits: Long
+            get() = requests - misses
+
+        /**
+         * The hit rate of the cache between 0% (0.0) and 100% (1.0).
+         *
+         * Returns 0.0 if no requests have occurred.
+         */
+        val hitRate: Double
+            get() {
+                val requests = requests
+                return if (requests > 0) {
+                    hits.toDouble() / requests
+                } else {
+                    0.0
+                }
+            }
 
     }
 }

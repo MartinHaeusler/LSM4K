@@ -4,6 +4,7 @@ import com.cronutils.model.Cron
 import mu.KotlinLogging
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor
 import org.chronos.chronostore.async.tasks.AsyncTask
+import org.chronos.chronostore.impl.ChronoStoreState
 import org.chronos.chronostore.util.cron.CronUtils.isValid
 import org.chronos.chronostore.util.cron.CronUtils.nextExecution
 import java.util.concurrent.*
@@ -11,6 +12,7 @@ import kotlin.time.Duration
 
 class AsyncTaskManagerImpl(
     private val executorService: ScheduledExecutorService,
+    private val getChronoStoreState: () -> ChronoStoreState,
 ) : AsyncTaskManager {
 
     companion object {
@@ -65,6 +67,7 @@ class AsyncTaskManagerImpl(
                 if (!monitor.status.state.isTerminal) {
                     monitor.reportFailed(e)
                 }
+                task.handleTaskException(e, this.getChronoStoreState())
             } finally {
                 if (!monitor.status.state.isTerminal) {
                     monitor.reportDone()
@@ -103,17 +106,30 @@ class AsyncTaskManagerImpl(
             try {
                 this.task.run(monitor)
             } finally {
-                // the task has been executed, reschedule it
-                val next = cron.nextExecution()
-                if (next != null) {
-                    // only execute again if we have a non-null, non-negative duration towards the next execution.
-                    log.debug { "[SCHEDULING] Task '${this.name}' has been executed. Rescheduling for cron '${this.cron.asString()}'. Next execution will be at: ${next.nextDateTime}" }
-                    val newCallable = createCallableForTask(this)
-                    this.executorService.schedule(newCallable, next.delayInMillis, TimeUnit.MILLISECONDS)
-                } else {
-                    // the cron expression produced no next execution date. This means we can never execute this task again!
-                    log.warn { "[SCHEDULING] Task '${this.name}' has been executed. Rescheduling for cron '${this.cron.asString()}' produced no next execution date; no further executions will be performed!" }
+                // never reschedule during system shutdown
+                val state = this@AsyncTaskManagerImpl.getChronoStoreState()
+                if (state != ChronoStoreState.SHUTTING_DOWN) {
+                    rescheduleTaskForNextRun()
                 }
+            }
+        }
+
+        override fun handleTaskException(exception: Exception, chronoStoreState: ChronoStoreState) {
+            // forward the call to the nested task
+            this.task.handleTaskException(exception, chronoStoreState)
+        }
+
+        private fun rescheduleTaskForNextRun() {
+            // the task has been executed, reschedule it
+            val next = cron.nextExecution()
+            if (next != null) {
+                // only execute again if we have a non-null, non-negative duration towards the next execution.
+                log.debug { "[SCHEDULING] Task '${this.name}' has been executed. Rescheduling for cron '${this.cron.asString()}'. Next execution will be at: ${next.nextDateTime}" }
+                val newCallable = createCallableForTask(this)
+                this.executorService.schedule(newCallable, next.delayInMillis, TimeUnit.MILLISECONDS)
+            } else {
+                // the cron expression produced no next execution date. This means we can never execute this task again!
+                log.warn { "[SCHEDULING] Task '${this.name}' has been executed. Rescheduling for cron '${this.cron.asString()}' produced no next execution date; no further executions will be performed!" }
             }
         }
 

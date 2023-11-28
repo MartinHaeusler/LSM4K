@@ -7,6 +7,7 @@ import org.chronos.chronostore.api.ChronoStoreConfiguration
 import org.chronos.chronostore.benchmark.util.Statistics.Companion.statistics
 import org.chronos.chronostore.util.bytes.BasicBytes
 import org.chronos.chronostore.util.bytes.Bytes
+import org.chronos.chronostore.util.statistics.ChronoStoreStatistics
 import org.chronos.chronostore.util.unit.MiB
 import java.io.File
 import java.io.InputStream
@@ -29,7 +30,7 @@ object ChronoStoreTaxonomyDataRandomReadBenchmark {
         // get all keys in the store
         val allKeys = mutableListOf<Bytes>()
         val configuration = ChronoStoreConfiguration()
-        configuration.blockCacheSize = 4500.MiB
+        configuration.blockCacheSize = 2000.MiB
         ChronoStore.openOnDirectory(inputDir, configuration).use { chronoStore ->
             chronoStore.transaction { tx ->
                 val store = tx.getStore("data")
@@ -67,6 +68,10 @@ object ChronoStoreTaxonomyDataRandomReadBenchmark {
         println("Black hole: ${blackHole}")
         println("Total Time: ${totalTime}ms")
         println(dataPoints.statistics().prettyPrint("ChronoStore read ${NUMBER_OF_READS} keys (${REPETITIONS} repetitions)"))
+        println()
+        println()
+        println()
+        println(ChronoStoreStatistics.snapshot().prettyPrint())
     }
 
 }

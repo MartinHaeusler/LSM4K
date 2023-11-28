@@ -5,6 +5,7 @@ import org.chronos.chronostore.api.ChronoStoreConfiguration
 import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.util.IOExtensions.size
 import org.chronos.chronostore.util.bytes.Bytes
+import org.chronos.chronostore.util.statistics.ChronoStoreStatistics
 import org.chronos.chronostore.util.unit.MiB
 import org.xerial.snappy.Snappy
 import java.io.File
@@ -19,9 +20,6 @@ object ChronoStoreTaxonomyDataWriterBenchmark {
         // access snappy to get native initialization out of the way.
         // This only happens once per JVM restart and we don't want to include it in the benchmark.
         Snappy.getNativeLibraryVersion()
-
-//        println("Attach profiler now! Press any key to continue")
-//        System.`in`.read()
 
         println("STARTING BENCHMARK")
 
@@ -63,6 +61,13 @@ object ChronoStoreTaxonomyDataWriterBenchmark {
                 println("Wrote ${entries} entries into ${storeDir.path} with ${Bytes.formatSize(storeDir.size)} in ${timeAfter - timeBefore}ms. ${transactionCount} transactions were committed.")
             }
         }
+
+        println()
+        println()
+        println()
+
+        val statistics = ChronoStoreStatistics.snapshot()
+        println(statistics.prettyPrint())
     }
 
 }

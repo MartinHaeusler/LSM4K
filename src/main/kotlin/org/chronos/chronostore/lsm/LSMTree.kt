@@ -407,9 +407,6 @@ class LSMTree(
         }
         try {
             return task()
-        } catch (e: Throwable) {
-            log.error(e) { "Exception during async write task: ${e}" }
-            throw e
         } finally {
             this.activeTaskLock.write {
                 this.activeTaskMonitor = null
