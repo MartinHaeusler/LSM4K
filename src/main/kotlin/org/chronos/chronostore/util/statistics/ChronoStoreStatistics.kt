@@ -308,13 +308,13 @@ class ChronoStoreStatistics(
             |            Requests: ${this.blockCache.requests}
             |                Hits: ${this.blockCache.hits}
             |              Misses: ${this.blockCache.misses}
-            |            Hit Rate: ${"%.2f".format(this.blockCache.hitRate)}%
+            |            Hit Rate: ${"%.2f".format(this.blockCache.hitRate * 100)}%
             |           Evictions: ${this.blockCache.evictions}
             |     Header Cache:
             |            Requests: ${this.fileHeaderCache.requests}
             |                Hits: ${this.fileHeaderCache.hits}
             |              Misses: ${this.fileHeaderCache.misses}
-            |            Hit Rate: ${"%.2f".format(this.fileHeaderCache.hitRate)}%
+            |            Hit Rate: ${"%.2f".format(this.fileHeaderCache.hitRate * 100)}%
             |           Evictions: ${this.fileHeaderCache.evictions}
             | Write Stalling:
             |    Total Stall Time: ${this.totalWriteStallTimeMillis}ms
