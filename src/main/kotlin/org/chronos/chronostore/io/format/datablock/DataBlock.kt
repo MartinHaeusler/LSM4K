@@ -1,13 +1,10 @@
 package org.chronos.chronostore.io.format.datablock
 
-import com.fasterxml.jackson.databind.ObjectMapper
-import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
-import org.chronos.chronostore.model.command.Command
-import org.chronos.chronostore.model.command.KeyAndTimestamp
-import org.chronos.chronostore.io.fileaccess.RandomFileAccessDriver
 import org.chronos.chronostore.io.format.BlockMetaData
 import org.chronos.chronostore.io.format.ChronoStoreFileFormat
 import org.chronos.chronostore.io.format.CompressionAlgorithm
+import org.chronos.chronostore.model.command.Command
+import org.chronos.chronostore.model.command.KeyAndTimestamp
 import org.chronos.chronostore.util.LittleEndianExtensions.readLittleEndianInt
 import org.chronos.chronostore.util.TreeMapUtils
 import org.chronos.chronostore.util.bytes.Bytes
@@ -18,7 +15,6 @@ import org.chronos.chronostore.util.cursor.NavigableMapCursor
 import java.io.ByteArrayInputStream
 import java.io.InputStream
 import java.util.*
-import kotlin.system.exitProcess
 
 class DataBlock(
     val metaData: BlockMetaData,
@@ -205,6 +201,10 @@ class DataBlock(
             // key is different -> the key we wanted doesn't exist.
             null
         }
+    }
+
+    inline fun <T> withCursor(action: (Cursor<KeyAndTimestamp, Command>) -> T): T {
+        return cursor().use(action)
     }
 
     /**

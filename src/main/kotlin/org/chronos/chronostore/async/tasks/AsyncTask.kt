@@ -59,7 +59,12 @@ interface AsyncTask {
      */
     fun handleTaskException(exception: Exception, chronoStoreState: ChronoStoreState) {
         if (chronoStoreState != ChronoStoreState.SHUTTING_DOWN) {
-            throw exception
+            log.error(exception) {
+                "A fatal exception has occurred during the execution of the asynchronous task '${this.name}'" +
+                    " of type '${this.javaClass.name}' on thread '${Thread.currentThread().name}'." +
+                    " This may cause deadlocks and/or starvation. The exception was: ${exception}"
+            }
+            return
         }
         if (isExceptionIgnoredDuringShutdown(exception)) {
             // these exceptions are normal behavior during shutdown and don't need to be logged.

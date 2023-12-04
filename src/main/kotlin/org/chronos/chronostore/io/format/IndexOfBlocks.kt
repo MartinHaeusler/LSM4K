@@ -81,11 +81,7 @@ class IndexOfBlocks {
     fun getBlockIndexForKeyAndTimestampAscending(keyAndTimestamp: KeyAndTimestamp): Int? {
         val floorEntry = this.minKeyAndTimestampToBlockIndex.floorEntry(keyAndTimestamp)
             ?: return null // the key is too small to exist in this file
-        return floorEntry.value.also {
-            if (it > this.startPositions.lastIndex) {
-                throw IllegalStateException("KABOOM!")
-            }
-        }
+        return floorEntry.value
     }
 
     fun getBlockIndexForKeyAndTimestampDescending(keyAndTimestamp: KeyAndTimestamp): Int? {

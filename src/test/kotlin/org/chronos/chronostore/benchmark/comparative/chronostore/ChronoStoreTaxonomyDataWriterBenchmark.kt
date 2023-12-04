@@ -2,6 +2,7 @@ package org.chronos.chronostore.benchmark.comparative.chronostore
 
 import org.chronos.chronostore.api.ChronoStore
 import org.chronos.chronostore.api.ChronoStoreConfiguration
+import org.chronos.chronostore.impl.ChronoStoreImpl
 import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.util.IOExtensions.size
 import org.chronos.chronostore.util.bytes.Bytes
@@ -59,6 +60,14 @@ object ChronoStoreTaxonomyDataWriterBenchmark {
                 }
                 val timeAfter = System.currentTimeMillis()
                 println("Wrote ${entries} entries into ${storeDir.path} with ${Bytes.formatSize(storeDir.size)} in ${timeAfter - timeBefore}ms. ${transactionCount} transactions were committed.")
+
+                chronoStore as ChronoStoreImpl
+
+                println("Flushing all data")
+                chronoStore.mergeService.flushAllInMemoryStoresToDisk()
+                println("Compacting data")
+                chronoStore.mergeService.performMajorCompaction()
+                println("Done")
             }
         }
 

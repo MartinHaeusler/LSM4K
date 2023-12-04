@@ -15,7 +15,7 @@ import kotlin.system.measureTimeMillis
 
 object ChronoStoreTaxonomyDataRandomReadBenchmark {
 
-    val REPETITIONS = 1000
+    val REPETITIONS = 10
     val NUMBER_OF_READS = 1000
 
     @JvmStatic
@@ -30,13 +30,13 @@ object ChronoStoreTaxonomyDataRandomReadBenchmark {
         // get all keys in the store
         val allKeys = mutableListOf<Bytes>()
         val configuration = ChronoStoreConfiguration()
-        configuration.blockCacheSize = 2000.MiB
+        configuration.blockCacheSize = 4500.MiB
         ChronoStore.openOnDirectory(inputDir, configuration).use { chronoStore ->
             chronoStore.transaction { tx ->
                 val store = tx.getStore("data")
                 store.openCursorOnLatest().use { cursor ->
                     cursor.firstOrThrow()
-                    allKeys += cursor.ascendingKeySequenceFromHere()
+                    allKeys += cursor.ascendingKeySequenceFromHere().map { it.own() }
                 }
             }
             println("There are ${allKeys.size} unique keys in the store.")
@@ -59,7 +59,10 @@ object ChronoStoreTaxonomyDataRandomReadBenchmark {
                             blackHole += value?.size ?: 1
                         }
                     }
-                }.let(dataPoints::add)
+                }.let {
+                    dataPoints += it
+                    println(it)
+                }
             }
         }
 

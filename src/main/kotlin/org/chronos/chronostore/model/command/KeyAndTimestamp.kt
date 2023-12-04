@@ -27,13 +27,19 @@ data class KeyAndTimestamp(
             }
         }
 
+        fun readFromBytesOrNull(bytes: Bytes): KeyAndTimestamp? {
+            bytes.withInputStream { inputStream ->
+                return readFromStreamOrNull(inputStream)
+            }
+        }
+
         fun readFromStreamOrNull(inputStream: InputStream): KeyAndTimestamp? {
             val keyLength = inputStream.readLittleEndianIntOrNull()
                 ?: return null
             val keyArray = ByteArray(keyLength)
             val readBytes = inputStream.read(keyArray)
             if (readBytes != keyLength) {
-                throw IOException("Failed to read ${keyLength} bytes from input stream (got: ${readBytes})!")
+                return null
             }
             val timestamp = inputStream.readLittleEndianLong()
             return KeyAndTimestamp(Bytes.wrap(keyArray), timestamp)

@@ -1,12 +1,12 @@
 package org.chronos.chronostore.io.format
 
-import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.LittleEndianExtensions.readLittleEndianInt
 import org.chronos.chronostore.util.LittleEndianExtensions.readLittleEndianLong
 import org.chronos.chronostore.util.LittleEndianExtensions.writeLittleEndianInt
 import org.chronos.chronostore.util.LittleEndianExtensions.writeLittleEndianLong
 import org.chronos.chronostore.util.PrefixIO
 import org.chronos.chronostore.util.Timestamp
+import org.chronos.chronostore.util.bytes.Bytes
 import java.io.InputStream
 import java.io.OutputStream
 

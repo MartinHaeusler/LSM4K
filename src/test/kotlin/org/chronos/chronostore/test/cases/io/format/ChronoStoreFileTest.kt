@@ -2,7 +2,9 @@ package org.chronos.chronostore.test.cases.io.format
 
 import org.chronos.chronostore.io.fileaccess.FileChannelDriver
 import org.chronos.chronostore.io.fileaccess.MemorySegmentFileDriver
+import org.chronos.chronostore.io.fileaccess.RandomFileAccessDriverFactory.Companion.withDriver
 import org.chronos.chronostore.io.format.*
+import org.chronos.chronostore.io.format.ChronoStoreFileReader.Companion.withChronoStoreFileReader
 import org.chronos.chronostore.io.vfs.VirtualReadWriteFile.Companion.withOverWriter
 import org.chronos.chronostore.lsm.cache.BlockCacheManagerImpl
 import org.chronos.chronostore.lsm.cache.LocalBlockCache
@@ -15,6 +17,7 @@ import org.chronos.chronostore.util.bytes.BasicBytes
 import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.unit.KiB
 import org.chronos.chronostore.util.unit.MiB
+import org.junit.jupiter.api.Test
 import strikt.api.expectThat
 import strikt.assertions.*
 import kotlin.random.Random
@@ -279,4 +282,194 @@ class ChronoStoreFileTest {
         }
     }
 
+    @VirtualFileSystemTest
+    fun canCreateAndReadFileWithFixedEntries(mode: VFSMode) {
+        mode.withVFS { vfs ->
+            val file = vfs.file("test.chronostore")
+
+            val beginOfTest = System.currentTimeMillis()
+
+            val commands = listOf(
+                Command.put("foo", 10_000, "bar"),
+                Command.put("foo", 100_000, "baz"),
+                Command.put("hello", 1234, "world"),
+                Command.put("hello", 1235, "foo"),
+                Command.put(BasicBytes("hello"), 1240, Bytes.EMPTY),
+            )
+
+            file.withOverWriter { overWriter ->
+                ChronoStoreFileWriter(
+                    outputStream = overWriter.outputStream.buffered(),
+                    settings = ChronoStoreFileSettings(CompressionAlgorithm.SNAPPY, 16.KiB),
+                    metadata = emptyMap()
+                ).use { writer ->
+                    writer.writeFile(
+                        numberOfMerges = 0L,
+                        orderedCommands = commands.iterator(),
+                    )
+                }
+                overWriter.commit()
+            }
+
+            FileChannelDriver.Factory.withDriver(file) { driver ->
+                val header = ChronoStoreFileReader.loadFileHeader(driver)
+                expectThat(header) {
+                    get { this.indexOfBlocks }.and {
+                        get { this.size }.isEqualTo(1)
+                        get { this.isEmpty }.isFalse()
+                        get { this.isValidBlockIndex(0) }.isTrue()
+                        get { this.isValidBlockIndex(1) }.isFalse()
+                        get { this.isValidBlockIndex(-1) }.isFalse()
+                        get { this.getBlockIndexForKeyAndTimestampAscending(KeyAndTimestamp(BasicBytes("hello"), 1237)) }.isEqualTo(0)
+                        get { this.getBlockIndexForKeyAndTimestampAscending(KeyAndTimestamp(BasicBytes("hello"), 1240)) }.isEqualTo(0)
+                        get { this.getBlockIndexForKeyAndTimestampAscending(KeyAndTimestamp(BasicBytes("hello"), 1241)) }.isEqualTo(0)
+                        get { this.getBlockIndexForKeyAndTimestampAscending(KeyAndTimestamp(BasicBytes("hello"), 0)) }.isEqualTo(0)
+                        get { this.getBlockIndexForKeyAndTimestampAscending(KeyAndTimestamp(BasicBytes("foo"), 0)) }.isNull()
+                        get { this.getBlockIndexForKeyAndTimestampAscending(KeyAndTimestamp(BasicBytes("foo"), 9_999)) }.isNull()
+                        get { this.getBlockIndexForKeyAndTimestampAscending(KeyAndTimestamp(BasicBytes("foo"), 10_000)) }.isEqualTo(0)
+                        get { this.getBlockIndexForKeyAndTimestampAscending(KeyAndTimestamp(BasicBytes("foo"), 200_000)) }.isEqualTo(0)
+                    }
+                    get { this.trailer }.and {
+                        get { this.beginOfBlocks }.isGreaterThan(0L)
+                        get { this.beginOfBlocks }.isLessThan(header.trailer.beginOfIndexOfBlocks)
+                        get { this.beginOfIndexOfBlocks }.isLessThan(header.trailer.beginOfMetadata)
+                    }
+                    get { this.fileFormatVersion }.isGreaterThanOrEqualTo(ChronoStoreFileFormat.Version.V_1_0_0)
+                    get { this.metaData }.and {
+                        get { this.createdAt }.isGreaterThanOrEqualTo(beginOfTest).isLessThanOrEqualTo(System.currentTimeMillis())
+                        get { this.totalEntries }.isEqualTo(5)
+                        get { this.headEntries }.isEqualTo(2)
+                        get { this.historyEntries }.isEqualTo(3)
+                        get { this.headHistoryRatio}.isEqualTo(0.4)
+                        get { this.numberOfMerges }.isEqualTo(0)
+                        get { this.numberOfBlocks }.isEqualTo(1)
+                        get { this.minKey }.isNotNull().get { this.asString() }.isEqualTo("foo")
+                        get { this.maxKey }.isNotNull().get { this.asString() }.isEqualTo("hello")
+                        get { this.minTimestamp }.isEqualTo(1234)
+                        get { this.maxTimestamp }.isEqualTo(100_000)
+                        get { this.infoMap }.isEmpty()
+                        get { this.settings }.and {
+                            get { this.maxBlockSize }.isEqualTo(16.KiB)
+                            get { this.compression }.isEqualTo(CompressionAlgorithm.SNAPPY)
+                        }
+                    }
+                }
+                driver.withChronoStoreFileReader(LocalBlockCache.NONE){ reader ->
+                    val entries = reader.withCursor { cursor ->
+                        cursor.firstOrThrow()
+                        cursor.ascendingEntrySequenceFromHere().toList()
+                    }
+                    expectThat(entries).containsExactly(
+                       KeyAndTimestamp(BasicBytes("foo"), 10_000) to Command.put("foo", 10_000, "bar"),
+                       KeyAndTimestamp(BasicBytes("foo"), 100_000) to Command.put("foo", 100_000, "baz"),
+                       KeyAndTimestamp(BasicBytes("hello"), 1234) to Command.put("hello", 1234, "world"),
+                       KeyAndTimestamp(BasicBytes("hello"), 1235) to Command.put("hello", 1235, "foo"),
+                       KeyAndTimestamp(BasicBytes("hello"), 1240) to Command.put(BasicBytes("hello"), 1240, Bytes.EMPTY),
+                    )
+                }
+            }
+        }
+    }
+
+    @VirtualFileSystemTest
+    fun canCreateAndReadFileWithFixedEntriesAfterMerge(mode: VFSMode) {
+        mode.withVFS { vfs ->
+            val file = vfs.file("test.chronostore")
+
+            val beginOfTest = System.currentTimeMillis()
+
+            val commands = listOf(
+                Command.put("foo", 10_000, "bar"),
+                Command.put("foo", 100_000, "baz"),
+                Command.put("hello", 1234, "world"),
+                Command.put("hello", 1235, "foo"),
+                Command.put(BasicBytes("hello"), 1240, Bytes.EMPTY),
+            )
+
+            file.withOverWriter { overWriter ->
+                ChronoStoreFileWriter(
+                    outputStream = overWriter.outputStream.buffered(),
+                    settings = ChronoStoreFileSettings(CompressionAlgorithm.SNAPPY, 16.KiB),
+                    metadata = emptyMap()
+                ).use { writer ->
+                    writer.writeFile(
+                        numberOfMerges = 0L,
+                        orderedCommands = commands.iterator(),
+                    )
+                }
+                overWriter.commit()
+            }
+
+            val emptyFile = vfs.file("test2.chronostore")
+            emptyFile.withOverWriter { overWriter ->
+                val writer = ChronoStoreFileWriter(
+                    outputStream = overWriter.outputStream.buffered(),
+                    settings = ChronoStoreFileSettings(CompressionAlgorithm.NONE, 16.MiB),
+                    metadata = emptyMap()
+                )
+                writer.writeFile(0, orderedCommands = emptySequence<Command>().iterator())
+                overWriter.commit()
+            }
+
+
+
+            FileChannelDriver.Factory.withDriver(file) { driver ->
+                val header = ChronoStoreFileReader.loadFileHeader(driver)
+                expectThat(header) {
+                    get { this.indexOfBlocks }.and {
+                        get { this.size }.isEqualTo(1)
+                        get { this.isEmpty }.isFalse()
+                        get { this.isValidBlockIndex(0) }.isTrue()
+                        get { this.isValidBlockIndex(1) }.isFalse()
+                        get { this.isValidBlockIndex(-1) }.isFalse()
+                        get { this.getBlockIndexForKeyAndTimestampAscending(KeyAndTimestamp(BasicBytes("hello"), 1237)) }.isEqualTo(0)
+                        get { this.getBlockIndexForKeyAndTimestampAscending(KeyAndTimestamp(BasicBytes("hello"), 1240)) }.isEqualTo(0)
+                        get { this.getBlockIndexForKeyAndTimestampAscending(KeyAndTimestamp(BasicBytes("hello"), 1241)) }.isEqualTo(0)
+                        get { this.getBlockIndexForKeyAndTimestampAscending(KeyAndTimestamp(BasicBytes("hello"), 0)) }.isEqualTo(0)
+                        get { this.getBlockIndexForKeyAndTimestampAscending(KeyAndTimestamp(BasicBytes("foo"), 0)) }.isNull()
+                        get { this.getBlockIndexForKeyAndTimestampAscending(KeyAndTimestamp(BasicBytes("foo"), 9_999)) }.isNull()
+                        get { this.getBlockIndexForKeyAndTimestampAscending(KeyAndTimestamp(BasicBytes("foo"), 10_000)) }.isEqualTo(0)
+                        get { this.getBlockIndexForKeyAndTimestampAscending(KeyAndTimestamp(BasicBytes("foo"), 200_000)) }.isEqualTo(0)
+                    }
+                    get { this.trailer }.and {
+                        get { this.beginOfBlocks }.isGreaterThan(0L)
+                        get { this.beginOfBlocks }.isLessThan(header.trailer.beginOfIndexOfBlocks)
+                        get { this.beginOfIndexOfBlocks }.isLessThan(header.trailer.beginOfMetadata)
+                    }
+                    get { this.fileFormatVersion }.isGreaterThanOrEqualTo(ChronoStoreFileFormat.Version.V_1_0_0)
+                    get { this.metaData }.and {
+                        get { this.createdAt }.isGreaterThanOrEqualTo(beginOfTest).isLessThanOrEqualTo(System.currentTimeMillis())
+                        get { this.totalEntries }.isEqualTo(5)
+                        get { this.headEntries }.isEqualTo(2)
+                        get { this.historyEntries }.isEqualTo(3)
+                        get { this.headHistoryRatio}.isEqualTo(0.4)
+                        get { this.numberOfMerges }.isEqualTo(0)
+                        get { this.numberOfBlocks }.isEqualTo(1)
+                        get { this.minKey }.isNotNull().get { this.asString() }.isEqualTo("foo")
+                        get { this.maxKey }.isNotNull().get { this.asString() }.isEqualTo("hello")
+                        get { this.minTimestamp }.isEqualTo(1234)
+                        get { this.maxTimestamp }.isEqualTo(100_000)
+                        get { this.infoMap }.isEmpty()
+                        get { this.settings }.and {
+                            get { this.maxBlockSize }.isEqualTo(16.KiB)
+                            get { this.compression }.isEqualTo(CompressionAlgorithm.SNAPPY)
+                        }
+                    }
+                }
+                driver.withChronoStoreFileReader(LocalBlockCache.NONE){ reader ->
+                    val entries = reader.withCursor { cursor ->
+                        cursor.firstOrThrow()
+                        cursor.ascendingEntrySequenceFromHere().toList()
+                    }
+                    expectThat(entries).containsExactly(
+                        KeyAndTimestamp(BasicBytes("foo"), 10_000) to Command.put("foo", 10_000, "bar"),
+                        KeyAndTimestamp(BasicBytes("foo"), 100_000) to Command.put("foo", 100_000, "baz"),
+                        KeyAndTimestamp(BasicBytes("hello"), 1234) to Command.put("hello", 1234, "world"),
+                        KeyAndTimestamp(BasicBytes("hello"), 1235) to Command.put("hello", 1235, "foo"),
+                        KeyAndTimestamp(BasicBytes("hello"), 1240) to Command.put(BasicBytes("hello"), 1240, Bytes.EMPTY),
+                    )
+                }
+            }
+        }
+    }
 }

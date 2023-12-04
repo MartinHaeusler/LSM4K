@@ -42,8 +42,9 @@ class ChronoStoreImpl(
     private val timeManager: TimeManager
     private val blockCacheManager = BlockCacheManager.create(configuration.blockCacheSize)
     private val fileHeaderCache = FileHeaderCache.create(configuration.fileHeaderCacheSize)
+
     private val taskManager = AsyncTaskManagerImpl(
-        executorService = Executors.newScheduledThreadPool(configuration.maxWriterThreads),
+        executorService = Executors.newScheduledThreadPool(this.configuration.maxWriterThreads),
         getChronoStoreState = this::state,
     )
 

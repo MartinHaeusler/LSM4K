@@ -12,6 +12,7 @@ import org.chronos.chronostore.io.format.ChronoStoreFileSettings
 import org.chronos.chronostore.io.format.ChronoStoreFileWriter
 import org.chronos.chronostore.io.vfs.VirtualDirectory
 import org.chronos.chronostore.io.vfs.VirtualFile
+import org.chronos.chronostore.io.vfs.VirtualReadWriteFile
 import org.chronos.chronostore.io.vfs.VirtualReadWriteFile.Companion.withOverWriter
 import org.chronos.chronostore.lsm.LSMTreeFile.Companion.FILE_EXTENSION
 import org.chronos.chronostore.lsm.cache.FileHeaderCache
@@ -330,32 +331,12 @@ class LSMTree(
             targetFile.createOverWriter().use { overWriter ->
                 val cursors = filesToMerge.map { it.cursor() }
                 try {
-                    val iterators = cursors.mapNotNull {
-                        if (it.first()) {
-                            it.ascendingValueSequenceFromHere().iterator()
-                        } else {
-                            null
-                        }
-                    }.toList()
-                    val commands = Iterators.mergeSorted(iterators, Comparator.naturalOrder())
-                    // ensure ordering and remove duplicates (which is cheap and lazy for ordered iterators)
-                    val basicIterator = commands.checkOrdered(strict = false).orderedDistinct()
-
-                    val finalIterator = if (retainOldVersions) {
-                        basicIterator
-                    } else {
-                        // we have to drop old versions...
-                        basicIterator.latestVersionOnly()
-                            // ...and if the latest version happens to be a DELETE, we ignore the key.
-                            .filter { it.opCode != Command.OpCode.DEL }
-                    }
-
                     ChronoStoreFileWriter(
                         outputStream = overWriter.outputStream,
                         settings = this.newFileSettings,
                         metadata = emptyMap()
                     ).use { writer ->
-                        writer.writeFile(numberOfMerges = maxMerge + 1, orderedCommands = finalIterator)
+                        CompactionUtil.compact(cursors, retainOldVersions, writer, maxMerge)
                     }
                 } finally {
                     for (cursor in cursors) {

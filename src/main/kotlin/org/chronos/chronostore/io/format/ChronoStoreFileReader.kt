@@ -2,6 +2,7 @@ package org.chronos.chronostore.io.format
 
 import org.chronos.chronostore.api.exceptions.ChronoStoreBlockReadException
 import org.chronos.chronostore.io.fileaccess.RandomFileAccessDriver
+import org.chronos.chronostore.io.fileaccess.RandomFileAccessDriverFactory
 import org.chronos.chronostore.io.format.datablock.DataBlock
 import org.chronos.chronostore.lsm.cache.LocalBlockCache
 import org.chronos.chronostore.model.command.Command
@@ -14,6 +15,29 @@ import org.chronos.chronostore.util.statistics.ChronoStoreStatistics
 class ChronoStoreFileReader : AutoCloseable {
 
     companion object {
+
+        inline fun <T> RandomFileAccessDriver.withChronoStoreFileReader(
+            blockCache: LocalBlockCache,
+            action: (ChronoStoreFileReader) -> T,
+        ): T {
+            return ChronoStoreFileReader(
+                driver = this,
+                blockCache = blockCache,
+            ).use(action)
+        }
+
+        inline fun <T> RandomFileAccessDriver.withChronoStoreFileReader(
+            blockCache: LocalBlockCache,
+            header: FileHeader,
+            action: (ChronoStoreFileReader) -> T,
+        ): T {
+            return ChronoStoreFileReader(
+                driver = this,
+                header = header,
+                blockCache = blockCache
+            ).use(action)
+        }
+
 
         @JvmStatic
         fun loadFileHeader(driver: RandomFileAccessDriver): FileHeader {
@@ -111,6 +135,10 @@ class ChronoStoreFileReader : AutoCloseable {
                 cause = e
             )
         }
+    }
+
+    inline fun <T> withCursor(action: (Cursor<KeyAndTimestamp, Command>) -> T): T {
+        return this.openCursor().use(action)
     }
 
     fun openCursor(): Cursor<KeyAndTimestamp, Command> {
