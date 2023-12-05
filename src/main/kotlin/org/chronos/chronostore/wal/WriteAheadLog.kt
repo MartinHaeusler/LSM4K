@@ -4,6 +4,7 @@ import com.google.common.io.CountingInputStream
 import mu.KotlinLogging
 import org.chronos.chronostore.api.exceptions.TruncatedInputException
 import org.chronos.chronostore.api.exceptions.WriteAheadLogEntryCorruptedException
+import org.chronos.chronostore.async.executor.AsyncTaskManager
 import org.chronos.chronostore.io.format.CompressionAlgorithm
 import org.chronos.chronostore.io.structure.ChronoStoreStructure.WRITE_AHEAD_LOG_FILE_PREFIX
 import org.chronos.chronostore.io.structure.ChronoStoreStructure.WRITE_AHEAD_LOG_FILE_SUFFIX
@@ -15,6 +16,7 @@ import org.chronos.chronostore.util.StreamExtensions.hasNext
 import org.chronos.chronostore.util.Timestamp
 import org.chronos.chronostore.util.iterator.IteratorExtensions.peekOrNull
 import org.chronos.chronostore.util.iterator.IteratorExtensions.toPeekingIterator
+import org.chronos.chronostore.util.unit.Bytes
 import org.chronos.chronostore.util.unit.MiB
 import java.io.InputStream
 import java.io.OutputStream
@@ -140,12 +142,12 @@ class WriteAheadLog(
     fun readWalStreaming(consumer: (WriteAheadLogTransaction) -> Unit) {
         this.lock.read {
             var previousTxCommitTimestamp = -1L
-            for (walFile in this.walFiles) {
+            for ((index, walFile) in this.walFiles.withIndex()) {
+                log.debug { "Replaying file '${walFile}' (${walFile.length.Bytes.toHumanReadableString()}) [${index+1} / ${this.walFiles.size}]" }
                 walFile.withInputStream { input ->
                     PushbackInputStream(input).use { pbIn ->
                         while (pbIn.hasNext()) {
                             val tx = WriteAheadLogFormat.readTransaction(pbIn)
-                                ?: break
                             if (tx.commitTimestamp <= previousTxCommitTimestamp) {
                                 throw WriteAheadLogEntryCorruptedException("Found non-ascending commit timestamp in the WAL! The WAL file is corrupted!")
                             }
@@ -190,6 +192,7 @@ class WriteAheadLog(
             if (!this.needsToBeShortened()) {
                 return
             }
+            log.debug { "Attempt to shorten Write-Ahead-Log. Low Watermark: ${lowWatermarkTimestamp}" }
             val iterator = this.walFiles.iterator().toPeekingIterator()
             val filesToDelete = mutableSetOf<WALFile>()
             while (iterator.hasNext()) {
@@ -204,8 +207,13 @@ class WriteAheadLog(
                     filesToDelete += currentWALFile
                 }
             }
-            this.walFiles.removeAll(filesToDelete)
-            filesToDelete.forEach(WALFile::delete)
+            if(filesToDelete.size > 0){
+                log.debug { "Identified ${filesToDelete.size} Write-Ahead-Log files which can be dropped." }
+                this.walFiles.removeAll(filesToDelete)
+                filesToDelete.forEach(WALFile::delete)
+            } else{
+                log.debug { "No Write-Ahead-Log files can be dropped." }
+            }
         }
     }
 
@@ -216,12 +224,15 @@ class WriteAheadLog(
      */
     fun performStartupRecoveryCleanup(getHighWatermarkTimestamp: () -> Timestamp) {
         this.lock.write {
+            log.debug { "Checking Write-Ahead-Log for incomplete transactions and data corruption." }
+            val timeBefore = System.currentTimeMillis()
             for ((index, walFile) in this.walFiles.withIndex()) {
+                log.debug { "Checking file '${walFile.file.name}' (${walFile.file.length.Bytes.toHumanReadableString()}) [${index + 1} / ${this.walFiles.size}]" }
                 // we tolerate incomplete trailing writes on the last file.
                 val isLastFile = index == this.walFiles.lastIndex
 
                 walFile.withInputStream { input ->
-                    PushbackInputStream(input).use { pbIn ->
+                    PushbackInputStream(input.buffered()).use { pbIn ->
                         CountingInputStream(pbIn).use { cIn ->
                             var startOfBlock: Long
                             var lastSuccessfulTransactionTimestamp = -1L
@@ -229,7 +240,6 @@ class WriteAheadLog(
                                 startOfBlock = cIn.count
                                 try {
                                     val tx = WriteAheadLogFormat.readTransaction(cIn)
-                                        ?: break // we're done reading this file
                                     lastSuccessfulTransactionTimestamp = tx.commitTimestamp
                                 } catch (e: TruncatedInputException) {
                                     if (isLastFile) {
@@ -241,7 +251,9 @@ class WriteAheadLog(
                                             throw WriteAheadLogEntryCorruptedException("WAL file '${walFile.file.path}' is has been truncated and cannot be read!")
                                         }
                                         // truncate the file
+                                        log.debug { "Detected truncation of Write-Ahead-Log file '${walFile.file.name}'. This is the latest file and it can be repaired. Dropping partial transactions..." }
                                         walFile.file.truncateAfter(startOfBlock)
+                                        log.debug { "Repair of Write-Ahead-Log file '${walFile.file.name}' complete." }
                                     } else {
                                         // for all other WAL files (which are not the last one) we cannot tolerate missing data.
                                         throw WriteAheadLogEntryCorruptedException("WAL file '${walFile.file.path}' is has been truncated and cannot be read!")
@@ -252,6 +264,8 @@ class WriteAheadLog(
                     }
                 }
             }
+            val timeAfter = System.currentTimeMillis()
+            log.debug { "Write-Ahead-Log validation complete. Checked ${walFiles.size} files in ${timeAfter-timeBefore}ms." }
         }
     }
 
@@ -283,6 +297,9 @@ class WriteAheadLog(
             return this.file.delete()
         }
 
+        override fun toString(): String {
+            return this.file.name
+        }
     }
 
 }

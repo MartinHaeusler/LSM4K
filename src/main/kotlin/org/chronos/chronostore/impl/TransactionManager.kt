@@ -99,10 +99,10 @@ class TransactionManager(
 
                     // we're missing the changes from this transaction,
                     // put them into the store.
-                    (store as StoreImpl).tree.put(commands)
+                    (store as StoreImpl).tree.putAll(commands)
 
                     val commitLogCommands = commands.map { createCommitLogEntry(commitTimestamp, storeName, it) }
-                    (commitLogStore as StoreImpl).tree.put(commitLogCommands)
+                    (commitLogStore as StoreImpl).tree.putAll(commitLogCommands)
                 }
             }
             log.trace { "Performed commit of transaction ${tx.id}. Transaction timestamp: ${tx.lastVisibleTimestamp}, commit timestamp: ${commitTimestamp}." }

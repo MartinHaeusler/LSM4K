@@ -61,7 +61,6 @@ class ChronoStoreImpl(
         vfs = this.vfs,
         blockCacheManager = this.blockCacheManager,
         fileHeaderCache = this.fileHeaderCache,
-        mergeService = this.mergeService,
         forest = this.forest,
         driverFactory = this.configuration.randomFileAccessDriverFactory,
         newFileSettings = ChronoStoreFileSettings(configuration.compressionAlgorithm, configuration.maxBlockSize),
@@ -129,7 +128,6 @@ class ChronoStoreImpl(
         this.writeAheadLog.performStartupRecoveryCleanup(this.storeManager::getHighWatermarkTimestamp)
         val allStores = this.storeManager.getAllStoresInternal()
         // with the store info, replay the changes found in the WAL.
-        log.info { "Located ${allStores.size} stores belonging to this database." }
         return this.replayWriteAheadLogChanges(allStores)
     }
 
@@ -139,11 +137,12 @@ class ChronoStoreImpl(
             val maxPersistedTimestamp = (store as StoreImpl).tree.getMaxPersistedTimestamp()
             store.storeId to maxPersistedTimestamp
         }
-        log.info { "Replaying Write Ahead Log file" }
+        log.info { "Replaying Write-Ahead-Log" }
         // replay the entries in the WAL which have not been persisted yet
         var totalTransactions = 0
         var missingTransactions = 0
         var maxTimestamp = 0L
+        val timeBefore = System.currentTimeMillis()
         this.writeAheadLog.readWalStreaming { walTransaction ->
             totalTransactions++
             maxTimestamp = max(maxTimestamp, walTransaction.commitTimestamp)
@@ -152,7 +151,7 @@ class ChronoStoreImpl(
                 val storeMaxTimestamp = storeIdToMaxTimestamp[entry.key]
                     ?: continue // the store doesn't exist anymore, skip
 
-                if (storeMaxTimestamp > walTransaction.commitTimestamp) {
+                if (storeMaxTimestamp >= walTransaction.commitTimestamp) {
                     // we already have these changes in our store.
                     continue
                 }
@@ -163,14 +162,15 @@ class ChronoStoreImpl(
 
                 // we're missing the changes from this transaction,
                 // put them into the store.
-                (store as StoreImpl).tree.put(entry.value)
+                (store as StoreImpl).tree.putAll(entry.value)
                 changed = true
             }
             if (changed) {
                 missingTransactions++
             }
         }
-        log.info { "Successfully replayed ${totalTransactions} transactions in the WAL file. ${missingTransactions} transactions were missing in persistent files." }
+        val timeAfter = System.currentTimeMillis()
+        log.info { "Successfully replayed ${totalTransactions} transactions in the WAL file in ${timeAfter-timeBefore}ms. ${missingTransactions} transactions were missing in store files." }
         return maxTimestamp
     }
 

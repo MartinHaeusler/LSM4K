@@ -189,13 +189,18 @@ object WriteAheadLogFormat {
     /**
      * Reads a [WriteAheadLogTransaction] from the given [input].
      *
+     * This method assumes that there is more data to read from the stream and will
+     * throw an exception if there's no more data.
+     *
      * @param input The input stream to read from.
      *
-     * @return The transaction, or `null` if [input] has no more data to read.
+     * @return The transaction.
+     *
+     * @throws TruncatedInputException If the input has been truncated half-way through the entry.
      */
     fun readTransaction(
         input: InputStream
-    ): WriteAheadLogTransaction? {
+    ): WriteAheadLogTransaction {
         val header = readHeader(input)
         // read the body
         val compressedBody = PrefixIO.readBytes(input)

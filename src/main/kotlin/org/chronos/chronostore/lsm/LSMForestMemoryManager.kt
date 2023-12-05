@@ -12,6 +12,7 @@ import org.chronos.chronostore.lsm.merge.tasks.FlushInMemoryTreeToDiskTask
 import org.chronos.chronostore.util.StoreId
 import org.chronos.chronostore.util.log.LogMarkers
 import org.chronos.chronostore.util.statistics.ChronoStoreStatistics
+import org.chronos.chronostore.util.unit.Bytes
 import java.util.concurrent.Future
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.concurrent.read
@@ -72,6 +73,8 @@ class LSMForestMemoryManager(
         require(flushThresholdSize <= maxForestSize) {
             "Argument 'flushThresholdSize' (${flushThresholdSize}) must not be larger than argument 'maxForestSize' (${maxForestSize})!"
         }
+
+        log.info { "Forest Size: ${maxForestSize.Bytes.toHumanReadableString()}, Flush Threshold: ${flushThresholdSize.Bytes.toHumanReadableString()}" }
     }
 
     fun addTree(tree: LSMTree) {

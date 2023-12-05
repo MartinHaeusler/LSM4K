@@ -13,7 +13,6 @@ import org.chronos.chronostore.io.vfs.VirtualReadWriteFile
 import org.chronos.chronostore.io.vfs.disk.DiskBasedVirtualFileSystem
 import org.chronos.chronostore.io.vfs.disk.DiskBasedVirtualFileSystemSettings
 import org.chronos.chronostore.lsm.cache.LocalBlockCache
-import org.chronos.chronostore.model.command.KeyAndTimestamp
 import org.chronos.chronostore.util.unit.Bytes
 import java.io.File
 import java.util.*
@@ -22,23 +21,32 @@ object StoreFileDebug {
 
     @JvmStatic
     fun main(args: Array<String>) {
-        // val inputDir = File("/home/martin/Documents/chronostore-test/corruptedData")
-        val inputDir = File("/home/martin/Documents/chronostore-test/taxonomyChronoStore/data")
+        val inputDir = File("/home/martin/Documents/chronostore-test/corruptedData")
+        // val inputDir = File("/home/martin/Documents/chronostore-test/taxonomyChronoStore/data")
         val chronoStoreFileNames = inputDir.listFiles().asSequence()
             .filter { it.name.endsWith(".chronostore") }
             .map { it.name }
             .sorted()
             .toList()
         val vfs = DiskBasedVirtualFileSystem(inputDir, DiskBasedVirtualFileSystemSettings())
-        var overallEntries = 0
+        var overallEntries = 0L
+        val issues = mutableListOf<Issue>()
+
         for (chronoStoreFileName in chronoStoreFileNames) {
             val file = vfs.file(chronoStoreFileName)
-            val localEntries = countEntriesInFile(file)
-            println("File '${file.name}' has ${localEntries} entries (counted).")
-            overallEntries += localEntries
+            val entriesInFile = countEntriesInFile(file)
+            println()
+            println("File '${file.name}' has ${entriesInFile} entries (counted).")
+            overallEntries += entriesInFile
             val header = loadHeader(file)
             println("File '${file.name}' header:")
+            println("  - Header Size: ${header.sizeBytes.Bytes.toHumanReadableString()}")
             println("  - Entries: ${header.metaData.totalEntries}")
+            if (entriesInFile != header.metaData.totalEntries) {
+                val msg = "[ERROR] The header count (${header.metaData.totalEntries}) doesn't match the actual number of entries in the file ${entriesInFile}!"
+                issues += Issue(fileName = chronoStoreFileName, blockIndex = null, message = msg)
+                println(msg)
+            }
             println("    - Head: ${header.metaData.headEntries}")
             println("    - Hist: ${header.metaData.historyEntries}")
             println("    - HHR: ${header.metaData.headHistoryRatio.format("%.3f")}")
@@ -60,22 +68,45 @@ object StoreFileDebug {
                     println("    - Min Key: ${dataBlock.metaData.minKey.asString()}")
                     println("    - Max Key: ${dataBlock.metaData.maxKey.asString()}")
                     println("    - Entries (header): ${dataBlock.metaData.commandCount}")
-                    println("    - Entries (count): ${dataBlock.withCursor { it.firstOrThrow(); it.ascendingKeySequenceFromHere().count() }}")
+                    val blockEntriesCount = dataBlock.withCursor { it.firstOrThrow(); it.ascendingKeySequenceFromHere().count() }
+                    println("    - Entries (count): $blockEntriesCount")
 
+                    if (blockEntriesCount != dataBlock.metaData.commandCount) {
+                        val msg = "[ERROR] The header count (${header.metaData.totalEntries}) doesn't match the actual number of entries in block #${blockIndex} in file ${entriesInFile}!"
+                        issues += Issue(fileName = chronoStoreFileName, blockIndex = blockIndex, message = msg)
+                        println(msg)
+                    }
                 }
             }
 
         }
         println("=========================================================")
         println("Sum: ${overallEntries} entries in *.chronostore files")
+        println()
+        println()
+        if (issues.isNotEmpty()) {
+            println("ISSUES")
+            println("================================")
+            for ((fileName, fileIssues) in issues.groupBy { it.fileName }) {
+                println()
+                println("File: ${fileName} (${fileIssues.size} issues)")
+                println("-------------------------------------------------------")
+                println()
+                for (fileIssue in fileIssues) {
+                    println(fileIssue.message)
+                }
+            }
+        } else {
+            println("No issues found in file integrity.")
+        }
     }
 
-    private fun countEntriesInFile(file: VirtualReadWriteFile): Int {
+    private fun countEntriesInFile(file: VirtualReadWriteFile): Long {
         FileChannelDriver.Factory.withDriver(file) { driver ->
             val entries = driver.withChronoStoreFileReader(LocalBlockCache.NONE) { reader ->
                 reader.withCursor { cursor ->
                     cursor.firstOrThrow()
-                    cursor.ascendingKeySequenceFromHere().count()
+                    cursor.ascendingKeySequenceFromHere().fold(0L) { acc, _ -> acc + 1 }
                 }
             }
             return entries
@@ -113,5 +144,11 @@ object StoreFileDebug {
             )
         }
     }
+
+    private class Issue(
+        val fileName: String,
+        val blockIndex: Int?,
+        val message: String,
+    )
 
 }

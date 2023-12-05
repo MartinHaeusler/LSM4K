@@ -1,9 +1,9 @@
 package org.chronos.chronostore.util.statistics
 
-import org.chronos.chronostore.lsm.cache.FileHeaderCache
 import org.chronos.chronostore.util.Timestamp
 import org.chronos.chronostore.util.cursor.OverlayCursor
 import org.chronos.chronostore.util.cursor.VersioningCursor
+import org.chronos.chronostore.util.unit.Bytes
 import java.util.*
 import java.util.concurrent.atomic.AtomicLong
 
@@ -32,6 +32,14 @@ class ChronoStoreStatistics(
     val transactionsRolledBack: Long,
     /** How many transactions have been opened but then left open and forgotten? */
     val transactionsDangling: Long,
+    /** How many flush tasks have been executed? */
+    val flushTaskExecutions: Long,
+    /** How many bytes have been written by the flush tasks in total? */
+    val flushTaskWrittenBytes: Long,
+    /** How many key-value entries have been written by the flush tasks in total? */
+    val flushTaskWrittenEntries: Long,
+    /** How much time has been spent in total in flush tasks (possibly concurrently)? */
+    val flushTaskTotalTime: Long,
 ) {
 
     companion object {
@@ -138,6 +146,19 @@ class ChronoStoreStatistics(
         /** How many transactions have been left open and forgotten? */
         val TRANSACTION_DANGLING = AtomicLong(0L)
 
+        /** How many flush tasks have been executed? */
+        val FLUSH_TASK_EXECUTIONS = AtomicLong(0L)
+
+        /** How many bytes have been written by the flush tasks in total? */
+        val FLUSH_TASK_WRITTEN_BYTES = AtomicLong(0L)
+
+        /** How many key-value entries have been written by the flush tasks in total? */
+        val FLUSH_TASK_WRITTEN_ENTRIES = AtomicLong(0L)
+
+        /** How much time has been spent in total in flush tasks (possibly concurrently)? */
+        val FLUSH_TASK_TOTAL_TIME = AtomicLong(0L)
+
+
         /**
          * Retrieves an immutable snapshot of all statistics at the current point in time.
          */
@@ -195,6 +216,10 @@ class ChronoStoreStatistics(
                 transactionsCommitted =  TRANSACTION_COMMITS.get(),
                 transactionsRolledBack = TRANSACTION_ROLLBACKS.get(),
                 transactionsDangling = TRANSACTION_DANGLING.get(),
+                flushTaskExecutions = FLUSH_TASK_EXECUTIONS.get(),
+                flushTaskWrittenBytes = FLUSH_TASK_WRITTEN_BYTES.get(),
+                flushTaskWrittenEntries = FLUSH_TASK_WRITTEN_ENTRIES.get(),
+                flushTaskTotalTime = FLUSH_TASK_TOTAL_TIME.get(),
             )
         }
 
@@ -246,6 +271,11 @@ class ChronoStoreStatistics(
             TRANSACTION_COMMITS.set(0L)
             TRANSACTION_ROLLBACKS.set(0L)
             TRANSACTION_DANGLING.set(0L)
+
+            FLUSH_TASK_EXECUTIONS.set(0L)
+            FLUSH_TASK_TOTAL_TIME.set(0L)
+            FLUSH_TASK_WRITTEN_BYTES.set(0L)
+            FLUSH_TASK_WRITTEN_ENTRIES.set(0L)
         }
     }
 
@@ -316,6 +346,11 @@ class ChronoStoreStatistics(
             |              Misses: ${this.fileHeaderCache.misses}
             |            Hit Rate: ${"%.2f".format(this.fileHeaderCache.hitRate * 100)}%
             |           Evictions: ${this.fileHeaderCache.evictions}
+            | Flush Tasks:
+            |    Flushes Executed: ${this.flushTaskExecutions}
+            |       Bytes Written: ${this.flushTaskWrittenBytes.Bytes.toHumanReadableString()}
+            |     Entries Written: ${this.flushTaskWrittenEntries}
+            |          Total Time: ${this.flushTaskTotalTime}ms
             | Write Stalling:
             |    Total Stall Time: ${this.totalWriteStallTimeMillis}ms
             |        Stall Events: ${this.writeStallEvents}

@@ -65,8 +65,8 @@ object ChronoStoreTaxonomyDataWriterBenchmark {
 
                 println("Flushing all data")
                 chronoStore.mergeService.flushAllInMemoryStoresToDisk()
-                println("Compacting data")
-                chronoStore.mergeService.performMajorCompaction()
+//                println("Compacting data")
+//                chronoStore.mergeService.performMajorCompaction()
                 println("Done")
             }
         }

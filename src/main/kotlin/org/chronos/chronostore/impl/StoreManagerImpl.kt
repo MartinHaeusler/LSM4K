@@ -1,5 +1,6 @@
 package org.chronos.chronostore.impl
 
+import mu.KotlinLogging
 import org.chronos.chronostore.api.ChronoStoreTransaction
 import org.chronos.chronostore.api.Store
 import org.chronos.chronostore.api.StoreManager
@@ -16,7 +17,6 @@ import org.chronos.chronostore.lsm.LSMForestMemoryManager
 import org.chronos.chronostore.lsm.LSMTree
 import org.chronos.chronostore.lsm.cache.BlockCacheManager
 import org.chronos.chronostore.lsm.cache.FileHeaderCache
-import org.chronos.chronostore.lsm.merge.strategy.MergeService
 import org.chronos.chronostore.util.IOExtensions.withInputStream
 import org.chronos.chronostore.util.StoreId
 import org.chronos.chronostore.util.Timestamp
@@ -31,7 +31,6 @@ class StoreManagerImpl(
     private val vfs: VirtualFileSystem,
     private val blockCacheManager: BlockCacheManager,
     private val fileHeaderCache: FileHeaderCache,
-    private val mergeService: MergeService,
     private val forest: LSMForestMemoryManager,
     private val driverFactory: RandomFileAccessDriverFactory,
     private val newFileSettings: ChronoStoreFileSettings,
@@ -41,6 +40,8 @@ class StoreManagerImpl(
 
         private const val DB_ALREADY_CLOSED = "This database has already been closed."
 
+        private val log = KotlinLogging.logger {}
+
     }
 
     @Transient
@@ -48,7 +49,7 @@ class StoreManagerImpl(
 
     private var initialized: Boolean = false
     private val storeInfoFile = vfs.file(STORE_INFO_FILE_NAME)
-    private val storesByName = mutableMapOf<StoreId, Store>()
+    private val storesById = mutableMapOf<StoreId, Store>()
     private val lock = ReentrantReadWriteLock(true)
 
     fun initialize(isEmptyDatabase: Boolean) {
@@ -58,10 +59,12 @@ class StoreManagerImpl(
                 check(!this.storeInfoFile.exists()) {
                     "An empty database is being created, but the store info file exists: ${storeInfoFile.path}"
                 }
+                log.info { "Creating a new, empty database in '${this.vfs.rootPath}'." }
                 this.storeInfoFile.create()
                 // in the beginning, there are no stores.
                 this.overwriteStoreInfoJson(emptyList())
             } else {
+                log.info { "Opening an existing database in '${this.vfs.rootPath}'." }
                 // read the store infos from the JSON file
                 val storeInfos = this.readStoreInfoFromJson()
                 for (storeInfo in storeInfos) {
@@ -76,6 +79,7 @@ class StoreManagerImpl(
                 this.ensureSystemStoreExists(systemStore)
             }
 
+            log.info { "Store initialization performed successfully for ${this.storesById.size} stores." }
             this.initialized = true
         }
     }
@@ -118,7 +122,7 @@ class StoreManagerImpl(
         check(this.isOpen) { DB_ALREADY_CLOSED }
         this.lock.read {
             assertInitialized()
-            return this.storesByName[name]?.takeIf { it.isVisibleFor(transaction) }
+            return this.storesById[name]?.takeIf { it.isVisibleFor(transaction) }
         }
     }
 
@@ -129,7 +133,7 @@ class StoreManagerImpl(
         this.lock.write {
             assertInitialized()
             require(!name.isSystemInternal) { "Store names must not start with '_' (reserved for internal purposes)!" }
-            require(!this.storesByName.containsKey(name)) { "There already exists a store with StoreID '${name}'!" }
+            require(!this.storesById.containsKey(name)) { "There already exists a store with StoreID '${name}'!" }
             // ensure that stores are not becoming nested.
             val allStores = this.getAllStoresInternal()
             val offendingStore = allStores.firstOrNull { name.collidesWith(it.storeId) }
@@ -154,7 +158,7 @@ class StoreManagerImpl(
         directory.mkdirs()
 
         val storeInfoList = mutableListOf<StoreInfo>()
-        this.storesByName.values.asSequence().map { it.storeInfo }.toCollection(storeInfoList)
+        this.storesById.values.asSequence().map { it.storeInfo }.toCollection(storeInfoList)
         val newStoreInfo = StoreInfo(
             storeId = storeId.toString(),
             retainOldVersions = versioned,
@@ -180,7 +184,7 @@ class StoreManagerImpl(
         this.lock.read {
             assertInitialized()
 
-            return this.storesByName[systemStore.storeId]
+            return this.storesById[systemStore.storeId]
                 ?: throw IllegalStateException("System Store '${systemStore}' was not initialized!")
         }
     }
@@ -188,7 +192,7 @@ class StoreManagerImpl(
     private fun ensureSystemStoreExists(systemStore: SystemStore): Store {
         check(this.isOpen) { DB_ALREADY_CLOSED }
         this.lock.write {
-            val existingStore = this.storesByName[systemStore.storeId]
+            val existingStore = this.storesById[systemStore.storeId]
             if (existingStore != null) {
                 return existingStore
             }
@@ -207,13 +211,13 @@ class StoreManagerImpl(
             assertInitialized()
             val store = this.getStoreByNameOrNull(transaction, name)
                 ?: return false
-            val storeInfoList = this.storesByName.values.asSequence()
+            val storeInfoList = this.storesById.values.asSequence()
                 .filter { it.storeId != store.storeId }
                 .map { it.storeInfo }
                 .toList()
 
             this.overwriteStoreInfoJson(storeInfoList)
-            this.storesByName.remove(store.storeId)
+            this.storesById.remove(store.storeId)
             store.directory.clear()
             store.directory.delete()
             return true
@@ -233,7 +237,7 @@ class StoreManagerImpl(
         check(this.isOpen) { DB_ALREADY_CLOSED }
         this.lock.read {
             this.assertInitialized()
-            return this.storesByName.values.toList()
+            return this.storesById.values.toList()
         }
     }
 
@@ -253,7 +257,7 @@ class StoreManagerImpl(
             return
         }
         this.lock.read {
-            monitor.forEachWithMonitor(1.0, "Cleaning up old files", this.storesByName.values.toList()) { taskMonitor, store ->
+            monitor.forEachWithMonitor(1.0, "Cleaning up old files", this.storesById.values.toList()) { taskMonitor, store ->
                 store as StoreImpl
                 store.tree.performGarbageCollection(taskMonitor)
             }
@@ -263,7 +267,7 @@ class StoreManagerImpl(
 
     override fun getHighWatermarkTimestamp(): Timestamp {
         this.lock.read {
-            val latestTimestamp = this.storesByName.values.asSequence()
+            val latestTimestamp = this.storesById.values.asSequence()
                 .mapNotNull { it.highWatermarkTimestamp }
                 .maxOrNull()
             return latestTimestamp ?: -1L
@@ -273,12 +277,22 @@ class StoreManagerImpl(
     override fun getLowWatermarkTimestamp(): Timestamp {
         this.lock.read {
             val highWatermark = this.getHighWatermarkTimestamp()
-            val maxLowWatermark = this.storesByName.values.asSequence()
-                .filter { it.hasInMemoryChanges() }
+            val minLowWatermark = this.storesById.values.asSequence()
+                .filter(Store::hasInMemoryChanges)
                 .mapNotNull { it.lowWatermarkTimestamp }
-                .maxOrNull()
+                .minOrNull()
 
-            return min(highWatermark, maxLowWatermark ?: -1L)
+            if (minLowWatermark == null) {
+                // no store has in-memory changes
+                // => everything is 100% persisted
+                // => low watermark == high watermark
+                return highWatermark
+            } else {
+                // some stores have in-memory changes.
+                // As a precaution, limit the low watermark with the
+                // high watermark.
+                return min(highWatermark, minLowWatermark)
+            }
         }
     }
 
@@ -308,7 +322,7 @@ class StoreManagerImpl(
 
     private fun registerStoreInCaches(store: Store) {
         this.lock.write {
-            this.storesByName[store.storeId] = store
+            this.storesById[store.storeId] = store
         }
     }
 

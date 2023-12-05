@@ -1,6 +1,5 @@
 package org.chronos.chronostore.lsm
 
-import com.google.common.collect.Iterators
 import mu.KotlinLogging
 import org.chronos.chronostore.api.ChronoStoreTransaction
 import org.chronos.chronostore.api.exceptions.ChronoStoreFlushException
@@ -12,7 +11,6 @@ import org.chronos.chronostore.io.format.ChronoStoreFileSettings
 import org.chronos.chronostore.io.format.ChronoStoreFileWriter
 import org.chronos.chronostore.io.vfs.VirtualDirectory
 import org.chronos.chronostore.io.vfs.VirtualFile
-import org.chronos.chronostore.io.vfs.VirtualReadWriteFile
 import org.chronos.chronostore.io.vfs.VirtualReadWriteFile.Companion.withOverWriter
 import org.chronos.chronostore.lsm.LSMTreeFile.Companion.FILE_EXTENSION
 import org.chronos.chronostore.lsm.cache.FileHeaderCache
@@ -23,10 +21,6 @@ import org.chronos.chronostore.util.StoreId
 import org.chronos.chronostore.util.Timestamp
 import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.cursor.*
-import org.chronos.chronostore.util.iterator.IteratorExtensions.checkOrdered
-import org.chronos.chronostore.util.iterator.IteratorExtensions.filter
-import org.chronos.chronostore.util.iterator.IteratorExtensions.latestVersionOnly
-import org.chronos.chronostore.util.iterator.IteratorExtensions.orderedDistinct
 import org.chronos.chronostore.util.log.LogMarkers
 import org.chronos.chronostore.util.unit.BinarySize
 import org.chronos.chronostore.util.unit.Bytes
@@ -89,8 +83,8 @@ class LSMTree(
             .map { it.substringAfterLast(File.separatorChar) }
             .filter { it.endsWith(FILE_EXTENSION) }
             .mapNotNull(::createLsmTreeFileOrNull)
-            // sort by file index ascending
-            .sortedBy { it.index }
+            // sort by oldest timestamp ascending (i.e. latest data is at the end of the list)
+            .sortedBy { it.header.metaData.minTimestamp }
             .toMutableList()
     }
 
@@ -113,6 +107,7 @@ class LSMTree(
     private fun createLsmTreeFileOrNull(file: VirtualFile): LSMTreeFile? {
         val index = this.parseFileIndexOrNull(file.name)
             ?: return null
+
         return LSMTreeFile(
             virtualFile = file,
             index = index,
@@ -195,7 +190,7 @@ class LSMTree(
         }
     }
 
-    fun put(commands: Iterable<Command>) {
+    fun putAll(commands: Iterable<Command>) {
         this.lock.write {
             val containedEntry = commands.asSequence().map { it.keyAndTimestamp }.firstOrNull(this.inMemoryTree::containsKey)
             require(containedEntry == null) {
@@ -229,15 +224,16 @@ class LSMTree(
             .maxOrNull() ?: -1
     }
 
-    fun flushInMemoryDataToDisk(minFlushSize: BinarySize, monitor: TaskMonitor): Long {
+    fun flushInMemoryDataToDisk(minFlushSize: BinarySize, monitor: TaskMonitor): FlushResult {
         log.trace(LogMarkers.PERF) { "TASK: Flush in-memory data to disk" }
         this.performAsyncWriteTask(monitor) {
             try {
+                val timeBefore = System.currentTimeMillis()
                 monitor.reportStarted("Flushing Data to Disk")
                 if (this.inMemoryTree.isEmpty() || this.inMemorySize < minFlushSize) {
                     // flush not necessary
                     monitor.reportDone()
-                    return -1L
+                    return FlushResult.EMPTY
                 }
                 log.trace(LogMarkers.PERF) { "Flushing LSM Tree '${this.directory}'!" }
                 val commands = monitor.subTask(0.1, "Collecting Entries to flush") {
@@ -270,7 +266,9 @@ class LSMTree(
                 log.trace(LogMarkers.PERF) { "Flush into index file ${newFileIndex} completed in ${flushTime}ms. Redirecting traffic to new data file for LSM tree ${this.path}" }
                 monitor.subTask(0.1, "Redirecting traffic to file") {
                     this.lock.write {
-                        this.fileList.add(this.createLsmTreeFile(file))
+                        this.fileList += this.createLsmTreeFile(file)
+                        // ensure that the merged file is at the correct position in the list
+                        this.fileList.sortBy { it.header.metaData.minTimestamp }
                         log.trace(LogMarkers.PERF) { "Removing ${commands.keys.size} keys from the in-memory tree (which has ${this.inMemoryTree.size} keys)..." }
                         this.inMemoryTree = this.inMemoryTree.minusAll(commands.keys)
                         log.trace(LogMarkers.PERF) { "${inMemoryTree.size} entries remaining in-memory after flush of tree ${this.path}" }
@@ -281,8 +279,14 @@ class LSMTree(
                     }
                 }
 
+                val timeAfter = System.currentTimeMillis()
+
                 monitor.reportDone()
-                return file.length
+                return FlushResult(
+                    bytesWritten = file.length,
+                    entriesWritten = commands.size,
+                    runtimeMillis = timeAfter - timeBefore,
+                )
             } catch (e: Exception) {
                 throw ChronoStoreFlushException("An exception occurred during flush task on '${storeId}': ${e}", e)
             }
