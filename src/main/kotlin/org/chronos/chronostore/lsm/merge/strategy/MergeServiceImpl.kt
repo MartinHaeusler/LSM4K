@@ -6,7 +6,6 @@ import org.chronos.chronostore.api.StoreManager
 import org.chronos.chronostore.async.executor.AsyncTaskManager
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.forEachWithMonitor
-import org.chronos.chronostore.lsm.event.LsmCursorClosedEvent
 import org.chronos.chronostore.lsm.garbagecollector.tasks.GarbageCollectorTask
 import org.chronos.chronostore.lsm.merge.tasks.CompactionTask
 import org.chronos.chronostore.lsm.merge.tasks.FlushInMemoryTreeToDiskTask
@@ -53,10 +52,9 @@ class MergeServiceImpl(
         }
 
         this.garbageCollectorTask = GarbageCollectorTask(storeManager)
-        val garbageCollectionTimeOfDay = this.storeConfig.garbageCollectionTimeOfDay
-        if (garbageCollectionTimeOfDay != null) {
-            val startDelay = garbageCollectionTimeOfDay.nextOccurrence
-            this.taskManager.scheduleRecurringWithFixedRate(this.walShorteningTask, startDelay.milliseconds, 24.hours)
+        val garbageCollectionCron = this.storeConfig.garbageCollectionCron
+        if (garbageCollectionCron != null) {
+            this.taskManager.scheduleRecurringWithCron(this.garbageCollectorTask, garbageCollectionCron)
         }
 
         this.storeManager = storeManager
