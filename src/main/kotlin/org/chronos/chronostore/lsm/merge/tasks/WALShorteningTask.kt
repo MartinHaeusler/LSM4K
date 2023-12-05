@@ -15,10 +15,13 @@ class WALShorteningTask(
 
     override fun run(monitor: TaskMonitor) {
         monitor.reportStarted("WAL Compaction")
+        // first, attempt to shorten the WAL by dropping all files that are no longer needed.
         if(this.writeAheadLog.needsToBeShortened()){
             val lowWatermark = this.storeManager.getLowWatermarkTimestamp()
             this.writeAheadLog.shorten(lowWatermark)
         }
+        // then, compute the checksums for all remaining WAL files which have been completed
+        this.writeAheadLog.generateChecksumsForCompletedFiles()
         monitor.reportDone()
     }
 

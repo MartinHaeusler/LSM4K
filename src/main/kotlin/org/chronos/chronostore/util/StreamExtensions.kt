@@ -1,6 +1,11 @@
 package org.chronos.chronostore.util
 
+import java.io.InputStream
 import java.io.PushbackInputStream
+import java.security.DigestInputStream
+import java.security.MessageDigest
+import java.util.zip.CheckedInputStream
+import java.util.zip.Checksum
 
 object StreamExtensions {
 
@@ -14,6 +19,13 @@ object StreamExtensions {
         }
     }
 
+    fun InputStream.checked(checksum: Checksum): CheckedInputStream {
+        return CheckedInputStream(this,checksum)
+    }
+
+    fun InputStream.digest(digest: MessageDigest): DigestInputStream {
+        return DigestInputStream(this, digest)
+    }
 
 
 }

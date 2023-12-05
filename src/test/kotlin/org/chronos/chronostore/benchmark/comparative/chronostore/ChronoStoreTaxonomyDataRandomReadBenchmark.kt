@@ -1,7 +1,5 @@
 package org.chronos.chronostore.benchmark.comparative.chronostore
 
-import jetbrains.exodus.ByteIterable
-import jetbrains.exodus.ByteIterator
 import org.chronos.chronostore.api.ChronoStore
 import org.chronos.chronostore.api.ChronoStoreConfiguration
 import org.chronos.chronostore.benchmark.util.Statistics.Companion.statistics
@@ -10,7 +8,6 @@ import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.statistics.ChronoStoreStatistics
 import org.chronos.chronostore.util.unit.MiB
 import java.io.File
-import java.io.InputStream
 import kotlin.system.measureTimeMillis
 
 object ChronoStoreTaxonomyDataRandomReadBenchmark {

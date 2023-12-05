@@ -25,6 +25,12 @@ class CompactionTask(
 
 
     override fun run(monitor: TaskMonitor) {
+        // if we're coming from the async task executor, it's
+        // always a major compaction.
+        this.runMajor(monitor)
+    }
+
+    fun runMinor(monitor: TaskMonitor) {
         this.runInternal(monitor, major = false)
     }
 

@@ -15,8 +15,10 @@ import org.chronos.chronostore.io.vfs.VirtualFileSystem
 import org.chronos.chronostore.lsm.LSMForestMemoryManager
 import org.chronos.chronostore.lsm.cache.BlockCacheManager
 import org.chronos.chronostore.lsm.cache.FileHeaderCache
+import org.chronos.chronostore.lsm.garbagecollector.tasks.GarbageCollectorTask
 import org.chronos.chronostore.lsm.merge.strategy.MergeService
 import org.chronos.chronostore.lsm.merge.strategy.MergeServiceImpl
+import org.chronos.chronostore.lsm.merge.tasks.WALShorteningTask
 import org.chronos.chronostore.util.Timestamp
 import org.chronos.chronostore.wal.WriteAheadLog
 import java.util.concurrent.Executors
@@ -110,6 +112,19 @@ class ChronoStoreImpl(
             timeManager = this.timeManager,
             writeAheadLog = this.writeAheadLog
         )
+
+        val walShorteningTask = WALShorteningTask(this.writeAheadLog, storeManager)
+        val walCompactionCron = this.configuration.writeAheadLogCompactionCron
+        if (walCompactionCron != null) {
+            this.taskManager.scheduleRecurringWithCron(walShorteningTask, walCompactionCron)
+        }
+
+        val garbageCollectorTask = GarbageCollectorTask(storeManager)
+        val garbageCollectionCron = this.configuration.garbageCollectionCron
+        if (garbageCollectionCron != null) {
+            this.taskManager.scheduleRecurringWithCron(garbageCollectorTask, garbageCollectionCron)
+        }
+
         this.mergeService.initialize(this.storeManager, writeAheadLog)
         this.state = ChronoStoreState.RUNNING
     }
@@ -170,7 +185,7 @@ class ChronoStoreImpl(
             }
         }
         val timeAfter = System.currentTimeMillis()
-        log.info { "Successfully replayed ${totalTransactions} transactions in the WAL file in ${timeAfter-timeBefore}ms. ${missingTransactions} transactions were missing in store files." }
+        log.info { "Successfully replayed ${totalTransactions} transactions in the WAL file in ${timeAfter - timeBefore}ms. ${missingTransactions} transactions were missing in store files." }
         return maxTimestamp
     }
 
@@ -189,6 +204,11 @@ class ChronoStoreImpl(
         isOpen = false
         log.info { "Initiating shut-down of ChronoStore at '${this.vfs}'." }
         this.state = ChronoStoreState.SHUTTING_DOWN
+        // to ensure a quick startup recovery, ensure that we have checksums
+        // for every WAL file (except for the last one which still receives changes).
+        // If this operation is aborted by process kill, nothing bad happens except
+        // that startup recovery may take a bit longer.
+        this.writeAheadLog.generateChecksumsForCompletedFiles()
         this.transactionManager.close()
         this.taskManager.close()
         this.storeManager.close()

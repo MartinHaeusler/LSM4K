@@ -45,18 +45,6 @@ class MergeServiceImpl(
             }
         }
 
-        this.walShorteningTask = WALShorteningTask(this.writeAheadLog, storeManager)
-        val walCompactionCron = this.storeConfig.writeAheadLogCompactionCron
-        if (walCompactionCron != null) {
-            this.taskManager.scheduleRecurringWithCron(this.walShorteningTask, walCompactionCron)
-        }
-
-        this.garbageCollectorTask = GarbageCollectorTask(storeManager)
-        val garbageCollectionCron = this.storeConfig.garbageCollectionCron
-        if (garbageCollectionCron != null) {
-            this.taskManager.scheduleRecurringWithCron(this.garbageCollectorTask, garbageCollectionCron)
-        }
-
         this.storeManager = storeManager
 
         this.initialized = true
@@ -69,7 +57,7 @@ class MergeServiceImpl(
 
     override fun performMinorCompaction(taskMonitor: TaskMonitor) {
         check(this.initialized) { "MergeService has not yet been initialized!" }
-        this.compactionTask.run(taskMonitor)
+        this.compactionTask.runMinor(taskMonitor)
     }
 
     override fun flushAllInMemoryStoresToDisk(taskMonitor: TaskMonitor) {

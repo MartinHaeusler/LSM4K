@@ -11,12 +11,15 @@ import org.chronos.chronostore.test.util.VFSMode
 import org.chronos.chronostore.test.util.VirtualFileSystemTest
 import org.chronos.chronostore.util.IOExtensions.withInputStream
 import org.chronos.chronostore.util.StoreId
+import org.chronos.chronostore.util.TransactionId
 import org.chronos.chronostore.util.bytes.BasicBytes
 import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.unit.MiB
+import org.chronos.chronostore.wal.WALFile
 import org.chronos.chronostore.wal.WriteAheadLogTransaction
 import org.chronos.chronostore.wal.WriteAheadLog
 import org.chronos.chronostore.wal.WriteAheadLogFormat
+import strikt.api.expect
 import strikt.api.expectThat
 import strikt.assertions.*
 import java.util.*
@@ -265,6 +268,117 @@ class WriteAheadLogTest {
                 "${WRITE_AHEAD_LOG_FILE_PREFIX}1999${WRITE_AHEAD_LOG_FILE_SUFFIX}",
                 "${WRITE_AHEAD_LOG_FILE_PREFIX}2001${WRITE_AHEAD_LOG_FILE_SUFFIX}"
             )
+        }
+    }
+
+    @VirtualFileSystemTest
+    fun canGenerateAndValidateChecksumForWALFile(vfsMode: VFSMode) {
+        vfsMode.withVFS { vfs ->
+            val walDirectory = vfs.directory(ChronoStoreStructure.WRITE_AHEAD_LOG_DIR_NAME)
+            walDirectory.mkdirs()
+
+            val walFile1 = WALFile(walDirectory.file("${WRITE_AHEAD_LOG_FILE_PREFIX}1234${WRITE_AHEAD_LOG_FILE_SUFFIX}").create(), 1234)
+            val walFile2 = WALFile(walDirectory.file("${WRITE_AHEAD_LOG_FILE_PREFIX}5678${WRITE_AHEAD_LOG_FILE_SUFFIX}").create(), 5678)
+
+            walFile1.file.withOverWriter { overWriter ->
+                WriteAheadLogFormat.writeTransaction(
+                    out = overWriter.outputStream,
+                    compressionAlgorithm = CompressionAlgorithm.SNAPPY,
+                    tx = WriteAheadLogTransaction(
+                        transactionId = TransactionId.randomUUID(),
+                        commitTimestamp = 1300,
+                        storeIdToCommands = mapOf(
+                            StoreId.of("hello") to listOf(
+                                Command.put("foo", 1300, "baz"),
+                                Command.put("pi", 1300, "3.1415")
+                            )
+                        ),
+                        commitMetadata = Bytes.EMPTY
+                    )
+                )
+                overWriter.commit()
+            }
+
+            val wal = WriteAheadLog(walDirectory)
+
+            // we do the following twice because "generateChecksumsForCompletedFiles()"
+            // should not perform any changes if every eligible WAL file has a checksum
+            // associated with it.
+            repeat(2) {
+                wal.generateChecksumsForCompletedFiles()
+
+                expect {
+                    that(walFile1) {
+                        get { this.checksumFile }.and {
+                            get { this.name.endsWith(".md5") }
+                            get { this.exists() }.isTrue()
+                            get { this.withInputStream { it.bufferedReader().use { r -> r.readText() } } }.isNotBlank()
+                        }
+                        get { this.validateChecksum() }.isTrue()
+                    }
+                    that(walFile2) {
+                        get { this.checksumFile }.and {
+                            get { this.name.endsWith(".md5") }
+                            get { this.exists() }.isFalse()
+                        }
+                        get { this.validateChecksum() }.isNull()
+                    }
+                }
+            }
+        }
+    }
+
+    @VirtualFileSystemTest
+    fun deletingWALFileAlsoDeletesChecksumFile(vfsMode: VFSMode) {
+        vfsMode.withVFS { vfs ->
+            val walDirectory = vfs.directory(ChronoStoreStructure.WRITE_AHEAD_LOG_DIR_NAME)
+            walDirectory.mkdirs()
+
+            val walFile1 = WALFile(walDirectory.file("${WRITE_AHEAD_LOG_FILE_PREFIX}1234${WRITE_AHEAD_LOG_FILE_SUFFIX}").create(), 1234)
+            val walFile2 = WALFile(walDirectory.file("${WRITE_AHEAD_LOG_FILE_PREFIX}5678${WRITE_AHEAD_LOG_FILE_SUFFIX}").create(), 5678)
+
+            walFile1.file.withOverWriter { overWriter ->
+                WriteAheadLogFormat.writeTransaction(
+                    out = overWriter.outputStream,
+                    compressionAlgorithm = CompressionAlgorithm.SNAPPY,
+                    tx = WriteAheadLogTransaction(
+                        transactionId = TransactionId.randomUUID(),
+                        commitTimestamp = 1300,
+                        storeIdToCommands = mapOf(
+                            StoreId.of("hello") to listOf(
+                                Command.put("foo", 1300, "baz"),
+                                Command.put("pi", 1300, "3.1415")
+                            )
+                        ),
+                        commitMetadata = Bytes.EMPTY
+                    )
+                )
+                overWriter.commit()
+            }
+
+            val wal = WriteAheadLog(walDirectory)
+            wal.generateChecksumsForCompletedFiles()
+
+            expect {
+                that(walFile1) {
+                    get { this.checksumFile }.and {
+                        get { this.name.endsWith(".md5") }
+                        get { this.exists() }.isTrue()
+                        get { this.withInputStream { it.bufferedReader().use { r -> r.readText() } } }.isNotBlank()
+                    }
+                    get { this.validateChecksum() }.isTrue()
+                }
+                that(walFile2) {
+                    get { this.checksumFile }.and {
+                        get { this.name.endsWith(".md5") }
+                        get { this.exists() }.isFalse()
+                    }
+                    get { this.validateChecksum() }.isNull()
+                }
+            }
+
+            walFile1.delete()
+            expectThat(walFile1).get { this.checksumFile }.get { this.exists() }.isFalse()
         }
     }
 

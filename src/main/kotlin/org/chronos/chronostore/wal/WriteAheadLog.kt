@@ -4,22 +4,18 @@ import com.google.common.io.CountingInputStream
 import mu.KotlinLogging
 import org.chronos.chronostore.api.exceptions.TruncatedInputException
 import org.chronos.chronostore.api.exceptions.WriteAheadLogEntryCorruptedException
-import org.chronos.chronostore.async.executor.AsyncTaskManager
 import org.chronos.chronostore.io.format.CompressionAlgorithm
 import org.chronos.chronostore.io.structure.ChronoStoreStructure.WRITE_AHEAD_LOG_FILE_PREFIX
 import org.chronos.chronostore.io.structure.ChronoStoreStructure.WRITE_AHEAD_LOG_FILE_SUFFIX
 import org.chronos.chronostore.io.vfs.VirtualDirectory
 import org.chronos.chronostore.io.vfs.VirtualFile
 import org.chronos.chronostore.io.vfs.VirtualReadWriteFile
-import org.chronos.chronostore.util.IOExtensions.withInputStream
 import org.chronos.chronostore.util.StreamExtensions.hasNext
 import org.chronos.chronostore.util.Timestamp
 import org.chronos.chronostore.util.iterator.IteratorExtensions.peekOrNull
 import org.chronos.chronostore.util.iterator.IteratorExtensions.toPeekingIterator
 import org.chronos.chronostore.util.unit.Bytes
 import org.chronos.chronostore.util.unit.MiB
-import java.io.InputStream
-import java.io.OutputStream
 import java.io.PushbackInputStream
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.concurrent.read
@@ -143,7 +139,7 @@ class WriteAheadLog(
         this.lock.read {
             var previousTxCommitTimestamp = -1L
             for ((index, walFile) in this.walFiles.withIndex()) {
-                log.debug { "Replaying file '${walFile}' (${walFile.length.Bytes.toHumanReadableString()}) [${index+1} / ${this.walFiles.size}]" }
+                log.debug { "Replaying file '${walFile}' (${walFile.length.Bytes.toHumanReadableString()}) [${index + 1} / ${this.walFiles.size}]" }
                 walFile.withInputStream { input ->
                     PushbackInputStream(input).use { pbIn ->
                         while (pbIn.hasNext()) {
@@ -207,11 +203,11 @@ class WriteAheadLog(
                     filesToDelete += currentWALFile
                 }
             }
-            if(filesToDelete.size > 0){
+            if (filesToDelete.size > 0) {
                 log.debug { "Identified ${filesToDelete.size} Write-Ahead-Log files which can be dropped." }
                 this.walFiles.removeAll(filesToDelete)
                 filesToDelete.forEach(WALFile::delete)
-            } else{
+            } else {
                 log.debug { "No Write-Ahead-Log files can be dropped." }
             }
         }
@@ -231,6 +227,14 @@ class WriteAheadLog(
                 // we tolerate incomplete trailing writes on the last file.
                 val isLastFile = index == this.walFiles.lastIndex
 
+                // Perform a checksum validation if we have a *.md5 file available.
+                // This will be much faster than actual content checking but equally effective.
+                if(walFile.validateChecksum() == true){
+                    // we can skip this file, the checksum is valid
+                    continue
+                }
+
+                // we either HAVE no checksum file or it's invalid => check the content.
                 walFile.withInputStream { input ->
                     PushbackInputStream(input.buffered()).use { pbIn ->
                         CountingInputStream(pbIn).use { cIn ->
@@ -265,40 +269,36 @@ class WriteAheadLog(
                 }
             }
             val timeAfter = System.currentTimeMillis()
-            log.debug { "Write-Ahead-Log validation complete. Checked ${walFiles.size} files in ${timeAfter-timeBefore}ms." }
+            log.debug { "Write-Ahead-Log validation complete. Checked ${walFiles.size} files in ${timeAfter - timeBefore}ms." }
         }
     }
 
-    private class WALFile(
-        val file: VirtualReadWriteFile,
-        val minTimestamp: Timestamp,
-    ) {
+    fun generateChecksumsForCompletedFiles() {
+        // we do this outside of any lock to avoid blocking writers;
+        // technically we're only computing checksums on immutable files so there's
+        // not much that can go wrong. Worst case is that we generate a checksum
+        // for a file that's being deleted as we compute the checksum.
 
-        init {
-            require(minTimestamp >= 0) { "Argument 'minTimestamp' (${minTimestamp}) must not be negative!" }
+        // grab a copy of the WAL files list
+        val walFiles = this.lock.read { this.walFiles.toMutableList() }
+        if(walFiles.isEmpty()){
+            // we don't have any WAL files yet, nothing to do.
+            return
         }
 
-        fun isFull(maxWalFileSizeBytes: Long): Boolean {
-            return this.length >= maxWalFileSizeBytes
-        }
+        // just a safeguard: sort the WAL files ascending by min timestamp. This
+        // *should* already be the case anyway. Since we're constantly shortening
+        // the WAL again, this list should not have thousands of entries, so the
+        // overhead for sorting should be negligible.
+        walFiles.sortBy { it.minTimestamp }
 
-        val length: Long
-            get() = this.file.length
+        // drop the last file from the list because this is the "active" WAL
+        // which is not complete yet; no point in computing a checksum for it.
+        walFiles.removeLast()
 
-        fun <T> append(action: (OutputStream) -> T): T {
-            return this.file.append(action)
-        }
-
-        fun <T> withInputStream(action: (InputStream) -> T): T {
-            return this.file.withInputStream(action)
-        }
-
-        fun delete() {
-            return this.file.delete()
-        }
-
-        override fun toString(): String {
-            return this.file.name
+        // for all other files, we generate checksums.
+        for (walFile in walFiles) {
+            walFile.createChecksumFileIfNecessary()
         }
     }
 
