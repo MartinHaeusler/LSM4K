@@ -37,15 +37,31 @@ class ChronoStoreConfiguration {
     var forestFlushThreshold: Double = 0.33
 
     /**
-     * The time of day at which the Write-Ahead-Log file should be compacted.
+     * A [Cron] expression which controls when - and how often - checkpoints should be performed.
      *
-     * WAL compaction happens once per day, at the specified time-of-day.
+     * A checkpoint allows the ChronoStore to restart quickly after a shutdown. The more data
+     * was changed between the last checkpoint and the shutdown, the longer the recovery
+     * will take when the ChronoStore instance is restarted again.
      *
-     * Use `null` to disable WAL compaction. **WARNING:** disabling WAL compaction
-     * can lead to very large WAL files, slow database restart/recovery and increased
+     * The tasks carried out by a checkpoint involve:
+     *
+     *  - Checking what the highest persisted timestamp is per store
+     *  - Based on that information, deleting old Write-Ahead-Log files which are no longer needed
+     *  - Writing files that allow for faster recovery after a restart
+     *
+     * Use `null` to disable checkpoints. **WARNING:** disabling checkpoints
+     * can lead to very large WAL files, slow ChronoStore restart/recovery and increased
      * disk footprint!
      */
-    var writeAheadLogCompactionCron: Cron? = cron("0 0 * * * *") // every hour
+    var checkpointCron: Cron? = cron("0 */10 * * * *") // every 10 minutes
+
+    /**
+     * The maximum number of checkpoint files to keep.
+     *
+     * This value must be greater than or equal to 1. Keeping multiple checkpoint files
+     * can help with recovery in case that the newer checkpoint files have been corrupted.
+     */
+    var maxCheckpointFiles: Int = 5
 
     /**
      * The time of day at which old store files should be garbage collected.
@@ -133,7 +149,7 @@ class ChronoStoreConfiguration {
 
     init {
         require(this.maxWriteAheadLogFileSize.bytes > 0) { "Cannot use a negative value for 'maxWriteAheadLogFileSize'!" }
-        require(this.writeAheadLogCompactionCron?.isValid() ?: true) { "The cron expression for 'writeAheadLogCompactionCron' is invalid: ${this.writeAheadLogCompactionCron}" }
+        require(this.checkpointCron?.isValid() ?: true) { "The cron expression for 'writeAheadLogCompactionCron' is invalid: ${this.checkpointCron}" }
     }
 
     fun createVirtualFileSystemConfiguration(): DiskBasedVirtualFileSystemSettings {

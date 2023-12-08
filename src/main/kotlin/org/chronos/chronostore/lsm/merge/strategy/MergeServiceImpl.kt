@@ -9,10 +9,8 @@ import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.forEachWi
 import org.chronos.chronostore.lsm.garbagecollector.tasks.GarbageCollectorTask
 import org.chronos.chronostore.lsm.merge.tasks.CompactionTask
 import org.chronos.chronostore.lsm.merge.tasks.FlushInMemoryTreeToDiskTask
-import org.chronos.chronostore.lsm.merge.tasks.WALShorteningTask
+import org.chronos.chronostore.lsm.merge.tasks.CheckpointTask
 import org.chronos.chronostore.wal.WriteAheadLog
-import kotlin.time.Duration.Companion.hours
-import kotlin.time.Duration.Companion.milliseconds
 
 class MergeServiceImpl(
     private val taskManager: AsyncTaskManager,
@@ -28,7 +26,7 @@ class MergeServiceImpl(
     private var initialized: Boolean = false
     private lateinit var compactionTask: CompactionTask
     private lateinit var writeAheadLog: WriteAheadLog
-    private lateinit var walShorteningTask: WALShorteningTask
+    private lateinit var checkpointTask: CheckpointTask
     private lateinit var garbageCollectorTask: GarbageCollectorTask
     private lateinit var storeManager: StoreManager
 

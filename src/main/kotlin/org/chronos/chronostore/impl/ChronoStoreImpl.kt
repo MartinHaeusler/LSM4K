@@ -2,12 +2,10 @@ package org.chronos.chronostore.impl
 
 import com.google.common.annotations.VisibleForTesting
 import mu.KotlinLogging
-import org.chronos.chronostore.api.ChronoStore
-import org.chronos.chronostore.api.ChronoStoreConfiguration
-import org.chronos.chronostore.api.ChronoStoreTransaction
-import org.chronos.chronostore.api.Store
+import org.chronos.chronostore.api.*
 import org.chronos.chronostore.async.executor.AsyncTaskManagerImpl
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor
+import org.chronos.chronostore.checkpoint.CheckpointManager
 import org.chronos.chronostore.impl.store.StoreImpl
 import org.chronos.chronostore.io.format.ChronoStoreFileSettings
 import org.chronos.chronostore.io.structure.ChronoStoreStructure
@@ -18,7 +16,7 @@ import org.chronos.chronostore.lsm.cache.FileHeaderCache
 import org.chronos.chronostore.lsm.garbagecollector.tasks.GarbageCollectorTask
 import org.chronos.chronostore.lsm.merge.strategy.MergeService
 import org.chronos.chronostore.lsm.merge.strategy.MergeServiceImpl
-import org.chronos.chronostore.lsm.merge.tasks.WALShorteningTask
+import org.chronos.chronostore.lsm.merge.tasks.CheckpointTask
 import org.chronos.chronostore.util.Timestamp
 import org.chronos.chronostore.wal.WriteAheadLog
 import java.util.concurrent.Executors
@@ -41,6 +39,7 @@ class ChronoStoreImpl(
     @Volatile
     private var state: ChronoStoreState = ChronoStoreState.STARTING
 
+    private val checkpointManager: CheckpointManager
     private val timeManager: TimeManager
     private val blockCacheManager = BlockCacheManager.create(configuration.blockCacheSize)
     private val fileHeaderCache = FileHeaderCache.create(configuration.fileHeaderCacheSize)
@@ -71,8 +70,12 @@ class ChronoStoreImpl(
     private val writeAheadLog: WriteAheadLog
     private val transactionManager: TransactionManager
 
+
+    private val checkpointTask: CheckpointTask
+
     init {
-        val walDirectory = this.vfs.directory(ChronoStoreStructure.WRITE_AHEAD_LOG_DIR_NAME)
+        val systemDir = this.vfs.directory(SystemStore.PATH_PREFIX)
+        val walDirectory = systemDir.directory(ChronoStoreStructure.WRITE_AHEAD_LOG_DIR_NAME)
         val isEmptyDatabase = !walDirectory.exists()
         if (isEmptyDatabase) {
             // If there is no WAL directory, we're going to set up a completely new database.
@@ -82,6 +85,11 @@ class ChronoStoreImpl(
                 throw IllegalArgumentException("Cannot create new database in '${vfs.rootPath}': the directory is not empty!")
             }
         }
+        systemDir.mkdirs()
+        this.checkpointManager = CheckpointManager(
+            directory = systemDir.directory(ChronoStoreStructure.CHECKPOINT_DIR_NAME),
+            maxCheckpointFiles = this.configuration.maxCheckpointFiles,
+        )
         this.writeAheadLog = WriteAheadLog(
             directory = walDirectory,
             compressionAlgorithm = this.configuration.compressionAlgorithm,
@@ -118,10 +126,14 @@ class ChronoStoreImpl(
             writeAheadLog = this.writeAheadLog
         )
 
-        val walShorteningTask = WALShorteningTask(this.writeAheadLog, storeManager)
-        val walCompactionCron = this.configuration.writeAheadLogCompactionCron
-        if (walCompactionCron != null) {
-            this.taskManager.scheduleRecurringWithCron(walShorteningTask, walCompactionCron)
+        this.checkpointTask = CheckpointTask(
+            writeAheadLog = this.writeAheadLog,
+            checkpointManager = this.checkpointManager,
+            storeManager = this.storeManager
+        )
+        val checkpointCron = this.configuration.checkpointCron
+        if (checkpointCron != null) {
+            this.taskManager.scheduleRecurringWithCron(checkpointTask, checkpointCron)
         }
 
         val garbageCollectorTask = GarbageCollectorTask(storeManager)
@@ -144,6 +156,12 @@ class ChronoStoreImpl(
         log.info { "Opening database in: ${this.vfs}" }
         // initialize the store manager so that we can read from it.
         this.storeManager.initialize(isEmptyDatabase = false)
+        val checkpoint = this.checkpointManager.getLatestCheckpoint()
+        if (checkpoint != null) {
+            // remove superfluous WAL files with the data from the checkpoint
+            this.writeAheadLog.shorten(checkpoint.lowWatermark)
+        }
+
         // remove any incomplete transactions from the WAL file.
         this.writeAheadLog.performStartupRecoveryCleanup(this.storeManager::getHighWatermarkTimestamp)
         val allStores = this.storeManager.getAllStoresInternal()
@@ -212,11 +230,10 @@ class ChronoStoreImpl(
         isOpen = false
         log.info { "Initiating shut-down of ChronoStore at '${this.vfs}'." }
         this.state = ChronoStoreState.SHUTTING_DOWN
-        // to ensure a quick startup recovery, ensure that we have checksums
-        // for every WAL file (except for the last one which still receives changes).
+        // to ensure a quick startup recovery, ensure that we have a recent checkpoint.
         // If this operation is aborted by process kill, nothing bad happens except
         // that startup recovery may take a bit longer.
-        this.writeAheadLog.generateChecksumsForCompletedFiles()
+        this.checkpointTask.run(TaskMonitor.create())
         this.transactionManager.close()
         this.taskManager.close()
         this.storeManager.close()
