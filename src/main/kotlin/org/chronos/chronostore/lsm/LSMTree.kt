@@ -21,7 +21,7 @@ import org.chronos.chronostore.util.StoreId
 import org.chronos.chronostore.util.Timestamp
 import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.cursor.*
-import org.chronos.chronostore.util.log.LogMarkers
+import org.chronos.chronostore.util.log.LogExtensions.performance
 import org.chronos.chronostore.util.unit.BinarySize
 import org.chronos.chronostore.util.unit.Bytes
 import org.pcollections.TreePMap
@@ -194,7 +194,7 @@ class LSMTree(
         this.lock.write {
             val containedEntry = commands.asSequence().map { it.keyAndTimestamp }.firstOrNull(this.inMemoryTree::containsKey)
             require(containedEntry == null) {
-                "The key-and-timestamp ${containedEntry} is already contained in in-memory LSM tree!"
+                "The key-and-timestamp ${containedEntry} is already contained in in-memory LSM tree '${this.storeId}'!"
             }
 
             val keyAndTimestampToCommand = commands.associateBy { it.keyAndTimestamp }
@@ -206,6 +206,11 @@ class LSMTree(
             // to claim more and more RAM until we eventually run into an OutOfMemoryError.
             this.waitUntilInMemoryTreeHasCapacity(bytesToInsert)
 
+            // [C0001] it is very important that we add ALL the data from the commands iterable to
+            // the tree at once. If we don't do that, we may risk flushing partial (!!) transaction
+            // data to disk which absolutely has to be avoided; otherwise efficient startup recovery
+            // is not possible. By updating the "this.inMemoryTree" reference only with the fully
+            // updated tree, we guarantee that each flush task either reads all commands, or none.
             this.inMemoryTree = this.inMemoryTree.plusAll(keyAndTimestampToCommand)
             this.inMemoryTreeSizeInBytes.getAndAdd(bytesToInsert)
 
@@ -225,7 +230,7 @@ class LSMTree(
     }
 
     fun flushInMemoryDataToDisk(minFlushSize: BinarySize, monitor: TaskMonitor): FlushResult {
-        log.trace(LogMarkers.PERF) { "TASK: Flush in-memory data to disk" }
+        log.performance { "TASK: Flush in-memory data to disk" }
         this.performAsyncWriteTask(monitor) {
             try {
                 val timeBefore = System.currentTimeMillis()
@@ -235,12 +240,14 @@ class LSMTree(
                     monitor.reportDone()
                     return FlushResult.EMPTY
                 }
-                log.trace(LogMarkers.PERF) { "Flushing LSM Tree '${this.directory}'!" }
+                log.performance { "Flushing LSM Tree '${this.directory}'!" }
                 val commands = monitor.subTask(0.1, "Collecting Entries to flush") {
+                    // [C0001]: We *must* take *all* of the commits in the in-memory tree
+                    // and flush them to avoid writing SST files with partial transactions in them.
                     this.inMemoryTree
                 }
                 val newFileIndex = this.nextFreeFileIndex.getAndIncrement()
-                log.trace(LogMarkers.PERF) { "Target file index ${newFileIndex} will be used for flush of tree ${this.path}" }
+                log.performance { "Target file index ${newFileIndex} will be used for flush of tree ${this.path}" }
                 val file = this.directory.file(this.createFileNameForIndex(newFileIndex))
                 val flushTime = measureTimeMillis {
                     monitor.subTask(0.8, "Writing File") {
@@ -251,7 +258,7 @@ class LSMTree(
                                 settings = this.newFileSettings,
                                 metadata = emptyMap()
                             ).use { writer ->
-                                log.trace(LogMarkers.PERF) { "Flushing ${commands.size} commands from in-memory segment into '${file.path}'." }
+                                log.performance { "Flushing ${commands.size} commands from in-memory segment into '${file.path}'." }
                                 writer.writeFile(
                                     // we're flushing this file from in-memory,
                                     // so the resulting file has never been merged.
@@ -263,15 +270,15 @@ class LSMTree(
                         }
                     }
                 }
-                log.trace(LogMarkers.PERF) { "Flush into index file ${newFileIndex} completed in ${flushTime}ms. Redirecting traffic to new data file for LSM tree ${this.path}" }
+                log.performance { "Flush into index file ${newFileIndex} completed in ${flushTime}ms. Redirecting traffic to new data file for LSM tree ${this.path}" }
                 monitor.subTask(0.1, "Redirecting traffic to file") {
                     this.lock.write {
                         this.fileList += this.createLsmTreeFile(file)
                         // ensure that the merged file is at the correct position in the list
                         this.fileList.sortBy { it.header.metaData.minTimestamp }
-                        log.trace(LogMarkers.PERF) { "Removing ${commands.keys.size} keys from the in-memory tree (which has ${this.inMemoryTree.size} keys)..." }
+                        log.performance { "Removing ${commands.keys.size} keys from the in-memory tree (which has ${this.inMemoryTree.size} keys)..." }
                         this.inMemoryTree = this.inMemoryTree.minusAll(commands.keys)
-                        log.trace(LogMarkers.PERF) { "${inMemoryTree.size} entries remaining in-memory after flush of tree ${this.path}" }
+                        log.performance { "${inMemoryTree.size} entries remaining in-memory after flush of tree ${this.path}" }
                         this.inMemoryTreeSizeInBytes.addAndGet(commands.values.sumOf { it.byteSize } * -1L)
 
                         // the in-memory tree size has changed, notify listeners

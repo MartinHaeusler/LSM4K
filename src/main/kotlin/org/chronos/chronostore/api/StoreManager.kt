@@ -8,14 +8,14 @@ import org.chronos.chronostore.util.Timestamp
 interface StoreManager {
 
     fun getStore(transaction: ChronoStoreTransaction, name: StoreId): Store {
-        return getStoreByNameOrNull(transaction, name)
+        return getStoreByIdOrNull(transaction, name)
             ?: throw IllegalArgumentException("There is no store with name '${name}'!")
     }
 
-    fun getStoreByNameOrNull(transaction: ChronoStoreTransaction, name: StoreId): Store?
+    fun getStoreByIdOrNull(transaction: ChronoStoreTransaction, name: StoreId): Store?
 
     fun existsStore(transaction: ChronoStoreTransaction, name: StoreId): Boolean {
-        return this.getStoreByNameOrNull(transaction, name) != null
+        return this.getStoreByIdOrNull(transaction, name) != null
     }
 
     fun getHighWatermarkTimestamp(): Timestamp

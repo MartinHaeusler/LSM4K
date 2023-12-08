@@ -1,21 +1,18 @@
 package org.chronos.chronostore.lsm
 
-import com.google.common.util.concurrent.Futures
 import mu.KotlinLogging
 import org.chronos.chronostore.async.executor.AsyncTaskManager
 import org.chronos.chronostore.async.executor.TaskExecutionResult
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.forEach
-import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.forEachWithMonitor
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.mainTask
 import org.chronos.chronostore.lsm.merge.tasks.FlushInMemoryTreeToDiskTask
-import org.chronos.chronostore.util.StoreId
+import org.chronos.chronostore.util.log.LogExtensions.performance
 import org.chronos.chronostore.util.log.LogMarkers
 import org.chronos.chronostore.util.statistics.ChronoStoreStatistics
 import org.chronos.chronostore.util.unit.Bytes
 import java.util.concurrent.Future
 import java.util.concurrent.locks.ReentrantReadWriteLock
-import kotlin.concurrent.read
 import kotlin.concurrent.write
 import kotlin.math.min
 
@@ -94,7 +91,7 @@ class LSMForestMemoryManager(
                 if (stallBegin < 0) {
                     stallBegin = System.currentTimeMillis()
                 }
-                log.trace(LogMarkers.PERF) {
+                log.performance {
                     "Stalling write to '${tree.path}' because the in-memory buffer is full." +
                         " Write will continue after the flush task has been completed."
                 }
@@ -114,7 +111,7 @@ class LSMForestMemoryManager(
                 val writeStallTime = stallEnd - stallBegin
                 ChronoStoreStatistics.TOTAL_WRITE_STALL_TIME_MILLIS.addAndGet(writeStallTime)
                 ChronoStoreStatistics.WRITE_STALL_EVENTS.incrementAndGet()
-                log.trace(LogMarkers.PERF) {
+                log.performance {
                     "Write to '${tree.path}' will no longer be stalled and may continue." +
                         " Stall time: ${writeStallTime}ms."
                 }

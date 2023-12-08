@@ -40,7 +40,7 @@ class ChronoStoreTransactionImpl(
         if (cachedStore != null) {
             return cachedStore
         }
-        val store = this.storeManager.getStoreByNameOrNull(this, name)
+        val store = this.storeManager.getStoreByIdOrNull(this, name)
             ?: return null
 
         return this.bindStore(store)

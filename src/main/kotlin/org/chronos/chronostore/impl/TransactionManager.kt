@@ -6,6 +6,7 @@ import org.chronos.chronostore.api.ChronoStoreTransaction
 import org.chronos.chronostore.api.Store
 import org.chronos.chronostore.api.StoreManager
 import org.chronos.chronostore.api.SystemStore
+import org.chronos.chronostore.api.exceptions.ChronoStoreCommitException
 import org.chronos.chronostore.impl.store.StoreImpl
 import org.chronos.chronostore.impl.transaction.ChronoStoreTransactionImpl
 import org.chronos.chronostore.model.command.Command
@@ -16,6 +17,7 @@ import org.chronos.chronostore.util.TransactionId
 import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.statistics.ChronoStoreStatistics
 import org.chronos.chronostore.wal.WriteAheadLog
+import org.chronos.chronostore.wal.WriteAheadLogTransaction
 import java.util.concurrent.locks.ReentrantLock
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.concurrent.read
@@ -82,33 +84,51 @@ class TransactionManager(
             this.storeManager.withStoreReadLock {
                 // ensure first that all stores are indeed writeable, otherwise we may
                 // write something into our WAL file which isn't actually "legal".
-                val storeNameToStore = walTransaction.storeIdToCommands.keys.asSequence()
-                    .mapNotNull { storeName -> this.storeManager.getStoreByNameOrNull(tx, storeName) }
-                    .associateBy(Store::storeId)
+                val storeNameToStore = this.getStoresForTransactionCommit(walTransaction, tx)
 
+                // once we know that all target stores exist, add it to the WAL
                 this.writeAheadLog.addCommittedTransaction(walTransaction)
 
+                // we've successfully added the new transaction to the WAL (so it is technically
+                // already persistent). Add it to the in-memory stores to make the data available
+                // to clients.
                 val commitLogStore = this.storeManager.getSystemStore(SystemStore.COMMIT_LOG)
 
-                for ((storeName, commands) in walTransaction.storeIdToCommands.entries) {
-
-                    val store = storeNameToStore[storeName]
-                        ?: continue // these changes cannot be performed and will be ignored.
-
-                    // TODO[Feature]: offer a setting to fail commits if some of the target stores don't exist.
-
-                    // we're missing the changes from this transaction,
-                    // put them into the store.
+                for ((storeId, commands) in walTransaction.storeIdToCommands.entries) {
+                    val store = storeNameToStore.getValue(storeId)
+                    // we're missing the changes from this transaction, put them into the store.
                     (store as StoreImpl).tree.putAll(commands)
 
-                    val commitLogCommands = commands.map { createCommitLogEntry(commitTimestamp, storeName, it) }
+                    val commitLogCommands = commands.map { createCommitLogEntry(commitTimestamp, storeId, it) }
                     (commitLogStore as StoreImpl).tree.putAll(commitLogCommands)
                 }
+
             }
             log.trace { "Performed commit of transaction ${tx.id}. Transaction timestamp: ${tx.lastVisibleTimestamp}, commit timestamp: ${commitTimestamp}." }
             this.closeTransaction(tx)
             ChronoStoreStatistics.TRANSACTION_COMMITS.incrementAndGet()
             return commitTimestamp
+        }
+    }
+
+    private fun getStoresForTransactionCommit(
+        walTransaction: WriteAheadLogTransaction,
+        tx: ChronoStoreTransactionImpl
+    ): Map<StoreId, Store> {
+        return walTransaction.storeIdToCommands.keys.associateWith { storeId ->
+            val store = this.storeManager.getStoreByIdOrNull(tx, storeId)
+                ?: throw ChronoStoreCommitException(
+                    "Transaction could not be fully committed, because the" +
+                        " store '${storeId}' does not exist! Commit will be aborted!"
+                )
+            if (store.isTerminated) {
+                throw ChronoStoreCommitException(
+                    "Transaction could not be fully committed, because the" +
+                        " store '${storeId}' has been terminated and does not accept" +
+                        " any further changes! Commit will be aborted!"
+                )
+            }
+            store
         }
     }
 

@@ -47,6 +47,9 @@ class StoreManagerImpl(
     @Transient
     private var isOpen = true
 
+    @Transient
+    private var watermarkQueriesAllowed = false
+
     private var initialized: Boolean = false
     private val storeInfoFile = vfs.file(STORE_INFO_FILE_NAME)
     private val storesById = mutableMapOf<StoreId, Store>()
@@ -114,11 +117,15 @@ class StoreManagerImpl(
         )
     }
 
+    fun enableWatermarks() {
+        this.watermarkQueriesAllowed = true
+    }
+
     override fun <T> withStoreReadLock(action: () -> T): T {
         return this.lock.read(action)
     }
 
-    override fun getStoreByNameOrNull(transaction: ChronoStoreTransaction, name: StoreId): Store? {
+    override fun getStoreByIdOrNull(transaction: ChronoStoreTransaction, name: StoreId): Store? {
         check(this.isOpen) { DB_ALREADY_CLOSED }
         this.lock.read {
             assertInitialized()
@@ -209,7 +216,7 @@ class StoreManagerImpl(
         check(this.isOpen) { DB_ALREADY_CLOSED }
         this.lock.write {
             assertInitialized()
-            val store = this.getStoreByNameOrNull(transaction, name)
+            val store = this.getStoreByIdOrNull(transaction, name)
                 ?: return false
             val storeInfoList = this.storesById.values.asSequence()
                 .filter { it.storeId != store.storeId }
@@ -267,6 +274,13 @@ class StoreManagerImpl(
 
     override fun getHighWatermarkTimestamp(): Timestamp {
         this.lock.read {
+            if(!this.watermarkQueriesAllowed){
+                throw IllegalStateException(
+                    "Cannot perform 'getHighWatermarkTimestamp()' on this StoreManager" +
+                        " because startup recovery hasn't been completed yet!"
+                )
+            }
+
             val latestTimestamp = this.storesById.values.asSequence()
                 .mapNotNull { it.highWatermarkTimestamp }
                 .maxOrNull()
@@ -276,22 +290,28 @@ class StoreManagerImpl(
 
     override fun getLowWatermarkTimestamp(): Timestamp {
         this.lock.read {
+            if(!this.watermarkQueriesAllowed){
+                throw IllegalStateException(
+                    "Cannot perform 'getLowWatermarkTimestamp()' on this StoreManager" +
+                        " because startup recovery hasn't been completed yet!"
+                )
+            }
             val highWatermark = this.getHighWatermarkTimestamp()
             val minLowWatermark = this.storesById.values.asSequence()
                 .filter(Store::hasInMemoryChanges)
                 .mapNotNull { it.lowWatermarkTimestamp }
                 .minOrNull()
 
-            if (minLowWatermark == null) {
+            return if (minLowWatermark == null) {
                 // no store has in-memory changes
                 // => everything is 100% persisted
                 // => low watermark == high watermark
-                return highWatermark
+                highWatermark
             } else {
                 // some stores have in-memory changes.
                 // As a precaution, limit the low watermark with the
                 // high watermark.
-                return min(highWatermark, minLowWatermark)
+                min(highWatermark, minLowWatermark)
             }
         }
     }

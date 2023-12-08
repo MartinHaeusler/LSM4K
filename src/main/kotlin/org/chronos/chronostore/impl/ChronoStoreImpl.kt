@@ -105,6 +105,11 @@ class ChronoStoreImpl(
             )
         }
 
+        // let the store manager know that watermark queries are valid from now on.
+        // Watermark queries deliver invalid results when performed before the WAL
+        // recovery has been performed.
+        this.storeManager.enableWatermarks()
+
         this.timeManager = TimeManager(currentTimestamp)
 
         this.transactionManager = TransactionManager(
@@ -176,7 +181,10 @@ class ChronoStoreImpl(
                     ?: continue // the store doesn't exist anymore, skip
 
                 // we're missing the changes from this transaction,
-                // put them into the store.
+                // put them into the store. Note that we put ALL changes
+                // by this transaction into the store at once. This is
+                // important because it avoids flushing partial transactions
+                // to the LSM tree files.
                 (store as StoreImpl).tree.putAll(entry.value)
                 changed = true
             }
