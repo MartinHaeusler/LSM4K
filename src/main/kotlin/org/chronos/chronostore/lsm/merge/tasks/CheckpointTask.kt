@@ -15,7 +15,7 @@ class CheckpointTask(
 ) : AsyncTask {
 
     override val name: String
-        get() = "WAL Compaction"
+        get() = "Checkpoint"
 
     override fun run(monitor: TaskMonitor) {
         monitor.reportStarted("WAL Compaction")

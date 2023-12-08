@@ -13,8 +13,6 @@ class TransactionBoundStoreContext(
 
     private val modifications = mutableMapOf<Bytes, Bytes?>()
 
-    private val openCursors = mutableSetOf<Cursor<Bytes, Bytes>>()
-
     val allModifications: Map<Bytes, Bytes?>
         get() = Collections.unmodifiableMap(this.modifications)
 

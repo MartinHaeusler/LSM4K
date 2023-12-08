@@ -29,14 +29,15 @@ object ChronoStoreTaxonomyDataRandomReadBenchmark {
         val configuration = ChronoStoreConfiguration()
         configuration.blockCacheSize = 4500.MiB
         ChronoStore.openOnDirectory(inputDir, configuration).use { chronoStore ->
-            chronoStore.transaction { tx ->
-                val store = tx.getStore("data")
-                store.openCursorOnLatest().use { cursor ->
-                    cursor.firstOrThrow()
-                    allKeys += cursor.ascendingKeySequenceFromHere().map { it.own() }
+            measureTimeMillis {
+                chronoStore.transaction { tx ->
+                    val store = tx.getStore("data")
+                    store.openCursorOnLatest().use { cursor ->
+                        cursor.firstOrThrow()
+                        allKeys += cursor.ascendingKeySequenceFromHere().map { it.own() }
+                    }
                 }
-            }
-            println("There are ${allKeys.size} unique keys in the store.")
+            }.also { println("There are ${allKeys.size} unique keys in the store. Calculation time: ${it}ms") }
             val keyList = allKeys.toList()
             val bullshitKey = BasicBytes("bullshit")
 

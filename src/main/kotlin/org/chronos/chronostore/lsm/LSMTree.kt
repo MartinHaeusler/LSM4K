@@ -184,9 +184,52 @@ class LSMTree(
             if (inMemoryCursor !is EmptyCursor) {
                 fileCursors.add(inMemoryCursor)
             }
-            return fileCursors.asSequence()
-                .map { VersioningCursor(it, timestamp, includeDeletions = true) }
-                .reduce(::OverlayCursor)
+
+            val versioningCursors = fileCursors.map { VersioningCursor(it, timestamp, includeDeletions = true) }
+
+            // we need to create a single cursor across all versioning cursors.
+            // A single overlay cursor takes one cursor and "overlays" the result of another on top of it
+            // (i.e. the second cursor has more recent information than the first and should override it,
+            // if they provide different data we keep both).
+            // The cursors we are dealing with here are already in the correct order (oldest to newest).
+            // If we simply take a list of cursors A,B,C,D and overlay them one after another, we create
+            // a structure like this:
+            //
+            //                   O
+            //                  / \
+            //                 A   O
+            //                    / \
+            //                   B   O
+            //                      / \
+            //                     C   D
+            //
+            // While this produces the correct result, it is easy to see that it degenerates into a list.
+            // This is not very efficient. The better solution is to create a balanced tree, like so:
+            //
+            //                   O
+            //                /     \
+            //               O       O
+            //              / \     / \
+            //             A   B   C   D
+            //
+            // This means that we balance out the comparisons and reduce them. This delivers the same
+            // result, is much more efficient and can cut the time for a full iteration in half.
+            fun buildOverlayCursorTree(cursors: List<Cursor<Bytes, Command>>): Cursor<Bytes, Command> {
+                return when(cursors.size){
+                    0 -> throw IllegalArgumentException( "List of cursors must not be empty!")
+                    1 -> cursors.first()
+                    2 -> OverlayCursor(cursors[0], cursors[1])
+                    else -> {
+                        // find the half-way point
+                        val halfWay = cursors.lastIndex / 2
+                        val leftCursor = buildOverlayCursorTree(cursors.subList(0, halfWay))
+                        val rightCursor = buildOverlayCursorTree(cursors.subList(halfWay, cursors.size))
+                        return OverlayCursor(leftCursor, rightCursor)
+                    }
+                }
+            }
+
+            return buildOverlayCursorTree(versioningCursors)
         }
     }
 
