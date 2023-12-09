@@ -216,7 +216,7 @@ class LSMTree(
             // result, is much more efficient and can cut the time for a full iteration in half.
             fun buildOverlayCursorTree(cursors: List<Cursor<Bytes, Command>>): Cursor<Bytes, Command> {
                 return when(cursors.size){
-                    0 -> throw IllegalArgumentException( "List of cursors must not be empty!")
+                    0 -> throw IllegalArgumentException("List of cursors must not be empty!")
                     1 -> cursors.first()
                     2 -> OverlayCursor(cursors[0], cursors[1])
                     else -> {

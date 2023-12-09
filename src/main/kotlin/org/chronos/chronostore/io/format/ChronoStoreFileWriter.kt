@@ -10,7 +10,6 @@ import org.chronos.chronostore.util.BloomFilterExtensions.toBytes
 import org.chronos.chronostore.util.LittleEndianExtensions.writeLittleEndianInt
 import org.chronos.chronostore.util.LittleEndianExtensions.writeLittleEndianLong
 import org.chronos.chronostore.util.PositionTrackingStream
-import org.chronos.chronostore.util.StringExtensions.ellipsis
 import org.chronos.chronostore.util.Timestamp
 import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.bytes.Bytes.Companion.put
