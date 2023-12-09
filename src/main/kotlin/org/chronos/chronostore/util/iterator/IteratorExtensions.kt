@@ -53,4 +53,17 @@ object IteratorExtensions {
         }
     }
 
+    fun <T, R> Iterator<T>.map(map: (T) -> R): Iterator<R> {
+        return Iterators.transform(this, map)
+    }
+
+    fun <T> Iterator<T>.onEach(action: (T) -> Unit): Iterator<T> {
+        return this.map {
+            // apply the action...
+            action(it)
+            // ... but keep the element the same
+            it
+        }
+    }
+
 }

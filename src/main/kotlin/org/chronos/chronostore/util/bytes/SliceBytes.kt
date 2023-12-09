@@ -29,16 +29,20 @@ class SliceBytes(
         return this.array[actualIndex]
     }
 
-    override fun toSharedArray(): ByteArray {
+    override fun toSharedArrayUnsafe(): ByteArray {
         return sharedArray
     }
 
     override fun own(): Bytes {
-        return BasicBytes(this.toSharedArray())
+        return BasicBytes(this.toSharedArrayUnsafe())
     }
 
     override fun writeWithoutSizeTo(outputStream: OutputStream) {
         outputStream.write(this.array, this.startInclusive, this.size)
+    }
+
+    override fun writeToOutput(output: BytesOutput) {
+        output.write(this.array, this.startInclusive, this.size)
     }
 
     override fun slice(start: Int, size: Int): Bytes {
@@ -60,7 +64,7 @@ class SliceBytes(
         // it shares the same underlying array.
         val actualStart = this.startInclusive + start
         // avoid integer overflow by converting to long
-        val end = min(actualStart.toLong() + size.toLong()-1, this.endInclusive.toLong()).toInt()
+        val end = min(actualStart.toLong() + size.toLong() - 1, this.endInclusive.toLong()).toInt()
 
 
         return SliceBytes(this.array, actualStart, end)

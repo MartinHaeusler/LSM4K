@@ -17,7 +17,6 @@ import org.chronos.chronostore.util.bytes.BasicBytes
 import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.unit.KiB
 import org.chronos.chronostore.util.unit.MiB
-import org.junit.jupiter.api.Test
 import strikt.api.expectThat
 import strikt.assertions.*
 import kotlin.random.Random
@@ -33,9 +32,8 @@ class ChronoStoreFileTest {
                 val writer = ChronoStoreFileWriter(
                     outputStream = overWriter.outputStream.buffered(),
                     settings = ChronoStoreFileSettings(CompressionAlgorithm.NONE, 16.MiB),
-                    metadata = emptyMap()
                 )
-                writer.writeFile(0, orderedCommands = emptySequence<Command>().iterator())
+                writer.writeFile(0, orderedCommands = emptySequence<Command>().iterator(), commandCountEstimate = 10)
                 overWriter.commit()
             }
 
@@ -58,7 +56,6 @@ class ChronoStoreFileTest {
                                 get { this.maxKey }.isNull()
                                 get { this.minTimestamp }.isNull()
                                 get { this.maxTimestamp }.isNull()
-                                get { this.infoMap }.isEmpty()
                                 get { this.headEntries }.isEqualTo(0L)
                                 get { this.historyEntries }.isEqualTo(0L)
                                 get { this.totalEntries }.isEqualTo(0)
@@ -93,10 +90,9 @@ class ChronoStoreFileTest {
                 val writer = ChronoStoreFileWriter(
                     outputStream = overWriter.outputStream.buffered(),
                     settings = ChronoStoreFileSettings(CompressionAlgorithm.NONE, 16.KiB),
-                    metadata = emptyMap()
                 )
                 val commands = listOf(Command.put(theKey, 1000L, BasicBytes("hello")))
-                writer.writeFile(0, orderedCommands = commands.iterator())
+                writer.writeFile(0, orderedCommands = commands.iterator(), commandCountEstimate = 10)
                 overWriter.commit()
             }
 
@@ -146,17 +142,16 @@ class ChronoStoreFileTest {
                 val writer = ChronoStoreFileWriter(
                     outputStream = overWriter.outputStream.buffered(),
                     settings = ChronoStoreFileSettings(CompressionAlgorithm.NONE, 16.KiB),
-                    metadata = emptyMap()
                 )
                 val random = Random(System.currentTimeMillis())
-                val commands = (0 until 1000).asSequence().map { i ->
+                val commands = (0..<1000).asSequence().map { i ->
                     if (i.mod(100) == 0 && i > 0) {
                         Command.del(theKey, (i + 1) * 1000L)
                     } else {
                         Command.put(theKey, (i + 1) * 1000L, Bytes.random(random, 1024))
                     }
                 }
-                writer.writeFile(0, orderedCommands = commands.iterator())
+                writer.writeFile(0, orderedCommands = commands.iterator(), commandCountEstimate = 1000)
                 overWriter.commit()
             }
 
@@ -246,17 +241,16 @@ class ChronoStoreFileTest {
                 val writer = ChronoStoreFileWriter(
                     outputStream = overWriter.outputStream.buffered(),
                     settings = ChronoStoreFileSettings(CompressionAlgorithm.NONE, 16.KiB),
-                    metadata = emptyMap()
                 )
                 val random = Random(System.currentTimeMillis())
-                val commands = (0 until 1000).asSequence().map { i ->
+                val commands = (0..<1000).asSequence().map { i ->
                     if (i.mod(100) == 0 && i > 0) {
                         Command.del(theKey, (i + 1) * 1000L)
                     } else {
                         Command.put(theKey, (i + 1) * 1000L, Bytes.random(random, 1024))
                     }
                 }
-                writer.writeFile(0, orderedCommands = commands.iterator())
+                writer.writeFile(0, orderedCommands = commands.iterator(), commandCountEstimate = 1000)
                 overWriter.commit()
             }
 
@@ -301,11 +295,11 @@ class ChronoStoreFileTest {
                 ChronoStoreFileWriter(
                     outputStream = overWriter.outputStream.buffered(),
                     settings = ChronoStoreFileSettings(CompressionAlgorithm.SNAPPY, 16.KiB),
-                    metadata = emptyMap()
                 ).use { writer ->
                     writer.writeFile(
                         numberOfMerges = 0L,
                         orderedCommands = commands.iterator(),
+                        commandCountEstimate = 10,
                     )
                 }
                 overWriter.commit()
@@ -340,31 +334,30 @@ class ChronoStoreFileTest {
                         get { this.totalEntries }.isEqualTo(5)
                         get { this.headEntries }.isEqualTo(2)
                         get { this.historyEntries }.isEqualTo(3)
-                        get { this.headHistoryRatio}.isEqualTo(0.4)
+                        get { this.headHistoryRatio }.isEqualTo(0.4)
                         get { this.numberOfMerges }.isEqualTo(0)
                         get { this.numberOfBlocks }.isEqualTo(1)
                         get { this.minKey }.isNotNull().get { this.asString() }.isEqualTo("foo")
                         get { this.maxKey }.isNotNull().get { this.asString() }.isEqualTo("hello")
                         get { this.minTimestamp }.isEqualTo(1234)
                         get { this.maxTimestamp }.isEqualTo(100_000)
-                        get { this.infoMap }.isEmpty()
                         get { this.settings }.and {
                             get { this.maxBlockSize }.isEqualTo(16.KiB)
                             get { this.compression }.isEqualTo(CompressionAlgorithm.SNAPPY)
                         }
                     }
                 }
-                driver.withChronoStoreFileReader(LocalBlockCache.NONE){ reader ->
+                driver.withChronoStoreFileReader(LocalBlockCache.NONE) { reader ->
                     val entries = reader.withCursor { cursor ->
                         cursor.firstOrThrow()
                         cursor.ascendingEntrySequenceFromHere().toList()
                     }
                     expectThat(entries).containsExactly(
-                       KeyAndTimestamp(BasicBytes("foo"), 10_000) to Command.put("foo", 10_000, "bar"),
-                       KeyAndTimestamp(BasicBytes("foo"), 100_000) to Command.put("foo", 100_000, "baz"),
-                       KeyAndTimestamp(BasicBytes("hello"), 1234) to Command.put("hello", 1234, "world"),
-                       KeyAndTimestamp(BasicBytes("hello"), 1235) to Command.put("hello", 1235, "foo"),
-                       KeyAndTimestamp(BasicBytes("hello"), 1240) to Command.put(BasicBytes("hello"), 1240, Bytes.EMPTY),
+                        KeyAndTimestamp(BasicBytes("foo"), 10_000) to Command.put("foo", 10_000, "bar"),
+                        KeyAndTimestamp(BasicBytes("foo"), 100_000) to Command.put("foo", 100_000, "baz"),
+                        KeyAndTimestamp(BasicBytes("hello"), 1234) to Command.put("hello", 1234, "world"),
+                        KeyAndTimestamp(BasicBytes("hello"), 1235) to Command.put("hello", 1235, "foo"),
+                        KeyAndTimestamp(BasicBytes("hello"), 1240) to Command.put(BasicBytes("hello"), 1240, Bytes.EMPTY),
                     )
                 }
             }
@@ -390,11 +383,11 @@ class ChronoStoreFileTest {
                 ChronoStoreFileWriter(
                     outputStream = overWriter.outputStream.buffered(),
                     settings = ChronoStoreFileSettings(CompressionAlgorithm.SNAPPY, 16.KiB),
-                    metadata = emptyMap()
                 ).use { writer ->
                     writer.writeFile(
                         numberOfMerges = 0L,
                         orderedCommands = commands.iterator(),
+                        commandCountEstimate = 10,
                     )
                 }
                 overWriter.commit()
@@ -405,9 +398,8 @@ class ChronoStoreFileTest {
                 val writer = ChronoStoreFileWriter(
                     outputStream = overWriter.outputStream.buffered(),
                     settings = ChronoStoreFileSettings(CompressionAlgorithm.NONE, 16.MiB),
-                    metadata = emptyMap()
                 )
-                writer.writeFile(0, orderedCommands = emptySequence<Command>().iterator())
+                writer.writeFile(0, orderedCommands = emptySequence<Command>().iterator(), commandCountEstimate = 10)
                 overWriter.commit()
             }
 
@@ -442,21 +434,20 @@ class ChronoStoreFileTest {
                         get { this.totalEntries }.isEqualTo(5)
                         get { this.headEntries }.isEqualTo(2)
                         get { this.historyEntries }.isEqualTo(3)
-                        get { this.headHistoryRatio}.isEqualTo(0.4)
+                        get { this.headHistoryRatio }.isEqualTo(0.4)
                         get { this.numberOfMerges }.isEqualTo(0)
                         get { this.numberOfBlocks }.isEqualTo(1)
                         get { this.minKey }.isNotNull().get { this.asString() }.isEqualTo("foo")
                         get { this.maxKey }.isNotNull().get { this.asString() }.isEqualTo("hello")
                         get { this.minTimestamp }.isEqualTo(1234)
                         get { this.maxTimestamp }.isEqualTo(100_000)
-                        get { this.infoMap }.isEmpty()
                         get { this.settings }.and {
                             get { this.maxBlockSize }.isEqualTo(16.KiB)
                             get { this.compression }.isEqualTo(CompressionAlgorithm.SNAPPY)
                         }
                     }
                 }
-                driver.withChronoStoreFileReader(LocalBlockCache.NONE){ reader ->
+                driver.withChronoStoreFileReader(LocalBlockCache.NONE) { reader ->
                     val entries = reader.withCursor { cursor ->
                         cursor.firstOrThrow()
                         cursor.ascendingEntrySequenceFromHere().toList()

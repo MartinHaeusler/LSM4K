@@ -1,7 +1,5 @@
 package org.chronos.chronostore.io.format
 
-import org.chronos.chronostore.util.bytes.Bytes
-import org.chronos.chronostore.util.bytes.Bytes.Companion.writeBytesWithoutSize
 import org.chronos.chronostore.util.LittleEndianExtensions.readLittleEndianInt
 import org.chronos.chronostore.util.LittleEndianExtensions.readLittleEndianLong
 import org.chronos.chronostore.util.LittleEndianExtensions.writeLittleEndianInt
@@ -10,8 +8,10 @@ import org.chronos.chronostore.util.PrefixIO
 import org.chronos.chronostore.util.Timestamp
 import org.chronos.chronostore.util.UUIDExtensions.readUUIDFrom
 import org.chronos.chronostore.util.UUIDExtensions.toBytes
+import org.chronos.chronostore.util.bloom.BytesBloomFilter
+import org.chronos.chronostore.util.bytes.Bytes
+import org.chronos.chronostore.util.bytes.Bytes.Companion.writeBytesWithoutSize
 import org.chronos.chronostore.util.unit.Bytes
-import java.io.ByteArrayInputStream
 import java.io.InputStream
 import java.io.OutputStream
 import java.util.*
@@ -39,8 +39,8 @@ class FileMetaData(
     val numberOfMerges: Long,
     /** The wall-clock-timestamp this file was written at (begin of write). */
     val createdAt: Timestamp,
-    /** A map of additional, arbitrary key-value pairs. */
-    val infoMap: Map<Bytes, Bytes>
+    /** The bloom filter for the file; indicates which keys *may* appear in the file. */
+    val bloomFilter: BytesBloomFilter,
 ) {
 
     companion object {
@@ -61,15 +61,8 @@ class FileMetaData(
             val numberOfBlocks = inputStream.readLittleEndianInt()
             val numberOfMerges = inputStream.readLittleEndianLong()
             val createdAt = inputStream.readLittleEndianLong()
-            val infoMapSize = inputStream.readLittleEndianInt()
-            val mapInput = ByteArrayInputStream(inputStream.readNBytes(infoMapSize))
-            val infoMap = mutableMapOf<Bytes, Bytes>()
-            while (true) {
-                val key = PrefixIO.readBytesOrNull(mapInput)
-                    ?: break
-                val value = PrefixIO.readBytes(mapInput)
-                infoMap[key] = value
-            }
+            val bloomFilterSize = inputStream.readLittleEndianInt()
+            val bloomFilterBytes = BytesBloomFilter.readFrom(Bytes.wrap(inputStream.readNBytes(bloomFilterSize)))
             return FileMetaData(
                 settings = settings,
                 fileUUID = fileUUID,
@@ -82,7 +75,7 @@ class FileMetaData(
                 numberOfBlocks = numberOfBlocks,
                 numberOfMerges = numberOfMerges,
                 createdAt = createdAt,
-                infoMap = infoMap,
+                bloomFilter = bloomFilterBytes,
             )
         }
 
@@ -101,12 +94,9 @@ class FileMetaData(
         outputStream.writeLittleEndianInt(this.numberOfBlocks)
         outputStream.writeLittleEndianLong(this.numberOfMerges)
         outputStream.writeLittleEndianLong(this.createdAt)
-        val infoMapSize = this.infoMap.entries.sumOf { it.key.size + Int.SIZE_BYTES + it.value.size + Int.SIZE_BYTES }
-        outputStream.writeLittleEndianInt(infoMapSize)
-        for ((key, value) in infoMap) {
-            PrefixIO.writeBytes(outputStream, key)
-            PrefixIO.writeBytes(outputStream, value)
-        }
+        val bloomFilterBytes = this.bloomFilter.toBytes()
+        outputStream.writeLittleEndianInt(bloomFilterBytes.size)
+        outputStream.writeBytesWithoutSize(bloomFilterBytes)
     }
 
     fun mayContainKey(key: Bytes): Boolean {
@@ -115,7 +105,11 @@ class FileMetaData(
             return false
         }
         // check if the key is in range
-        return this.minKey <= key && key <= this.maxKey
+        if (key < this.minKey || key > this.maxKey) {
+            // key is out of range
+            return false
+        }
+        return this.bloomFilter.mightContain(key)
     }
 
     fun mayContainDataRelevantForTimestamp(timestamp: Timestamp): Boolean {
@@ -152,19 +146,20 @@ class FileMetaData(
             val maxTimestampSize = Timestamp.SIZE_BYTES
             val statsSize = Long.SIZE_BYTES * 3 + Int.SIZE_BYTES
             val createdAtSize = Timestamp.SIZE_BYTES
-            val infoMapSize = this.infoMap.entries.sumOf { (it.key.size + it.value.size).toLong() }
-            return settingsSize + fileUUIDSize +
+            val bloomFilterSize = Int.SIZE_BYTES + this.bloomFilter.sizeBytes
+            return settingsSize +
+                fileUUIDSize +
                 minKeySize +
                 maxKeySize +
                 minTimestampSize +
                 maxTimestampSize +
                 statsSize +
                 createdAtSize +
-                infoMapSize
+                bloomFilterSize
         }
 
     override fun toString(): String {
-        return "FileMetaData(settings=$settings, fileUUID=$fileUUID, minKey=$minKey, maxKey=$maxKey, minTimestamp=$minTimestamp, maxTimestamp=$maxTimestamp, headEntries=$headEntries, totalEntries=$totalEntries, numberOfBlocks=$numberOfBlocks, numberOfMerges=$numberOfMerges, createdAt=$createdAt, infoMap=$infoMap, historyEntries=$historyEntries, headHistoryRatio=$headHistoryRatio)"
+        return "FileMetaData(settings=$settings, fileUUID=$fileUUID, minKey=$minKey, maxKey=$maxKey, minTimestamp=$minTimestamp, maxTimestamp=$maxTimestamp, headEntries=$headEntries, totalEntries=$totalEntries, numberOfBlocks=$numberOfBlocks, numberOfMerges=$numberOfMerges, createdAt=$createdAt, historyEntries=$historyEntries, headHistoryRatio=$headHistoryRatio)"
     }
 
 

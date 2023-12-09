@@ -19,7 +19,7 @@ object UUIDExtensions {
     }
 
     fun readUUIDFrom(bytes: Bytes): UUID {
-        val byteBuffer = ByteBuffer.wrap(bytes.toSharedArray())
+        val byteBuffer = ByteBuffer.wrap(bytes.toSharedArrayUnsafe())
         val high = byteBuffer.getLong()
         val low = byteBuffer.getLong()
         return UUID(high, low)

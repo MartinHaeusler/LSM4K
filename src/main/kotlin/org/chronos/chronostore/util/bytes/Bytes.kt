@@ -1,6 +1,7 @@
 package org.chronos.chronostore.util.bytes
 
 import com.google.common.hash.BloomFilter
+import com.google.common.hash.PrimitiveSink
 import org.chronos.chronostore.io.format.CompressionAlgorithm
 import org.chronos.chronostore.io.vfs.InputSource
 import org.chronos.chronostore.util.LittleEndianUtil
@@ -71,12 +72,12 @@ sealed interface Bytes :
 
         @Suppress("UnstableApiUsage")
         fun BloomFilter<ByteArray>.mightContain(bytes: Bytes): Boolean {
-            return this.mightContain(bytes.toSharedArray())
+            return this.mightContain(bytes.toSharedArrayUnsafe())
         }
 
         @Suppress("UnstableApiUsage")
         fun BloomFilter<ByteArray>.put(bytes: Bytes) {
-            this.put(bytes.toSharedArray())
+            this.put(bytes.toSharedArrayUnsafe())
         }
 
         fun OutputStream.writeBytesWithoutSize(bytes: Bytes) {
@@ -88,7 +89,7 @@ sealed interface Bytes :
             if (algorithm == CompressionAlgorithm.NONE) {
                 return this
             }
-            return BasicBytes(algorithm.compress(this.toSharedArray()))
+            return BasicBytes(algorithm.compress(this.toSharedArrayUnsafe()))
         }
 
         fun Bytes.decompressWith(algorithm: CompressionAlgorithm): Bytes {
@@ -96,7 +97,7 @@ sealed interface Bytes :
             if (algorithm == CompressionAlgorithm.NONE) {
                 return this
             }
-            return wrap(algorithm.decompress(this.toSharedArray()))
+            return wrap(algorithm.decompress(this.toSharedArrayUnsafe()))
         }
 
         fun stableInt(int: Int): Bytes {
@@ -177,7 +178,7 @@ sealed interface Bytes :
      *
      *  @return A [ByteArray] which may be the internal representation of this object.
      */
-    fun toSharedArray(): ByteArray
+    fun toSharedArrayUnsafe(): ByteArray
 
     /**
      * Converts this [Bytes] object into a raw byte array.
@@ -192,7 +193,7 @@ sealed interface Bytes :
      */
     fun toOwnedArray(): ByteArray {
         val ownedArray = ByteArray(this.size)
-        System.arraycopy(this.toSharedArray(), 0, ownedArray, 0, this.size)
+        System.arraycopy(this.toSharedArrayUnsafe(), 0, ownedArray, 0, this.size)
         return ownedArray
     }
 
@@ -224,7 +225,7 @@ sealed interface Bytes :
      * @return The hexadecimal representation of this object as a String.
      */
     fun hex(): String {
-        return HexFormat.of().formatHex(this.toSharedArray())
+        return HexFormat.of().formatHex(this.toSharedArrayUnsafe())
     }
 
     /**
@@ -241,7 +242,7 @@ sealed interface Bytes :
         // the constructor for String internally creates its own
         // copy of the array we pass in, so it's okay to use the
         // shared array version here.
-        return String(this.toSharedArray(), charset)
+        return String(this.toSharedArrayUnsafe(), charset)
     }
 
     fun lastIndexOf(element: Byte): Int {
@@ -276,6 +277,9 @@ sealed interface Bytes :
      * If this object [isEmpty], no bytes will be written at all.
      */
     fun writeWithoutSizeTo(outputStream: OutputStream)
+
+    fun writeToOutput(output: BytesOutput)
+
 
     /**
      * Creates an [InputStream] which delivers all [Byte]s in this object.

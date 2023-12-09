@@ -13,9 +13,8 @@ class FileHeader(
             val formatVersionSize = Int.SIZE_BYTES
             val trailerSize = trailer.sizeBytes
             val metadataSize = metaData.sizeBytes
-            val infoMapSize = metaData.infoMap.entries.sumOf { it.key.size + it.value.size }
             val indexOfBlocksSize = indexOfBlocks.sizeInBytes
-            return formatVersionSize + trailerSize + metadataSize + infoMapSize + indexOfBlocksSize
+            return formatVersionSize + trailerSize + metadataSize + indexOfBlocksSize
         }
 
 }

@@ -2,6 +2,7 @@ package org.chronos.chronostore.util.bytes
 
 import com.google.common.collect.Iterators
 import com.google.common.hash.BloomFilter
+import com.google.common.hash.PrimitiveSink
 import org.chronos.chronostore.io.format.CompressionAlgorithm
 import org.chronos.chronostore.util.ByteArrayExtensions.hex
 import org.chronos.chronostore.util.LittleEndianUtil
@@ -54,6 +55,10 @@ class BasicBytes(
         outputStream.write(this.array)
     }
 
+    override fun writeToOutput(output: BytesOutput) {
+        output.write(this.array)
+    }
+
     override fun createInputStream(): InputStream {
         // override for slightly better performance
         return ByteArrayInputStream(this.array)
@@ -100,7 +105,7 @@ class BasicBytes(
     }
 
 
-    override fun toSharedArray(): ByteArray {
+    override fun toSharedArrayUnsafe(): ByteArray {
         return this.array
     }
 

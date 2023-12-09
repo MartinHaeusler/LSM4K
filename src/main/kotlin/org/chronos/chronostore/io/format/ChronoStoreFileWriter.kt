@@ -11,10 +11,12 @@ import org.chronos.chronostore.util.LittleEndianExtensions.writeLittleEndianInt
 import org.chronos.chronostore.util.LittleEndianExtensions.writeLittleEndianLong
 import org.chronos.chronostore.util.PositionTrackingStream
 import org.chronos.chronostore.util.Timestamp
+import org.chronos.chronostore.util.bloom.BytesBloomFilter
 import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.bytes.Bytes.Companion.put
 import org.chronos.chronostore.util.bytes.Bytes.Companion.writeBytesWithoutSize
 import org.chronos.chronostore.util.iterator.IteratorExtensions.checkOrdered
+import org.chronos.chronostore.util.iterator.IteratorExtensions.onEach
 import java.io.ByteArrayOutputStream
 import java.io.OutputStream
 import java.util.*
@@ -29,8 +31,6 @@ class ChronoStoreFileWriter : AutoCloseable {
     private val outputStream: PositionTrackingStream
 
     private val settings: ChronoStoreFileSettings
-
-    private val metadata: Map<Bytes, Bytes>
 
     companion object {
 
@@ -47,10 +47,9 @@ class ChronoStoreFileWriter : AutoCloseable {
      * @param settings The settings to use for writing the file. Will also be persisted in the file itself.
      */
     @Suppress("ConvertSecondaryConstructorToPrimary")
-    constructor(outputStream: OutputStream, settings: ChronoStoreFileSettings, metadata: Map<Bytes, Bytes>) {
+    constructor(outputStream: OutputStream, settings: ChronoStoreFileSettings) {
         this.outputStream = PositionTrackingStream(outputStream.buffered())
         this.settings = settings
-        this.metadata = metadata
     }
 
     /**
@@ -58,8 +57,20 @@ class ChronoStoreFileWriter : AutoCloseable {
      *
      * @param numberOfMerges The number of merges to record in the file metadata.
      * @param orderedCommands The sequence of commands to write. **MUST** be ordered!
+     * @param commandCountEstimate An estimate of the total number of entries in [orderedCommands]. Will be used for bloom filter sizing.
      */
-    fun writeFile(numberOfMerges: Long, orderedCommands: Iterator<Command>) {
+    fun writeFile(
+        numberOfMerges: Long,
+        orderedCommands: Iterator<Command>,
+        commandCountEstimate: Long,
+    ) {
+        if (orderedCommands.hasNext() && commandCountEstimate <= 0) {
+            throw IllegalArgumentException(
+                "Precondition violation - argument 'commandCountEstimate' (${commandCountEstimate})" +
+                    " is not positive, but the command iterator has entries!"
+            )
+        }
+
         // grab the system clock time (will be written into the file later on)
         val wallClockTime = System.currentTimeMillis()
 
@@ -70,7 +81,10 @@ class ChronoStoreFileWriter : AutoCloseable {
 
         val beginOfBlocks = this.outputStream.position
 
-        val blockWriteResult = this.writeBlocks(orderedCommands)
+        val bloomFilter = BytesBloomFilter(commandCountEstimate, 0.001)
+
+        val blockWriteResult = this.writeBlocks(orderedCommands, bloomFilter)
+
 
         val beginOfIndexOfBlocks = this.outputStream.position
         // write the index of blocks
@@ -94,7 +108,7 @@ class ChronoStoreFileWriter : AutoCloseable {
             totalEntries = blockWriteResult.totalEntries,
             numberOfBlocks = blockWriteResult.numberOfBlocks,
             createdAt = wallClockTime,
-            infoMap = this.metadata,
+            bloomFilter = bloomFilter,
         )
 
         metadata.writeTo(this.outputStream)
@@ -109,7 +123,10 @@ class ChronoStoreFileWriter : AutoCloseable {
         this.outputStream.flush()
     }
 
-    private fun writeBlocks(orderedCommands: Iterator<Command>): BlockWriteResult {
+    private fun writeBlocks(
+        orderedCommands: Iterator<Command>,
+        bloomFilter: BytesBloomFilter,
+    ): BlockWriteResult {
         // ensure that the commands we receive really are ordered,
         // as a command which appears out of order would be fatal.
         // Note that "checkOrdered" doesn't "sort" the input, it
@@ -165,8 +182,8 @@ class ChronoStoreFileWriter : AutoCloseable {
             blockIndexToStartPositionAndMinKey += Triple(blockSequenceNumber, this.outputStream.position, minKeyAndTimestamp)
 
             // for debugging purposes, we write the block into a byte array first
-            val blockBytes =  ByteArrayOutputStream().use { baos ->
-                writeBlock(commands, blockSequenceNumber, baos)
+            val blockBytes = ByteArrayOutputStream().use { baos ->
+                writeBlock(commands, bloomFilter, blockSequenceNumber, baos)
                 baos.flush()
                 baos.toByteArray()
             }
@@ -191,6 +208,7 @@ class ChronoStoreFileWriter : AutoCloseable {
 
     private fun writeBlock(
         commands: PeekingIterator<Command>,
+        bloomFilter: BytesBloomFilter,
         blockSequenceNumber: Int,
         outputStream: OutputStream,
     ) {
@@ -228,6 +246,7 @@ class ChronoStoreFileWriter : AutoCloseable {
 
             val command = commands.next()
             command.writeToStream(blockPositionTrackingStream)
+            bloomFilter.put(command.key)
 
             minTimestamp = min(minTimestamp, command.timestamp)
             maxTimestamp = max(maxTimestamp, command.timestamp)

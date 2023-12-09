@@ -2,7 +2,6 @@ package org.chronos.chronostore.lsm
 
 import com.google.common.collect.Iterators
 import org.chronos.chronostore.io.format.ChronoStoreFileWriter
-import org.chronos.chronostore.io.vfs.VirtualReadWriteFile
 import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.model.command.KeyAndTimestamp
 import org.chronos.chronostore.util.cursor.Cursor
@@ -17,7 +16,8 @@ object CompactionUtil {
         cursors: List<Cursor<KeyAndTimestamp, Command>>,
         retainOldVersions: Boolean,
         writer: ChronoStoreFileWriter,
-        maxMerge: Long
+        maxMerge: Long,
+        totalEntries: Long,
     ) {
         val iterators = cursors.mapNotNull {
             if (it.first()) {
@@ -38,7 +38,11 @@ object CompactionUtil {
                 // ...and if the latest version happens to be a DELETE, we ignore the key.
                 .filter { it.opCode != Command.OpCode.DEL }
         }
-        writer.writeFile(numberOfMerges = maxMerge + 1, orderedCommands = finalIterator)
+        writer.writeFile(
+            numberOfMerges = maxMerge + 1,
+            orderedCommands = finalIterator,
+            commandCountEstimate = totalEntries,
+        )
     }
 
 }

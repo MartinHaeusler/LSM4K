@@ -39,7 +39,7 @@ object XodusTaxonomyDataRandomReadBenchmark {
                 }
             }
             println("There are ${allKeys.size} unique keys in the store.")
-            val keyList = allKeys.asSequence().map { ArrayByteIterable(it.toSharedArray()) }.toList()
+            val keyList = allKeys.asSequence().map { ArrayByteIterable(it.toSharedArrayUnsafe()) }.toList()
 
             val bullshitKey = ArrayByteIterable("bullshit".toByteArray())
 

@@ -299,14 +299,14 @@ class LSMTree(
                             ChronoStoreFileWriter(
                                 outputStream = overWriter.outputStream,
                                 settings = this.newFileSettings,
-                                metadata = emptyMap()
                             ).use { writer ->
                                 log.performance { "Flushing ${commands.size} commands from in-memory segment into '${file.path}'." }
                                 writer.writeFile(
                                     // we're flushing this file from in-memory,
                                     // so the resulting file has never been merged.
                                     numberOfMerges = 0,
-                                    orderedCommands = commands.values.iterator()
+                                    orderedCommands = commands.values.iterator(),
+                                    commandCountEstimate = commands.size.toLong(),
                                 )
                             }
                             overWriter.commit()
@@ -383,14 +383,14 @@ class LSMTree(
 
             targetFile.deleteOverWriterFileIfExists()
             targetFile.createOverWriter().use { overWriter ->
+                val totalEntries = filesToMerge.sumOf { it.header.metaData.totalEntries }
                 val cursors = filesToMerge.map { it.cursor() }
                 try {
                     ChronoStoreFileWriter(
                         outputStream = overWriter.outputStream,
                         settings = this.newFileSettings,
-                        metadata = emptyMap()
                     ).use { writer ->
-                        CompactionUtil.compact(cursors, retainOldVersions, writer, maxMerge)
+                        CompactionUtil.compact(cursors, retainOldVersions, writer, maxMerge, totalEntries)
                     }
                 } finally {
                     for (cursor in cursors) {

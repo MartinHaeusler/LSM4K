@@ -295,7 +295,7 @@ object WriteAheadLogFormat {
 
     private fun crc32(bytes: Bytes): Long {
         val checksum = CRC32()
-        checksum.update(bytes.toSharedArray())
+        checksum.update(bytes.toSharedArrayUnsafe())
         return checksum.value
     }
 

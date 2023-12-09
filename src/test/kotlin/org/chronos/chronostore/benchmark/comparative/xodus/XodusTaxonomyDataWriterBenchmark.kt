@@ -41,8 +41,8 @@ object XodusTaxonomyDataWriterBenchmark {
                 environment.computeInTransaction { tx ->
                     val store = environment.openStore("data", StoreConfig.USE_EXISTING, tx)
                     for (command in chunk) {
-                        val xodusKey = ArrayByteIterable(command.keyAndTimestamp.toBytes().toSharedArray())
-                        val xodusValue = ArrayByteIterable(command.toBytes().toSharedArray())
+                        val xodusKey = ArrayByteIterable(command.keyAndTimestamp.toBytes().toSharedArrayUnsafe())
+                        val xodusValue = ArrayByteIterable(command.toBytes().toSharedArrayUnsafe())
                         store.put(tx, xodusKey, xodusValue)
                         commandCount++
                     }
