@@ -111,11 +111,15 @@ class ChronoStoreFileReader : AutoCloseable {
     }
 
     private fun getBlockForIndex(blockIndex: Int): DataBlock? {
-        if (!this.fileHeader.indexOfBlocks.isValidBlockIndex(blockIndex)) {
+        if (blockIndex >= this.fileHeader.metaData.numberOfBlocks || blockIndex < 0) {
             // block index is out of range, no need to look for it.
             return null
         }
-        return this.blockCache.getBlock(this.fileHeader.metaData.fileUUID, blockIndex, ::getBlockForIndexUncached)
+        try {
+            return this.blockCache.getBlock(this.fileHeader.metaData.fileUUID, blockIndex, ::getBlockForIndexUncached)
+        } catch (e: Exception) {
+            throw ChronoStoreBlockReadException("Failed to read block #${blockIndex} from file '${this.driver.filePath}'. \nCause: ${e}", e)
+        }
     }
 
     private fun getBlockForIndexUncached(blockIndex: Int): DataBlock {

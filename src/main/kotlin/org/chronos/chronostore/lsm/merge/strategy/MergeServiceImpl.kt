@@ -26,8 +26,6 @@ class MergeServiceImpl(
     private var initialized: Boolean = false
     private lateinit var compactionTask: CompactionTask
     private lateinit var writeAheadLog: WriteAheadLog
-    private lateinit var checkpointTask: CheckpointTask
-    private lateinit var garbageCollectorTask: GarbageCollectorTask
     private lateinit var storeManager: StoreManager
 
     override fun initialize(storeManager: StoreManager, writeAheadLog: WriteAheadLog) {

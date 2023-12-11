@@ -1,6 +1,9 @@
 package org.chronos.chronostore.lsm
 
+import org.chronos.chronostore.io.vfs.VirtualFile
+
 class FlushResult(
+    val targetFile: VirtualFile?,
     val bytesWritten: Long,
     val entriesWritten: Int,
     val runtimeMillis: Long,
@@ -8,7 +11,7 @@ class FlushResult(
 
     companion object {
 
-        val EMPTY = FlushResult(0, 0, 0)
+        val EMPTY = FlushResult(null, 0, 0, 0)
 
     }
 

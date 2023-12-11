@@ -43,7 +43,9 @@ class FlushInMemoryTreeToDiskTask(
                 val writtenBytes = flushResult.bytesWritten
                 val bytesPerSecond = flushResult.throughputPerSecond
                 val entries = flushResult.entriesWritten
-                "FLUSH TASK [${this.index}] DONE on ${this.lsmTree.storeId}. Wrote ${entries} entries to disk (file size: ${writtenBytes.Bytes.toHumanReadableString()}) with ${bytesPerSecond.Bytes.toHumanReadableString()}/s."
+                "FLUSH TASK [${this.index}] DONE on ${this.lsmTree.storeId}." +
+                    " Wrote ${entries} entries to disk (file size: ${writtenBytes.Bytes.toHumanReadableString()})" +
+                    " with ${bytesPerSecond.Bytes.toHumanReadableString()}/s. Target file: ${flushResult.targetFile?.path}"
             }
         }
         ChronoStoreStatistics.FLUSH_TASK_EXECUTIONS.incrementAndGet()

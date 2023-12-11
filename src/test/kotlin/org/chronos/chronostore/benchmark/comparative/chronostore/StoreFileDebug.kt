@@ -40,6 +40,7 @@ object StoreFileDebug {
             overallEntries += entriesInFile
             val header = loadHeader(file)
             println("File '${file.name}' header:")
+            println("  - File UUID: ${header.metaData.fileUUID}")
             println("  - Header Size: ${header.sizeBytes.Bytes.toHumanReadableString()}")
             println("  - Entries: ${header.metaData.totalEntries}")
             if (entriesInFile != header.metaData.totalEntries) {
@@ -56,6 +57,13 @@ object StoreFileDebug {
             println("  - Created at: ${Date(header.metaData.createdAt)}")
             println("  - Merges: ${header.metaData.numberOfMerges}")
             println("  - File Format Version: ${header.fileFormatVersion}")
+
+            if(header.indexOfBlocks.size != header.metaData.numberOfBlocks){
+                val msg = "[ERROR] The number of blocks specified in the header (${header.metaData.numberOfBlocks}) doesn't match the actual number of blocks in the index ${header.indexOfBlocks.size}!"
+                issues += Issue(fileName = chronoStoreFileName, blockIndex = null, message = msg)
+                println(msg)
+            }
+
             println("File '${file.name}' blocks:")
             for (blockIndex in 0..<header.metaData.numberOfBlocks) {
                 FileChannelDriver.Factory.withDriver(file) { driver ->

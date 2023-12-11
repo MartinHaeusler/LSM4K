@@ -147,6 +147,17 @@ class ChronoStoreConfiguration {
      */
     var minNumberOfWriteAheadLogFiles: Int = 3
 
+    /**
+     * Determines if ChronoStore should attempt to create a checkpoint during store shutdown.
+     *
+     * Checkpoints are taken regularly (see: [checkpointCron]) and speed up the restart of the
+     * store. By taking a checkpoint during shutdown, we guarantee that a recent checkpoint is
+     * available during restart.
+     *
+     * Disable this option if the time-to-shutdown is more important than the time-to-restart.
+     */
+    var checkpointOnShutdown: Boolean = true
+
     init {
         require(this.maxWriteAheadLogFileSize.bytes > 0) { "Cannot use a negative value for 'maxWriteAheadLogFileSize'!" }
         require(this.checkpointCron?.isValid() ?: true) { "The cron expression for 'writeAheadLogCompactionCron' is invalid: ${this.checkpointCron}" }

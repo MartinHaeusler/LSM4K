@@ -233,7 +233,9 @@ class ChronoStoreImpl(
         // to ensure a quick startup recovery, ensure that we have a recent checkpoint.
         // If this operation is aborted by process kill, nothing bad happens except
         // that startup recovery may take a bit longer.
-        this.checkpointTask.run(TaskMonitor.create())
+        if (this.configuration.checkpointOnShutdown) {
+            this.checkpointTask.run(TaskMonitor.create())
+        }
         this.transactionManager.close()
         this.taskManager.close()
         this.storeManager.close()

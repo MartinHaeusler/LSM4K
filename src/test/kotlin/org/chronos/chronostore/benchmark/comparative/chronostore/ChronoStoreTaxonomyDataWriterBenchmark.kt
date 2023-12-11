@@ -31,6 +31,8 @@ object ChronoStoreTaxonomyDataWriterBenchmark {
 
         val configuration = ChronoStoreConfiguration()
         configuration.maxBlockSize = 16.MiB
+        // disable the checkpoints during shutdown on purpose to provoke potential errors in the reader.
+        configuration.checkpointOnShutdown = false
 
         ChronoStore.openOnDirectory(this.storeDir, configuration).use { chronoStore ->
             inputFile.inputStream().buffered().use { input ->
@@ -63,8 +65,8 @@ object ChronoStoreTaxonomyDataWriterBenchmark {
 
                 chronoStore as ChronoStoreImpl
 
-                println("Flushing all data")
-                chronoStore.mergeService.flushAllInMemoryStoresToDisk()
+//                println("Flushing all data")
+//                chronoStore.mergeService.flushAllInMemoryStoresToDisk()
 //                println("Compacting data")
 //                chronoStore.mergeService.performMajorCompaction()
                 println("Done")

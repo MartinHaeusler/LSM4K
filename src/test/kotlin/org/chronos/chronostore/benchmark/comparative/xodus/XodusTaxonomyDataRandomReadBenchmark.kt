@@ -3,8 +3,10 @@ package org.chronos.chronostore.benchmark.comparative.xodus
 import jetbrains.exodus.ArrayByteIterable
 import jetbrains.exodus.ByteIterable
 import jetbrains.exodus.ByteIterator
+import jetbrains.exodus.env.EnvironmentStatistics
 import jetbrains.exodus.env.Environments
 import jetbrains.exodus.env.StoreConfig
+import jetbrains.exodus.management.Statistics
 import org.chronos.chronostore.benchmark.comparative.xodus.XodusUtils.toBytes
 import org.chronos.chronostore.benchmark.util.Statistics.Companion.statistics
 import org.chronos.chronostore.util.bytes.Bytes
@@ -30,15 +32,17 @@ object XodusTaxonomyDataRandomReadBenchmark {
         // get all keys in the store
         val allKeys = mutableSetOf<Bytes>()
         Environments.newInstance(inputDir).use { environment ->
-            environment.computeInReadonlyTransaction { tx ->
-                val store = environment.openStore("data", StoreConfig.USE_EXISTING, tx)
-                store.openCursor(tx).use { cursor ->
-                    while (cursor.next) {
-                        allKeys += cursor.key.toBytes()
+            measureTimeMillis {
+                environment.computeInReadonlyTransaction { tx ->
+                    val store = environment.openStore("data", StoreConfig.USE_EXISTING, tx)
+                    store.openCursor(tx).use { cursor ->
+                        while (cursor.next) {
+                            allKeys += cursor.key.toBytes()
+                        }
                     }
                 }
-            }
-            println("There are ${allKeys.size} unique keys in the store.")
+            }.also { println("There are ${allKeys.size} unique keys in the store (retrieved in ${it}ms).") }
+
             val keyList = allKeys.asSequence().map { ArrayByteIterable(it.toSharedArrayUnsafe()) }.toList()
 
             val bullshitKey = ArrayByteIterable("bullshit".toByteArray())

@@ -74,7 +74,7 @@ class LSMTree(
         }
         this.garbageFileManager = GarbageFileManager(this.directory.file(GarbageFileManager.FILE_NAME))
         this.fileList = loadFileList()
-        this.nextFreeFileIndex.set(this.fileList.maxOfOrNull { it.index } ?: 0)
+        this.nextFreeFileIndex.set(getNextFreeFileIndex(this.fileList))
         forest.addTree(this)
     }
 
@@ -93,6 +93,14 @@ class LSMTree(
             .substringAfterLast(File.separatorChar)
             .removeSuffix(FILE_EXTENSION)
             .toIntOrNull()
+    }
+
+    private fun getNextFreeFileIndex(fileList: List<LSMTreeFile>): Int {
+        val maxExistingFileIndex = fileList.maxOfOrNull { it.index }
+            ?: return 0   // we don't have any files yet, start with 0
+
+        // we already have existing files, take the next free index (existing + 1)
+        return maxExistingFileIndex + 1
     }
 
     private fun createLsmTreeFileOrNull(name: String): LSMTreeFile? {
@@ -215,7 +223,7 @@ class LSMTree(
             // This means that we balance out the comparisons and reduce them. This delivers the same
             // result, is much more efficient and can cut the time for a full iteration in half.
             fun buildOverlayCursorTree(cursors: List<Cursor<Bytes, Command>>): Cursor<Bytes, Command> {
-                return when(cursors.size){
+                return when (cursors.size) {
                     0 -> throw IllegalArgumentException("List of cursors must not be empty!")
                     1 -> cursors.first()
                     2 -> OverlayCursor(cursors[0], cursors[1])
@@ -333,6 +341,7 @@ class LSMTree(
 
                 monitor.reportDone()
                 return FlushResult(
+                    targetFile = file,
                     bytesWritten = file.length,
                     entriesWritten = commands.size,
                     runtimeMillis = timeAfter - timeBefore,

@@ -6,13 +6,14 @@ import org.chronos.chronostore.benchmark.util.Statistics.Companion.statistics
 import org.chronos.chronostore.util.bytes.BasicBytes
 import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.statistics.ChronoStoreStatistics
+import org.chronos.chronostore.util.unit.GiB
 import org.chronos.chronostore.util.unit.MiB
 import java.io.File
 import kotlin.system.measureTimeMillis
 
 object ChronoStoreTaxonomyDataRandomReadBenchmark {
 
-    val REPETITIONS = 10
+    val REPETITIONS = 1000
     val NUMBER_OF_READS = 1000
 
     @JvmStatic
@@ -27,7 +28,7 @@ object ChronoStoreTaxonomyDataRandomReadBenchmark {
         // get all keys in the store
         val allKeys = mutableListOf<Bytes>()
         val configuration = ChronoStoreConfiguration()
-        configuration.blockCacheSize = 4500.MiB
+        configuration.blockCacheSize = 4.GiB
         ChronoStore.openOnDirectory(inputDir, configuration).use { chronoStore ->
             measureTimeMillis {
                 chronoStore.transaction { tx ->

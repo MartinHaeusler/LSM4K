@@ -65,4 +65,17 @@ class DiskBasedVirtualDirectory(
         return "Dir[${this.path}]"
     }
 
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (javaClass != other?.javaClass) return false
+
+        other as DiskBasedVirtualDirectory
+
+        return file == other.file
+    }
+
+    override fun hashCode(): Int {
+        return file.hashCode()
+    }
+
 }
