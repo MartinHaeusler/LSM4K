@@ -100,6 +100,29 @@ sealed interface Bytes :
             return wrap(algorithm.decompress(this.toSharedArrayUnsafe()))
         }
 
+
+        fun Bytes.decompressWith(algorithm: CompressionAlgorithm, uncompressedSize: Int): Bytes {
+            require(!this.isEmpty()) { "The empty Bytes object cannot be decompressed!" }
+            require(uncompressedSize > 0) { "The uncompressedSize (${uncompressedSize}) must be greater than zero!" }
+            if (algorithm == CompressionAlgorithm.NONE) {
+                return this
+            }
+            val output = TrackingBytesOutput()
+            this.writeToOutput(output)
+
+            val compressedBytes = output.lastBytes
+                ?: throw IllegalStateException("Bytes.writeToOutput produced no data!")
+
+            val compressedBytesOffset = output.lastOffset ?: 0
+            val compressedBytesLength = output.lastLength ?: compressedBytes.size
+
+            val target = ByteArray(uncompressedSize)
+
+            algorithm.decompress(compressedBytes, compressedBytesOffset, compressedBytesLength, target)
+
+            return wrap(target)
+        }
+
         fun stableInt(int: Int): Bytes {
             val byteArray = ByteArrayOutputStream().use { baos ->
                 baos.writeStableInt(int)

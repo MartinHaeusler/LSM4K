@@ -13,7 +13,7 @@ import kotlin.system.measureTimeMillis
 
 object ChronoStoreTaxonomyDataRandomReadBenchmark {
 
-    val REPETITIONS = 1000
+    val REPETITIONS = 10
     val NUMBER_OF_READS = 1000
 
     @JvmStatic

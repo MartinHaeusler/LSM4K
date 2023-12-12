@@ -5,6 +5,7 @@ import org.chronos.chronostore.io.format.ChronoStoreFileFormat
 import org.chronos.chronostore.io.format.CompressionAlgorithm
 import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.model.command.KeyAndTimestamp
+import org.chronos.chronostore.util.IOExtensions.withInputStream
 import org.chronos.chronostore.util.LittleEndianExtensions.readLittleEndianInt
 import org.chronos.chronostore.util.TreeMapUtils
 import org.chronos.chronostore.util.bytes.Bytes
@@ -43,10 +44,6 @@ class DataBlock(
             val blockMetadataSize = buffer.takeLittleEndianInt()
             val blockMetadataBytes = buffer.takeBytes(blockMetadataSize)
 
-            val bloomFilterSize = buffer.takeLittleEndianInt()
-            // skip the bloom filter, we don't need it for eager-loaded blocks
-            buffer.skipBytes(bloomFilterSize)
-
             val compressedSize = buffer.takeLittleEndianInt()
             val compressedBytes = buffer.takeBytes(compressedSize)
 
@@ -54,9 +51,7 @@ class DataBlock(
             val blockMetaData = blockMetadataBytes.createInputStream().use(BlockMetaData::readFrom)
 
             // decompress the data
-            val decompressedData = compressionAlgorithm.decompress(compressedBytes)
-
-            // we use "ArrayList" instead of "mutableListOf(...)" here because we can provide an initial size
+            val decompressedData = compressionAlgorithm.decompress(compressedBytes, blockMetaData.uncompressedDataSize)
 
             val commandsArray = arrayOfNulls<Map.Entry<KeyAndTimestamp, Command>>(blockMetaData.commandCount)
             val decompressedBuffer = BytesBuffer(decompressedData)
@@ -113,10 +108,6 @@ class DataBlock(
             val blockMetadataSize = inputStream.readLittleEndianInt()
             val blockMetadataBytes = inputStream.readNBytes(blockMetadataSize)
 
-            val bloomFilterSize = inputStream.readLittleEndianInt()
-            // skip the bloom filter, we don't need it for eager-loaded blocks
-            inputStream.skipNBytes(bloomFilterSize.toLong())
-
             val compressedSize = inputStream.readLittleEndianInt()
             val compressedBytes = inputStream.readNBytes(compressedSize)
 
@@ -124,12 +115,12 @@ class DataBlock(
             val blockMetaData = BlockMetaData.readFrom(ByteArrayInputStream(blockMetadataBytes))
 
             // decompress the data
-            val decompressedData = compressionAlgorithm.decompress(compressedBytes)
+            val decompressedData = compressionAlgorithm.decompress(Bytes.wrap(compressedBytes), blockMetaData.uncompressedDataSize)
 
             // we use "ArrayList" instead of "mutableListOf(...)" here because we can provide an initial size
             val commandsList = ArrayList<Map.Entry<KeyAndTimestamp, Command>>(blockMetaData.commandCount)
 
-            decompressedData.inputStream().use { byteIn ->
+            decompressedData.withInputStream { byteIn ->
                 while (byteIn.available() > 0) {
                     val command = Command.readFromStream(byteIn)
                     commandsList += ImmutableEntry(command.keyAndTimestamp, command)

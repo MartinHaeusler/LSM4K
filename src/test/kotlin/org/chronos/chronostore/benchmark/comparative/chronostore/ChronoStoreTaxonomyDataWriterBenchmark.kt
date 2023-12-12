@@ -3,6 +3,7 @@ package org.chronos.chronostore.benchmark.comparative.chronostore
 import org.chronos.chronostore.api.ChronoStore
 import org.chronos.chronostore.api.ChronoStoreConfiguration
 import org.chronos.chronostore.impl.ChronoStoreImpl
+import org.chronos.chronostore.io.format.CompressionAlgorithm
 import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.util.IOExtensions.size
 import org.chronos.chronostore.util.bytes.Bytes

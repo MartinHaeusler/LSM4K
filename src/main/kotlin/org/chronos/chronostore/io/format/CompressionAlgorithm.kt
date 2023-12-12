@@ -9,6 +9,7 @@ import org.chronos.chronostore.util.bytes.Bytes.Companion.decompressWith
 import org.xerial.snappy.Snappy
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
+import java.nio.ByteBuffer
 import java.util.zip.GZIPInputStream
 import java.util.zip.GZIPOutputStream
 
@@ -35,6 +36,14 @@ enum class CompressionAlgorithm(
             return bytes
         }
 
+        override fun decompress(bytes: ByteArray, offset: Int, length: Int, target: ByteArray) {
+            require(bytes.isNotEmpty()) { "An empty byte array cannot be decompressed!" }
+            require(offset >= 0) { "Argument 'offset' (${offset}) must not be negative!" }
+            require(length >= 0) { "Argument 'length' (${length}) must not be negative!" }
+            require(target.isNotEmpty()) { "An empty array cannot be the decompression target!" }
+            System.arraycopy(bytes, offset, target, 0, length)
+        }
+
     },
 
     SNAPPY(10) {
@@ -47,6 +56,14 @@ enum class CompressionAlgorithm(
         override fun decompress(bytes: ByteArray): ByteArray {
             require(bytes.isNotEmpty()) { "An empty byte array cannot be decompressed!" }
             return Snappy.uncompress(bytes)
+        }
+
+        override fun decompress(bytes: ByteArray, offset: Int, length: Int, target: ByteArray) {
+            require(bytes.isNotEmpty()) { "An empty byte array cannot be decompressed!" }
+            require(offset >= 0) { "Argument 'offset' (${offset}) must not be negative!" }
+            require(length >= 0) { "Argument 'length' (${length}) must not be negative!" }
+            require(target.isNotEmpty()) { "An empty array cannot be the decompression target!" }
+            Snappy.uncompress(bytes, offset, length, target, 0)
         }
 
     },
@@ -67,6 +84,14 @@ enum class CompressionAlgorithm(
             return GZIPInputStream(bytes.inputStream()).use { gzipInput -> gzipInput.readAllBytes() }
         }
 
+        override fun decompress(bytes: ByteArray, offset: Int, length: Int, target: ByteArray) {
+            require(bytes.isNotEmpty()) { "An empty byte array cannot be decompressed!" }
+            require(offset >= 0) { "Argument 'offset' (${offset}) must not be negative!" }
+            require(length >= 0) { "Argument 'length' (${length}) must not be negative!" }
+            require(target.isNotEmpty()) { "An empty array cannot be the decompression target!" }
+            bytes.inputStream(offset, length).use { gzipInput -> gzipInput.readNBytes(target, 0, target.size) }
+        }
+
     },
 
     ZSTD(50) {
@@ -79,6 +104,14 @@ enum class CompressionAlgorithm(
         override fun decompress(bytes: ByteArray): ByteArray {
             require(bytes.isNotEmpty()) { "An empty byte array cannot be decompressed!" }
             return Zstd.decompress(bytes, Zstd.decompressedSize(bytes).toInt())
+        }
+
+        override fun decompress(bytes: ByteArray, offset: Int, length: Int, target: ByteArray) {
+            require(bytes.isNotEmpty()) { "An empty byte array cannot be decompressed!" }
+            require(offset >= 0) { "Argument 'offset' (${offset}) must not be negative!" }
+            require(length >= 0) { "Argument 'length' (${length}) must not be negative!" }
+            require(target.isNotEmpty()) { "An empty array cannot be the decompression target!" }
+            Zstd.decompress(ByteBuffer.wrap(target), ByteBuffer.wrap(bytes, offset, length))
         }
 
     },
@@ -104,6 +137,18 @@ enum class CompressionAlgorithm(
             }
         }
 
+        override fun decompress(bytes: ByteArray, offset: Int, length: Int, target: ByteArray) {
+            require(bytes.isNotEmpty()) { "An empty byte array cannot be decompressed!" }
+            require(offset >= 0) { "Argument 'offset' (${offset}) must not be negative!" }
+            require(length >= 0) { "Argument 'length' (${length}) must not be negative!" }
+            require(target.isNotEmpty()) { "An empty array cannot be the decompression target!" }
+            ByteArrayInputStream(bytes, offset, length).use { bais ->
+                LZ4FrameInputStream(bais).use { lz4In ->
+                    lz4In.readNBytes(target, 0, target.size)
+                }
+            }
+        }
+
     },
 
     ;
@@ -111,7 +156,7 @@ enum class CompressionAlgorithm(
     companion object {
 
         fun fromAlgorithmIndex(algorithmIndex: Int): CompressionAlgorithm {
-            for (algorithm in values()) {
+            for (algorithm in entries) {
                 if (algorithm.algorithmIndex == algorithmIndex) {
                     return algorithm
                 }
@@ -133,6 +178,14 @@ enum class CompressionAlgorithm(
         return bytes.decompressWith(this)
     }
 
+    fun decompress(bytes: Bytes, uncompressedSize: Int): Bytes {
+        require(bytes.isNotEmpty()) { "The EMPTY Bytes object cannot be decompressed!" }
+        require(uncompressedSize > 0) { "The uncompressedSize (${uncompressedSize}) must be greater than zero!" }
+        return bytes.decompressWith(this, uncompressedSize)
+    }
+
     abstract fun decompress(bytes: ByteArray): ByteArray
+
+    abstract fun decompress(bytes: ByteArray, offset: Int, length: Int, target: ByteArray)
 
 }

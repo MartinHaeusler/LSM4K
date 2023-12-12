@@ -228,7 +228,8 @@ class ChronoStoreFileWriter : AutoCloseable {
 
         // in order to create an appropriately sized bloom filter for the block later on,
         // we must keep track of all keys within the block.
-        val allKeysInBlock = mutableListOf<Bytes>()
+        var firstKey: Bytes? = null
+        var lastKey: Bytes? = null
         // fill the block with commands:
         // While we have more commands (and the block didn't get too big yet), write more commands to the block.
         while (commands.hasNext()) {
@@ -239,7 +240,7 @@ class ChronoStoreFileWriter : AutoCloseable {
             // we allow the first entry to be of arbitrary size (even larger than the block size). If
             // the current block is *not* empty, we demand that the next entry still fits into the block;
             // if it doesn't, we close the current block and let the data flow into the next block instead.
-            if (allKeysInBlock.isNotEmpty() && blockSizeIncludingNextEntry >= this.settings.maxBlockSize.bytes) {
+            if (firstKey != null && blockSizeIncludingNextEntry >= this.settings.maxBlockSize.bytes) {
                 // this block is full, don't continue writing.
                 break
             }
@@ -250,7 +251,10 @@ class ChronoStoreFileWriter : AutoCloseable {
 
             minTimestamp = min(minTimestamp, command.timestamp)
             maxTimestamp = max(maxTimestamp, command.timestamp)
-            allKeysInBlock += command.keyAndTimestamp.key
+
+            val currentKey = command.keyAndTimestamp.key
+            firstKey = firstKey ?: currentKey
+            lastKey = currentKey
             commandCount++
         }
 
@@ -267,14 +271,11 @@ class ChronoStoreFileWriter : AutoCloseable {
         val uncompressedSize = blockDataArrayRaw.size
         val compressedSize = blockDataArrayCompressed.size
 
-        // prepare the bloom filter
-        val bloomFilterBytes = createBlockBloomFilter(allKeysInBlock)
-
         // create the block metadata
         val blockMetaData = BlockMetaData(
             blockSequenceNumber = blockSequenceNumber,
-            minKey = allKeysInBlock.first(),
-            maxKey = allKeysInBlock.last(),
+            minKey = firstKey!!, // we know for a fact that we will have a first key
+            maxKey = lastKey!!, // and a last key at this point because the iterator is non-empty.
             minTimestamp = minTimestamp,
             maxTimestamp = maxTimestamp,
             commandCount = commandCount,
@@ -287,7 +288,6 @@ class ChronoStoreFileWriter : AutoCloseable {
         // write the total size of the block
         val computedTotalBlockSize = computeTotalBlockSize(
             blockMetaDataSize = blockMetaData.byteSize,
-            bloomFilterBytes = bloomFilterBytes.size,
             blockDataArrayCompressedSize = blockDataArrayCompressed.size
         )
         outputStream.writeLittleEndianInt(computedTotalBlockSize)
@@ -295,38 +295,15 @@ class ChronoStoreFileWriter : AutoCloseable {
         outputStream.writeLittleEndianInt(blockMetaData.byteSize)
         // write the metadata of the block
         blockMetaData.writeTo(outputStream)
-        // write the size of the bloom filter
-        outputStream.writeLittleEndianInt(bloomFilterBytes.size)
-        // write the content of the bloom filter
-        outputStream.writeBytesWithoutSize(bloomFilterBytes)
         // write the compressed size of the block
         outputStream.writeLittleEndianInt(compressedSize)
         // write the compressed block bytes
         outputStream.write(blockDataArrayCompressed)
     }
 
-    @Suppress("UnstableApiUsage")
-    private fun createBlockBloomFilter(allKeysInBlock: List<Bytes>): Bytes {
-        // create a bloom filter to track which elements *might* be in the block
-        val bloomFilter = BloomFilter.create(
-            /* funnel = */ Funnels.byteArrayFunnel(),
-            /* expectedInsertions = */ allKeysInBlock.size,
-            /* fpp = */ BLOOM_FILTER_FALSE_POSITIVE_PROBABILITY
-        )
-
-        // add all entries to the bloom filter
-        for (key in allKeysInBlock) {
-            bloomFilter.put(key)
-        }
-
-        return bloomFilter.toBytes()
-    }
-
-    private fun computeTotalBlockSize(blockMetaDataSize: Int, bloomFilterBytes: Int, blockDataArrayCompressedSize: Int): Int {
+    private fun computeTotalBlockSize(blockMetaDataSize: Int, blockDataArrayCompressedSize: Int): Int {
         return Int.SIZE_BYTES + // size of metadata
             blockMetaDataSize + // metadata content bytes
-            Int.SIZE_BYTES + // size of the bloom filter
-            bloomFilterBytes + // content of the bloom filter
             Int.SIZE_BYTES + // compressed size of the block
             blockDataArrayCompressedSize  // block content
     }
