@@ -13,6 +13,7 @@ import org.chronos.chronostore.util.bytes.BytesBuffer
 import org.chronos.chronostore.util.cursor.Cursor
 import org.chronos.chronostore.util.cursor.EmptyCursor
 import org.chronos.chronostore.util.cursor.NavigableMapCursor
+import org.chronos.chronostore.util.statistics.ChronoStoreStatistics
 import java.io.ByteArrayInputStream
 import java.io.InputStream
 import java.util.*
@@ -30,6 +31,8 @@ class DataBlock(
             input: Bytes,
             compressionAlgorithm: CompressionAlgorithm
         ): DataBlock {
+            ChronoStoreStatistics.BLOCK_LOADS.incrementAndGet()
+
             val buffer = BytesBuffer(input)
 
             val magicBytes = buffer.takeBytes(ChronoStoreFileFormat.BLOCK_MAGIC_BYTES.size)
@@ -89,50 +92,6 @@ class DataBlock(
                 data = commands,
             )
 
-        }
-
-        @JvmStatic
-        fun loadBlock(
-            inputStream: InputStream,
-            compressionAlgorithm: CompressionAlgorithm
-        ): DataBlock {
-            val magicBytes = Bytes.wrap(inputStream.readNBytes(ChronoStoreFileFormat.BLOCK_MAGIC_BYTES.size))
-            if (magicBytes != ChronoStoreFileFormat.BLOCK_MAGIC_BYTES) {
-                throw IllegalArgumentException(
-                    "Cannot read block from input: the magic bytes do not match!" +
-                        " Expected ${ChronoStoreFileFormat.BLOCK_MAGIC_BYTES.hex()}, found ${magicBytes.hex()}!"
-                )
-            }
-            // read the individual parts of the binary format
-            inputStream.readLittleEndianInt() // block size; not needed here
-            val blockMetadataSize = inputStream.readLittleEndianInt()
-            val blockMetadataBytes = inputStream.readNBytes(blockMetadataSize)
-
-            val compressedSize = inputStream.readLittleEndianInt()
-            val compressedBytes = inputStream.readNBytes(compressedSize)
-
-            // deserialize the binary representations
-            val blockMetaData = BlockMetaData.readFrom(ByteArrayInputStream(blockMetadataBytes))
-
-            // decompress the data
-            val decompressedData = compressionAlgorithm.decompress(Bytes.wrap(compressedBytes), blockMetaData.uncompressedDataSize)
-
-            // we use "ArrayList" instead of "mutableListOf(...)" here because we can provide an initial size
-            val commandsList = ArrayList<Map.Entry<KeyAndTimestamp, Command>>(blockMetaData.commandCount)
-
-            decompressedData.withInputStream { byteIn ->
-                while (byteIn.available() > 0) {
-                    val command = Command.readFromStream(byteIn)
-                    commandsList += ImmutableEntry(command.keyAndTimestamp, command)
-                }
-            }
-
-            val commands = TreeMapUtils.treeMapFromSortedList(commandsList)
-
-            return DataBlock(
-                metaData = blockMetaData,
-                data = commands,
-            )
         }
 
     }

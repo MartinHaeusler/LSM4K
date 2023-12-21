@@ -18,8 +18,14 @@ class ChronoStoreStatistics(
     val versioningCursorStatistics: CursorStatistics,
     /** Statistics on the block cache. */
     val blockCache: CacheStatistics,
+    /** How many times did we load a block from raw bytes? */
+    val blockLoads: Long,
+    /** How much time (in milliseconds) did we spend loading blocks? */
+    val blockLoadTime: Long,
     /** Statistics on the file header cache.  */
     val fileHeaderCache: CacheStatistics,
+    /** Statistics on the usage of compression. */
+    val compressionStatistics: CompressionStatistics,
     /** How long have writer threads been stalled because of full in-memory trees? */
     val totalWriteStallTimeMillis: Long,
     /** How many times have writer threads been stalled because of full in-memory trees? */
@@ -119,6 +125,12 @@ class ChronoStoreStatistics(
         /** How many cache evictions have occurred in the block cache? */
         val BLOCK_CACHE_EVICTIONS = AtomicLong(0L)
 
+        /** How many times did we load a block from raw bytes? */
+        val BLOCK_LOADS = AtomicLong(0L)
+
+        /** How much time (in milliseconds) did we spend loading blocks? */
+        val BLOCK_LOAD_TIME = AtomicLong(0L)
+
         /** How many file headers have been evicted from the cache?  */
         val FILE_HEADER_CACHE_EVICTIONS = AtomicLong(0L)
 
@@ -158,6 +170,23 @@ class ChronoStoreStatistics(
         /** How much time has been spent in total in flush tasks (possibly concurrently)? */
         val FLUSH_TASK_TOTAL_TIME = AtomicLong(0L)
 
+        /** How many times did we compress raw bytes? */
+        val COMPRESSION_INVOCATIONS = AtomicLong(0L)
+
+        /** How many input bytes did we receive in total for compression? */
+        val COMPRESSION_INPUT_BYTES = AtomicLong(0L)
+
+        /** How many output bytes did we deliver in total for compression? */
+        val COMPRESSION_OUTPUT_BYTES = AtomicLong(0L)
+
+        /** How many times did we uncompress bytes? */
+        val DECOMPRESSION_INVOCATIONS = AtomicLong(0L)
+
+        /** How many input bytes did we receive in total for decompression? */
+        val DECOMPRESSION_INPUT_BYTES = AtomicLong(0L)
+
+        /** How many output bytes did we deliver in total for decompression? */
+        val DECOMPRESSION_OUTPUT_BYTES = AtomicLong(0L)
 
         /**
          * Retrieves an immutable snapshot of all statistics at the current point in time.
@@ -203,6 +232,9 @@ class ChronoStoreStatistics(
                     requests = BLOCK_CACHE_REQUESTS.get(),
                 ),
 
+                blockLoads = BLOCK_LOADS.get(),
+                blockLoadTime = BLOCK_LOAD_TIME.get(),
+
                 fileHeaderCache = CacheStatistics(
                     cacheName = "File Header Cache",
                     evictions = FILE_HEADER_CACHE_EVICTIONS.get(),
@@ -210,10 +242,19 @@ class ChronoStoreStatistics(
                     requests = FILE_HEADER_CACHE_REQUESTS.get(),
                 ),
 
+                compressionStatistics = CompressionStatistics(
+                    compressionInvocations = COMPRESSION_INVOCATIONS.get(),
+                    compressionInputBytes = COMPRESSION_INPUT_BYTES.get(),
+                    compressionOutputBytes = COMPRESSION_OUTPUT_BYTES.get(),
+                    decompressionInvocations = DECOMPRESSION_INVOCATIONS.get(),
+                    decompressionInputBytes = DECOMPRESSION_INPUT_BYTES.get(),
+                    decompressionOutputBytes = DECOMPRESSION_OUTPUT_BYTES.get(),
+                ),
+
                 totalWriteStallTimeMillis = TOTAL_WRITE_STALL_TIME_MILLIS.get(),
                 writeStallEvents = WRITE_STALL_EVENTS.get(),
                 transactionsOpened = TRANSACTIONS.get(),
-                transactionsCommitted =  TRANSACTION_COMMITS.get(),
+                transactionsCommitted = TRANSACTION_COMMITS.get(),
                 transactionsRolledBack = TRANSACTION_ROLLBACKS.get(),
                 transactionsDangling = TRANSACTION_DANGLING.get(),
                 flushTaskExecutions = FLUSH_TASK_EXECUTIONS.get(),
@@ -260,6 +301,9 @@ class ChronoStoreStatistics(
             BLOCK_CACHE_EVICTIONS.set(0L)
             BLOCK_CACHE_REQUESTS.set(0L)
 
+            BLOCK_LOADS.set(0L)
+            BLOCK_LOAD_TIME.set(0L)
+
             FILE_HEADER_CACHE_EVICTIONS.set(0L)
             FILE_HEADER_CACHE_REQUESTS.set(0L)
             FILE_HEADER_CACHE_MISSES.set(0L)
@@ -276,6 +320,13 @@ class ChronoStoreStatistics(
             FLUSH_TASK_TOTAL_TIME.set(0L)
             FLUSH_TASK_WRITTEN_BYTES.set(0L)
             FLUSH_TASK_WRITTEN_ENTRIES.set(0L)
+
+            COMPRESSION_INVOCATIONS.set(0L)
+            COMPRESSION_INPUT_BYTES.set(0L)
+            COMPRESSION_OUTPUT_BYTES.set(0L)
+            DECOMPRESSION_INVOCATIONS.set(0L)
+            DECOMPRESSION_INPUT_BYTES.set(0L)
+            DECOMPRESSION_OUTPUT_BYTES.set(0L)
         }
     }
 
@@ -346,6 +397,9 @@ class ChronoStoreStatistics(
             |              Misses: ${this.fileHeaderCache.misses}
             |            Hit Rate: ${"%.2f".format(this.fileHeaderCache.hitRate * 100)}%
             |           Evictions: ${this.fileHeaderCache.evictions}
+            | Block Management:
+            |        Block Loads: ${this.blockLoads}
+            |    Block Load Time: ${this.blockLoadTime}ms
             | Flush Tasks:
             |    Flushes Executed: ${this.flushTaskExecutions}
             |       Bytes Written: ${this.flushTaskWrittenBytes.Bytes.toHumanReadableString()}
@@ -359,6 +413,15 @@ class ChronoStoreStatistics(
             |      Committed: ${this.transactionsCommitted}
             |    Rolled back: ${this.transactionsRolledBack}
             |       Dangling: ${this.transactionsDangling}
+            | Compression:
+            |   Compression:
+            |    Invocations: ${this.compressionStatistics.compressionInvocations}
+            |       Bytes In: ${this.compressionStatistics.compressionInputBytes.Bytes.toHumanReadableString()}
+            |      Bytes Out: ${this.compressionStatistics.compressionOutputBytes.Bytes.toHumanReadableString()}
+            |   Decompression:
+            |    Invocations: ${this.compressionStatistics.decompressionInvocations}
+            |       Bytes In: ${this.compressionStatistics.decompressionInputBytes.Bytes.toHumanReadableString()}
+            |      Bytes Out: ${this.compressionStatistics.decompressionOutputBytes.Bytes.toHumanReadableString()}
         """.trimMargin()
     }
 
@@ -461,4 +524,20 @@ class ChronoStoreStatistics(
             }
 
     }
+
+    class CompressionStatistics(
+        /** How many times did we compress raw bytes? */
+        val compressionInvocations: Long,
+        /** How many input bytes did we receive in total for compression? */
+        val compressionInputBytes: Long,
+        /** How many output bytes did we deliver in total for compression? */
+        val compressionOutputBytes: Long,
+        /** How many times did we uncompress bytes? */
+        val decompressionInvocations: Long,
+        /** How many input bytes did we receive in total for decompression? */
+        val decompressionInputBytes: Long,
+        /** How many output bytes did we deliver in total for decompression? */
+        val decompressionOutputBytes: Long,
+    )
+
 }

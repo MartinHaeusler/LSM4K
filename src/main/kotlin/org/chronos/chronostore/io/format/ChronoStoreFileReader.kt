@@ -11,6 +11,7 @@ import org.chronos.chronostore.util.cursor.CloseHandler
 import org.chronos.chronostore.util.cursor.Cursor
 import org.chronos.chronostore.util.cursor.CursorUtils
 import org.chronos.chronostore.util.statistics.ChronoStoreStatistics
+import kotlin.system.measureTimeMillis
 
 class ChronoStoreFileReader : AutoCloseable {
 
@@ -123,6 +124,7 @@ class ChronoStoreFileReader : AutoCloseable {
     }
 
     private fun getBlockForIndexUncached(blockIndex: Int): DataBlock {
+        val timeBefore = System.currentTimeMillis()
         val (startPosition, length) = this.fileHeader.indexOfBlocks.getBlockStartPositionAndLengthOrNull(blockIndex)
             ?: throw IllegalStateException(
                 "Could not fetch block #${blockIndex} from Store '${this.blockCache.storeId}' (file: '${this.fileHeader.metaData.fileUUID}')!" +
@@ -131,7 +133,10 @@ class ChronoStoreFileReader : AutoCloseable {
         val blockBytes = this.driver.readBytes(startPosition, length)
         val compressionAlgorithm = this.fileHeader.metaData.settings.compression
         try {
-            return DataBlock.loadBlock(blockBytes, compressionAlgorithm)
+            val dataBlock = DataBlock.loadBlock(blockBytes, compressionAlgorithm)
+            val timeAfter = System.currentTimeMillis()
+            ChronoStoreStatistics.BLOCK_LOAD_TIME.addAndGet(timeAfter - timeBefore)
+            return dataBlock
         } catch (e: Exception) {
             throw ChronoStoreBlockReadException(
                 message = "Failed to read block #${blockIndex} of file '${this.driver.filePath}'." +
