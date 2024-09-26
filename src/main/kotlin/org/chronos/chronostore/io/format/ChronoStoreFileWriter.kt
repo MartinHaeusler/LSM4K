@@ -2,21 +2,16 @@ package org.chronos.chronostore.io.format
 
 import com.google.common.collect.Iterators
 import com.google.common.collect.PeekingIterator
-import com.google.common.hash.BloomFilter
-import com.google.common.hash.Funnels
 import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.model.command.KeyAndTimestamp
-import org.chronos.chronostore.util.BloomFilterExtensions.toBytes
 import org.chronos.chronostore.util.LittleEndianExtensions.writeLittleEndianInt
 import org.chronos.chronostore.util.LittleEndianExtensions.writeLittleEndianLong
 import org.chronos.chronostore.util.PositionTrackingStream
 import org.chronos.chronostore.util.Timestamp
 import org.chronos.chronostore.util.bloom.BytesBloomFilter
 import org.chronos.chronostore.util.bytes.Bytes
-import org.chronos.chronostore.util.bytes.Bytes.Companion.put
 import org.chronos.chronostore.util.bytes.Bytes.Companion.writeBytesWithoutSize
 import org.chronos.chronostore.util.iterator.IteratorExtensions.checkOrdered
-import org.chronos.chronostore.util.iterator.IteratorExtensions.onEach
 import java.io.ByteArrayOutputStream
 import java.io.OutputStream
 import java.util.*
@@ -76,15 +71,18 @@ class ChronoStoreFileWriter : AutoCloseable {
 
         // the file starts with the magic bytes (for later filetype recognition; fixed size)
         this.outputStream.writeBytesWithoutSize(ChronoStoreFileFormat.FILE_MAGIC_BYTES)
+
         // the next 4 bytes are reserved for the file format version (fixed size)
         this.outputStream.writeLittleEndianInt(FILE_FORMAT_VERSION.versionInt)
 
         val beginOfBlocks = this.outputStream.position
 
-        val bloomFilter = BytesBloomFilter(commandCountEstimate, 0.001)
+        val bloomFilter = BytesBloomFilter(
+            expectedEntries = commandCountEstimate,
+            falsePositiveRate = BLOOM_FILTER_FALSE_POSITIVE_PROBABILITY,
+        )
 
         val blockWriteResult = this.writeBlocks(orderedCommands, bloomFilter)
-
 
         val beginOfIndexOfBlocks = this.outputStream.position
         // write the index of blocks
@@ -179,7 +177,11 @@ class ChronoStoreFileWriter : AutoCloseable {
                 nextCommand.key.own(),
                 nextCommand.timestamp
             )
-            blockIndexToStartPositionAndMinKey += Triple(blockSequenceNumber, this.outputStream.position, minKeyAndTimestamp)
+            blockIndexToStartPositionAndMinKey += Triple(
+                blockSequenceNumber,
+                this.outputStream.position,
+                minKeyAndTimestamp
+            )
 
             // for debugging purposes, we write the block into a byte array first
             val blockBytes = ByteArrayOutputStream().use { baos ->

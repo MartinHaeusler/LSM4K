@@ -4,7 +4,6 @@ import org.chronos.chronostore.io.vfs.VirtualReadWriteFile
 import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.stream.UnclosableOutputStream.Companion.unclosable
 import java.io.ByteArrayOutputStream
-import java.io.FileOutputStream
 import java.io.OutputStream
 
 class InMemoryVirtualReadWriteFile(
@@ -44,14 +43,14 @@ class InMemoryVirtualReadWriteFile(
     }
 
     override fun createOverWriter(): VirtualReadWriteFile.OverWriter {
-        return OverWriterImpl()
+        return InMemoryOverWriter()
     }
 
     override fun deleteOverWriterFileIfExists() {
         // no-op
     }
 
-    inner class OverWriterImpl : VirtualReadWriteFile.OverWriter {
+    inner class InMemoryOverWriter : VirtualReadWriteFile.OverWriter {
 
         private var isOpen: Boolean = true
 

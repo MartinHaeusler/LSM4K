@@ -1,7 +1,7 @@
 package org.chronos.chronostore.util.bytes
 
 import com.google.common.hash.BloomFilter
-import com.google.common.hash.PrimitiveSink
+import com.google.common.primitives.UnsignedBytes
 import org.chronos.chronostore.io.format.CompressionAlgorithm
 import org.chronos.chronostore.io.vfs.InputSource
 import org.chronos.chronostore.util.LittleEndianUtil
@@ -12,6 +12,7 @@ import java.io.InputStream
 import java.io.OutputStream
 import java.nio.charset.Charset
 import java.util.*
+import kotlin.math.min
 import kotlin.random.Random
 
 /**
@@ -316,7 +317,14 @@ sealed interface Bytes :
     override fun compareTo(other: Bytes): Int {
         // the following implementation has been borrowed from Xodus
         // and slightly adapted, but RocksDB uses the same comparison technique.
-        val min = kotlin.math.min(this.size, other.size)
+        val min = min(this.size, other.size)
+
+        // TODO [PERFORMANCE] We could try other alternatives instead of comparing byte-by-byte here.
+        // For example:
+        // - how about converting 8 bytes at a time into an (unsinged) long (by concatenation) and comparing the longs unsigned?
+        // - how about using a fixed-size byte array (pre-allocated), flush a section of the bytes in there, and use the guava UnsignedBytes.lexicographicalComparator()
+
+        UnsignedBytes.lexicographicalComparator()
 
         for (i in 0..<min) {
             val myByteUnsigned = this[i].toInt() and 0xff

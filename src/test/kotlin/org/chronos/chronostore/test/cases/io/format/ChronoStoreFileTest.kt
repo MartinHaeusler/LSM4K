@@ -30,7 +30,7 @@ class ChronoStoreFileTest {
 
             file.withOverWriter { overWriter ->
                 val writer = ChronoStoreFileWriter(
-                    outputStream = overWriter.outputStream.buffered(),
+                    outputStream = overWriter.outputStream,
                     settings = ChronoStoreFileSettings(CompressionAlgorithm.NONE, 16.MiB),
                 )
                 writer.writeFile(0, orderedCommands = emptySequence<Command>().iterator(), commandCountEstimate = 10)

@@ -5,6 +5,7 @@ import com.google.common.hash.PrimitiveSink
 import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.bytes.BytesOutput
 
+@Suppress("UnstableApiUsage", "JavaIoSerializableObjectMustHaveReadResolve")
 data object BytesFunnel: Funnel<Bytes> {
 
     override fun funnel(from: Bytes, into: PrimitiveSink) {

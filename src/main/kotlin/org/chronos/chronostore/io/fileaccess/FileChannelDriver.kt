@@ -1,6 +1,5 @@
 package org.chronos.chronostore.io.fileaccess
 
-import com.sun.nio.file.ExtendedOpenOption
 import org.chronos.chronostore.io.vfs.VirtualFile
 import org.chronos.chronostore.io.vfs.disk.DiskBasedVirtualFile
 import org.chronos.chronostore.io.vfs.inmemory.InMemoryVirtualFile

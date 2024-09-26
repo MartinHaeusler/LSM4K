@@ -5,6 +5,7 @@ import org.chronos.chronostore.util.BloomFilterExtensions.toBytes
 import org.chronos.chronostore.util.IOExtensions.withInputStream
 import org.chronos.chronostore.util.bytes.Bytes
 
+@Suppress("UnstableApiUsage")
 class BytesBloomFilter {
 
     companion object {

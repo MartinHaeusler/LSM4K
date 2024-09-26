@@ -22,25 +22,6 @@
 **/daemon
 **/*._*
 
-# org.txture.core
-# ==============================
-**/*.xtendbin
-
-# org.txture.client
-# ==============================
-**/npm-debug.log
-**/node_modules
-**/dist
-**/tmp
-**/test-results
-**/coverage/
-**/yarn-error.log
-**/webpack_bundle_size_report.html
-
-
-
-
-
 # Created by https://www.gitignore.io/api/intellij
 
 ### Intellij ###
