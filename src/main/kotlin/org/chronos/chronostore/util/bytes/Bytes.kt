@@ -1,7 +1,6 @@
 package org.chronos.chronostore.util.bytes
 
 import com.google.common.hash.BloomFilter
-import com.google.common.primitives.UnsignedBytes
 import org.chronos.chronostore.io.format.CompressionAlgorithm
 import org.chronos.chronostore.io.vfs.InputSource
 import org.chronos.chronostore.util.LittleEndianUtil
@@ -36,6 +35,10 @@ sealed interface Bytes :
         val TRUE: Bytes = BasicBytes(byteArrayOf(1))
 
         val FALSE: Bytes = BasicBytes(byteArrayOf(0))
+
+        fun of(vararg bytes: Byte): Bytes {
+            return BasicBytes(byteArrayOf(*bytes))
+        }
 
         /**
          * Creates a new [Bytes] object that wraps the given [ByteArray].
@@ -98,7 +101,7 @@ sealed interface Bytes :
             if (algorithm == CompressionAlgorithm.NONE) {
                 return this
             }
-            return wrap(algorithm.decompress(this.toSharedArrayUnsafe()))
+            return wrap(algorithm.decompress(toSharedArrayUnsafe()))
         }
 
 
@@ -318,13 +321,6 @@ sealed interface Bytes :
         // the following implementation has been borrowed from Xodus
         // and slightly adapted, but RocksDB uses the same comparison technique.
         val min = min(this.size, other.size)
-
-        // TODO [PERFORMANCE] We could try other alternatives instead of comparing byte-by-byte here.
-        // For example:
-        // - how about converting 8 bytes at a time into an (unsinged) long (by concatenation) and comparing the longs unsigned?
-        // - how about using a fixed-size byte array (pre-allocated), flush a section of the bytes in there, and use the guava UnsignedBytes.lexicographicalComparator()
-
-        UnsignedBytes.lexicographicalComparator()
 
         for (i in 0..<min) {
             val myByteUnsigned = this[i].toInt() and 0xff

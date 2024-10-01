@@ -1,22 +1,13 @@
 package org.chronos.chronostore.util.bytes
 
 import com.google.common.collect.Iterators
-import com.google.common.hash.BloomFilter
-import com.google.common.hash.PrimitiveSink
-import org.chronos.chronostore.io.format.CompressionAlgorithm
 import org.chronos.chronostore.util.ByteArrayExtensions.hex
-import org.chronos.chronostore.util.LittleEndianUtil
-import org.chronos.chronostore.util.bits.BitTricks.writeStableInt
-import org.chronos.chronostore.util.bits.BitTricks.writeStableLong
+import org.chronos.chronostore.util.comparator.UnsignedBytesComparator
 import org.chronos.chronostore.util.unit.Bytes
 import java.io.ByteArrayInputStream
-import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.io.OutputStream
-import java.nio.charset.Charset
-import java.util.*
 import kotlin.math.min
-import kotlin.random.Random
 
 class BasicBytes(
     private val array: ByteArray,
@@ -71,6 +62,32 @@ class BasicBytes(
             is Bytes -> Iterators.elementsEqual(this.iterator(), other.iterator())
             else -> false
         }
+    }
+
+    override fun compareTo(other: Bytes): Int {
+        return when (other) {
+            is SliceBytes -> compareToSliceBytes(other)
+            is BasicBytes -> compareToBasicBytes(other)
+        }
+    }
+
+    private fun compareToSliceBytes(other: SliceBytes): Int {
+        return other.compareTo(this) * -1
+    }
+
+    private fun compareToBasicBytes(other: BasicBytes): Int {
+        return UnsignedBytesComparator.compare(this.array, other.array)
+    }
+
+    fun compareTo(array: ByteArray, from: Int, to: Int): Int {
+        return UnsignedBytesComparator.compare(
+            left = this.array,
+            leftFromInclusive = 0,
+            leftToInclusive = this.array.lastIndex,
+            right = array,
+            rightFromInclusive = from,
+            rightToInclusive = to,
+        )
     }
 
     override fun hashCode(): Int {

@@ -2,14 +2,16 @@ package org.chronos.chronostore.util.bytes
 
 import com.google.common.collect.Iterators
 import org.chronos.chronostore.util.ByteArrayExtensions.hex
+import org.chronos.chronostore.util.comparator.UnsignedBytesComparator
 import org.chronos.chronostore.util.unit.Bytes
 import java.io.OutputStream
 import kotlin.math.min
+import kotlin.math.sign
 
 class SliceBytes(
     private val array: ByteArray,
     private val startInclusive: Int,
-    private val endInclusive: Int
+    private val endInclusive: Int,
 ) : Bytes {
 
     override val size: Int = this.endInclusive - this.startInclusive + 1
@@ -111,6 +113,28 @@ class SliceBytes(
 
     override fun iterator(): ByteIterator {
         return SliceBytesIterator()
+    }
+
+    override fun compareTo(other: Bytes): Int {
+        return when (other) {
+            is SliceBytes -> compareToSliceBytes(other)
+            is BasicBytes -> compareToBasicBytes(other)
+        }
+    }
+
+    private fun compareToSliceBytes(other: SliceBytes): Int {
+        return UnsignedBytesComparator.compare(
+            left = this.array,
+            leftFromInclusive = this.startInclusive,
+            leftToInclusive = this.endInclusive,
+            right = other.array,
+            rightFromInclusive = other.startInclusive,
+            rightToInclusive = other.endInclusive,
+        )
+    }
+
+    private fun compareToBasicBytes(other: BasicBytes): Int {
+        return other.compareTo(this.array, this.startInclusive, this.endInclusive) * -1
     }
 
     private inner class SliceBytesIterator : ByteIterator() {
