@@ -5,7 +5,7 @@ import org.chronos.chronostore.util.LittleEndianExtensions.readLittleEndianLong
 import org.chronos.chronostore.util.LittleEndianExtensions.writeLittleEndianInt
 import org.chronos.chronostore.util.LittleEndianExtensions.writeLittleEndianLong
 import org.chronos.chronostore.util.PrefixIO
-import org.chronos.chronostore.util.Timestamp
+import org.chronos.chronostore.util.TSN
 import org.chronos.chronostore.util.bytes.Bytes
 import java.io.InputStream
 import java.io.OutputStream
@@ -14,8 +14,8 @@ class BlockMetaData(
     val blockSequenceNumber: Int,
     val minKey: Bytes,
     val maxKey: Bytes,
-    val minTimestamp: Timestamp,
-    val maxTimestamp: Timestamp,
+    val minTSN: TSN,
+    val maxTSN: TSN,
     val commandCount: Int,
     val compressedDataSize: Int,
     val uncompressedDataSize: Int,
@@ -27,8 +27,8 @@ class BlockMetaData(
             val blockSequenceNumber = inputStream.readLittleEndianInt()
             val minKey = PrefixIO.readBytes(inputStream)
             val maxKey = PrefixIO.readBytes(inputStream)
-            val minTimestamp = inputStream.readLittleEndianLong()
-            val maxTimestamp = inputStream.readLittleEndianLong()
+            val minTSN = inputStream.readLittleEndianLong()
+            val maxTSN = inputStream.readLittleEndianLong()
             val commandCount = inputStream.readLittleEndianInt()
             val compressedSize = inputStream.readLittleEndianInt()
             val uncompressedSize = inputStream.readLittleEndianInt()
@@ -36,8 +36,8 @@ class BlockMetaData(
                 blockSequenceNumber = blockSequenceNumber,
                 minKey = minKey,
                 maxKey = maxKey,
-                minTimestamp = minTimestamp,
-                maxTimestamp = maxTimestamp,
+                minTSN = minTSN,
+                maxTSN = maxTSN,
                 commandCount = commandCount,
                 compressedDataSize = compressedSize,
                 uncompressedDataSize = uncompressedSize,
@@ -51,9 +51,9 @@ class BlockMetaData(
         require(!this.minKey.isEmpty()) { "Argument 'minKey' must not be empty!" }
         require(!this.maxKey.isEmpty()) { "Argument 'maxKey' must not be empty!" }
         require(this.minKey <= this.maxKey) { "Argument 'minKey' is greater than argument 'maxKey'!" }
-        require(this.minTimestamp >= 0) { "Argument 'minTimestamp' must not be negative!" }
-        require(this.maxTimestamp >= 0) { "Argument 'maxTimestamp' must not be negative!" }
-        require(this.minTimestamp <= this.maxTimestamp) { "Argument 'minTimestamp' (${this.minTimestamp}) is greater than argument 'maxTimestamp' (${this.maxTimestamp})!" }
+        require(this.minTSN >= 0) { "Argument 'minTSN' must not be negative!" }
+        require(this.maxTSN >= 0) { "Argument 'maxTSN' must not be negative!" }
+        require(this.minTSN <= this.maxTSN) { "Argument 'minTSN' (${this.minTSN}) is greater than argument 'maxTSN' (${this.maxTSN})!" }
         require(this.compressedDataSize >= 0) { "Argument 'compressedSize' must not be negative (${this.compressedDataSize})!" }
         require(this.uncompressedDataSize >= 0) { "Argument 'compressedSize' must not be negative (${this.uncompressedDataSize})!" }
     }
@@ -77,8 +77,8 @@ class BlockMetaData(
         outputStream.writeLittleEndianInt(this.blockSequenceNumber)
         PrefixIO.writeBytes(outputStream, this.minKey)
         PrefixIO.writeBytes(outputStream, this.maxKey)
-        outputStream.writeLittleEndianLong(this.minTimestamp)
-        outputStream.writeLittleEndianLong(this.maxTimestamp)
+        outputStream.writeLittleEndianLong(this.minTSN)
+        outputStream.writeLittleEndianLong(this.maxTSN)
         outputStream.writeLittleEndianInt(this.commandCount)
         outputStream.writeLittleEndianInt(this.compressedDataSize)
         outputStream.writeLittleEndianInt(this.uncompressedDataSize)
@@ -88,8 +88,8 @@ class BlockMetaData(
         return "BlockMetaData(" +
             "minKey=$minKey, " +
             "maxKey=$maxKey, " +
-            "minTimestamp=$minTimestamp, " +
-            "maxTimestamp=$maxTimestamp, " +
+            "minTSN=$minTSN, " +
+            "maxTSN=$maxTSN, " +
             "commandCount=$commandCount, " +
             "compressedSize=$compressedDataSize, " +
             "uncompressedSize=$uncompressedDataSize" +

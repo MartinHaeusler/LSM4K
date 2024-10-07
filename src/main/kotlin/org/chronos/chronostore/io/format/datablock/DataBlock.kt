@@ -4,9 +4,7 @@ import org.chronos.chronostore.io.format.BlockMetaData
 import org.chronos.chronostore.io.format.ChronoStoreFileFormat
 import org.chronos.chronostore.io.format.CompressionAlgorithm
 import org.chronos.chronostore.model.command.Command
-import org.chronos.chronostore.model.command.KeyAndTimestamp
-import org.chronos.chronostore.util.IOExtensions.withInputStream
-import org.chronos.chronostore.util.LittleEndianExtensions.readLittleEndianInt
+import org.chronos.chronostore.model.command.KeyAndTSN
 import org.chronos.chronostore.util.TreeMapUtils
 import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.bytes.BytesBuffer
@@ -14,13 +12,11 @@ import org.chronos.chronostore.util.cursor.Cursor
 import org.chronos.chronostore.util.cursor.EmptyCursor
 import org.chronos.chronostore.util.cursor.NavigableMapCursor
 import org.chronos.chronostore.util.statistics.ChronoStoreStatistics
-import java.io.ByteArrayInputStream
-import java.io.InputStream
 import java.util.*
 
 class DataBlock(
     val metaData: BlockMetaData,
-    private val data: NavigableMap<KeyAndTimestamp, Command>,
+    private val data: NavigableMap<KeyAndTSN, Command>,
 ) {
 
     companion object {
@@ -56,7 +52,7 @@ class DataBlock(
             // decompress the data
             val decompressedData = compressionAlgorithm.decompress(compressedBytes, blockMetaData.uncompressedDataSize)
 
-            val commandsArray = arrayOfNulls<Map.Entry<KeyAndTimestamp, Command>>(blockMetaData.commandCount)
+            val commandsArray = arrayOfNulls<Map.Entry<KeyAndTSN, Command>>(blockMetaData.commandCount)
             val decompressedBuffer = BytesBuffer(decompressedData)
 
             for (i in 0..commandsArray.lastIndex) {
@@ -66,7 +62,7 @@ class DataBlock(
                             "Could not read command at index ${i} from the decompressed buffer -" +
                                 " expected ${blockMetaData.commandCount} commands to be in the buffer!"
                         )
-                    commandsArray[i] = ImmutableEntry(command.keyAndTimestamp, command)
+                    commandsArray[i] = ImmutableEntry(command.keyAndTSN, command)
                 } catch (e: Exception) {
                     throw IllegalStateException(
                         "Could not read command at index ${i} (of ${blockMetaData.commandCount - 1} total) from the decompressed buffer! Cause: ${e}",
@@ -85,7 +81,7 @@ class DataBlock(
             // this cast is 100% safe!
             // We collect the data in an array of commands which gets initialized with NULL values. Once we've extracted
             // all commands from the block, we will have filled every spot in the array with a non-NULL command.
-            val commands = TreeMapUtils.treeMapFromSortedList(commandsArray.asList() as List<Map.Entry<KeyAndTimestamp, Command>>)
+            val commands = TreeMapUtils.treeMapFromSortedList(commandsArray.asList() as List<Map.Entry<KeyAndTSN, Command>>)
 
             return DataBlock(
                 metaData = blockMetaData,
@@ -123,7 +119,7 @@ class DataBlock(
     /**
      * Attempts to get the value for the given [key] from this block.
      *
-     * @param key The key-and-timestamp to get from the block.
+     * @param key The key-and-TSN to get from the block.
      *
      * @return Either the successful result, or `null` if the key wasn't found at all.
      *         If the key was found, a pair is returned. The command is the command
@@ -133,27 +129,27 @@ class DataBlock(
      *         the case, the next data block needs to be consulted as well, because
      *         the entry we returned may not be the **latest** entry for the key.
      */
-    fun get(key: KeyAndTimestamp): Pair<Command, Boolean>? {
+    fun get(key: KeyAndTSN): Pair<Command, Boolean>? {
         if (key.key !in metaData.minKey..metaData.maxKey) {
             return null
         }
-        if (key.timestamp < metaData.minTimestamp) {
+        if (key.tsn < metaData.minTSN) {
             return null
         }
-        val (foundKeyAndTimestamp, foundCommand) = data.floorEntry(key)
+        val (foundKeyAndTSN, foundCommand) = data.floorEntry(key)
             ?: return null // request key is too small
 
         // did we hit the same key?
-        return if (foundKeyAndTimestamp.key == key.key) {
+        return if (foundKeyAndTSN.key == key.key) {
             // key is the same -> this is the entry we're looking for.
-            Pair(foundCommand, data.lastKey() == foundKeyAndTimestamp)
+            Pair(foundCommand, data.lastKey() == foundKeyAndTSN)
         } else {
             // key is different -> the key we wanted doesn't exist.
             null
         }
     }
 
-    inline fun <T> withCursor(action: (Cursor<KeyAndTimestamp, Command>) -> T): T {
+    inline fun <T> withCursor(action: (Cursor<KeyAndTSN, Command>) -> T): T {
         return cursor().use(action)
     }
 
@@ -164,7 +160,7 @@ class DataBlock(
      *
      * @return the new cursor.
      */
-    fun cursor(): Cursor<KeyAndTimestamp, Command> {
+    fun cursor(): Cursor<KeyAndTSN, Command> {
         return if (this.data.isEmpty()) {
             EmptyCursor(
                 getCursorName = { "Data Block #${this.metaData.blockSequenceNumber}" }

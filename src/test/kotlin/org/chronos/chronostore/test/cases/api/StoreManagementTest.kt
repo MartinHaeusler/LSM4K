@@ -2,10 +2,11 @@ package org.chronos.chronostore.test.cases.api
 
 import org.chronos.chronostore.api.ChronoStoreConfiguration
 import org.chronos.chronostore.api.ChronoStoreTransaction
+import org.chronos.chronostore.api.TransactionalStore.Companion.withCursor
 import org.chronos.chronostore.lsm.LSMTreeFile
-import org.chronos.chronostore.test.extensions.transaction.ChronoStoreTransactionTestExtensions.allEntriesOnLatest
+import org.chronos.chronostore.test.extensions.transaction.ChronoStoreTransactionTestExtensions.allEntries
 import org.chronos.chronostore.test.extensions.transaction.ChronoStoreTransactionTestExtensions.delete
-import org.chronos.chronostore.test.extensions.transaction.ChronoStoreTransactionTestExtensions.getLatest
+import org.chronos.chronostore.test.extensions.transaction.ChronoStoreTransactionTestExtensions.get
 import org.chronos.chronostore.test.extensions.transaction.ChronoStoreTransactionTestExtensions.put
 import org.chronos.chronostore.test.util.ChronoStoreMode
 import org.chronos.chronostore.test.util.ChronoStoreTest
@@ -16,6 +17,7 @@ import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.unit.GiB
 import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.fail
+import strikt.api.expect
 import strikt.api.expectThat
 import strikt.api.expectThrows
 import strikt.assertions.*
@@ -29,8 +31,8 @@ class StoreManagementTest {
     fun canCreateStoresAndPerformPutAndGet(mode: ChronoStoreMode) {
         mode.withChronoStore { chronoStore ->
             chronoStore.transaction { tx ->
-                tx.createNewStore("test", versioned = true)
-                tx.createNewStore("math", versioned = false)
+                tx.createNewStore("test")
+                tx.createNewStore("math")
                 tx.commit()
             }
             chronoStore.transaction { tx ->
@@ -48,13 +50,13 @@ class StoreManagementTest {
                     get { allStores }.hasSize(2).and {
                         any {
                             get { this.storeId }.isEqualTo(StoreId.of("test"))
-                            get { this.getLatest("foo") }.isEqualTo(BasicBytes("bar"))
-                            get { this.getLatest("bullshit") }.isNull()
+                            get { this.get("foo") }.isEqualTo(BasicBytes("bar"))
+                            get { this.get("bullshit") }.isNull()
                         }
                         any {
                             get { this.storeId }.isEqualTo(StoreId.of("math"))
-                            get { this.getLatest("pi") }.isEqualTo(BasicBytes("3.1415"))
-                            get { this.getLatest("e") }.isEqualTo(BasicBytes("2.718"))
+                            get { this.get("pi") }.isEqualTo(BasicBytes("3.1415"))
+                            get { this.get("e") }.isEqualTo(BasicBytes("2.718"))
                         }
                     }
 
@@ -71,13 +73,13 @@ class StoreManagementTest {
                 get { allStores }.hasSize(2).and {
                     any {
                         get { this.storeId }.isEqualTo(StoreId.of("test"))
-                        get { this.getLatest("foo") }.isEqualTo(BasicBytes("bar"))
-                        get { this.getLatest("bullshit") }.isNull()
+                        get { this.get("foo") }.isEqualTo(BasicBytes("bar"))
+                        get { this.get("bullshit") }.isNull()
                     }
                     any {
                         get { this.storeId }.isEqualTo(StoreId.of("math"))
-                        get { this.getLatest("pi") }.isEqualTo(BasicBytes("3.1415"))
-                        get { this.getLatest("e") }.isEqualTo(BasicBytes("2.718"))
+                        get { this.get("pi") }.isEqualTo(BasicBytes("3.1415"))
+                        get { this.get("e") }.isEqualTo(BasicBytes("2.718"))
                     }
                 }
             }
@@ -85,9 +87,9 @@ class StoreManagementTest {
 
         mode.withChronoStore { chronoStore ->
             chronoStore.transaction { tx ->
-                val test = tx.createNewStore("test", versioned = true)
+                val test = tx.createNewStore("test")
                 test.put("foo", "bar")
-                val math = tx.createNewStore("math", versioned = false)
+                val math = tx.createNewStore("math")
                 math.put("pi", "3.1415")
                 math.put("e", "2.718")
 
@@ -109,11 +111,11 @@ class StoreManagementTest {
                 get { allStores }.hasSize(2).and {
                     any {
                         get { this.storeId }.isEqualTo(StoreId.of("test"))
-                        get { this.allEntriesOnLatest }.containsExactly(BasicBytes("foo") to BasicBytes("bar"))
+                        get { this.allEntries }.containsExactly(BasicBytes("foo") to BasicBytes("bar"))
                     }
                     any {
                         get { this.storeId }.isEqualTo(StoreId.of("math"))
-                        get { this.allEntriesOnLatest }.containsExactly(
+                        get { this.allEntries }.containsExactly(
                             BasicBytes("e") to BasicBytes("2.718"),
                             BasicBytes("pi") to BasicBytes("3.1415")
                         )
@@ -124,9 +126,9 @@ class StoreManagementTest {
 
         mode.withChronoStore { chronoStore ->
             chronoStore.transaction { tx ->
-                val test = tx.createNewStore("test", versioned = true)
+                val test = tx.createNewStore("test")
                 test.put("foo", "bar")
-                val math = tx.createNewStore("math", versioned = false)
+                val math = tx.createNewStore("math")
                 math.put("pi", "3.1415")
                 math.put("e", "2.718")
 
@@ -161,7 +163,7 @@ class StoreManagementTest {
         config.mergeInterval = (-1).minutes
         mode.withChronoStore(config) { chronoStore ->
             chronoStore.transaction { tx ->
-                val data = tx.createNewStore("data", versioned = true)
+                val data = tx.createNewStore("data")
                 repeat(numberOfEntries) { i ->
                     data.put(createKey(i), "value#${i}")
                 }
@@ -170,7 +172,7 @@ class StoreManagementTest {
 
             // start iterating in a new transaction
             val tx1 = chronoStore.beginTransaction()
-            val c1 = tx1.getStore("data").openCursorOnLatest()
+            val c1 = tx1.getStore("data").openCursor()
             c1.firstOrThrow()
             val c1Sequence1 = c1.ascendingEntrySequenceFromHere()
 
@@ -183,7 +185,7 @@ class StoreManagementTest {
             c1.firstOrThrow()
 
             val tx2 = chronoStore.beginTransaction()
-            val c2 = tx2.getStore("data").openCursorOnLatest()
+            val c2 = tx2.getStore("data").openCursor()
 
             c2.firstOrThrow()
             val c2Sequence1 = c2.ascendingEntrySequenceFromHere()
@@ -237,14 +239,20 @@ class StoreManagementTest {
             // | 18   | a        | b        | b        | b        |
             // | 19   | a        | a        | a        | a        |
             //
-            val commitTimestamp1 = chronoStore.transaction { tx ->
-                val data = tx.createNewStore("data", versioned = true)
+            val txAtZero = chronoStore.beginTransaction()
+
+
+            chronoStore.transaction { tx ->
+                val data = tx.createNewStore("data")
                 repeat(numberOfEntries) { i ->
                     data.put(createKey(i), "a")
                 }
                 tx.commit()
             }
-            val commitTimestamp2 = chronoStore.transaction { tx ->
+
+            val txAtTSN1 = chronoStore.beginTransaction()
+
+           chronoStore.transaction { tx ->
                 val data = tx.getStore("data")
                 for (i in (0..<numberOfEntries step 3)) {
                     data.put(createKey(i), "b")
@@ -252,10 +260,12 @@ class StoreManagementTest {
                 tx.commit()
             }
 
+            val txAtTSN2 = chronoStore.beginTransaction()
+
             // flush the in-memory stores to the VFS
             chronoStore.forest.flushAllInMemoryStoresToDisk()
 
-            val commitTimestamp3 = chronoStore.transaction { tx ->
+            chronoStore.transaction { tx ->
                 val data = tx.getStore("data")
                 for (i in (0..<numberOfEntries step 5)) {
                     data.delete(createKey(i))
@@ -263,16 +273,20 @@ class StoreManagementTest {
                 tx.commit()
             }
 
+            val txAtTSN3 = chronoStore.beginTransaction()
+
             // flush the in-memory stores to the VFS
             chronoStore.forest.flushAllInMemoryStoresToDisk()
 
-            val commitTimestamp4 = chronoStore.transaction { tx ->
+            chronoStore.transaction { tx ->
                 val data = tx.getStore("data")
                 for (i in (0..<numberOfEntries step 7)) {
                     data.put(createKey(i), "c")
                 }
                 tx.commit()
             }
+
+            val txAtTSN4 = chronoStore.beginTransaction()
 
             val storeDir = vfs.directory("data")
 
@@ -284,7 +298,7 @@ class StoreManagementTest {
 
             // iterate over the data.
             chronoStore.transaction { tx ->
-                tx.getStore("data").openCursorOnLatest().use { cursor ->
+                tx.getStore("data").withCursor { cursor ->
                     cursor.firstOrThrow()
                     val entries = cursor.ascendingEntrySequenceFromHere().toList()
                     expectThat(entries).map { it.first.asString() to it.second.asString() }.containsExactly(
@@ -308,15 +322,10 @@ class StoreManagementTest {
                     )
                 }
 
-                tx.getStore("data").openCursorAtTimestamp(0).use { cursor ->
-                    expectThat(cursor.first()).isFalse() // should be empty at timestamp 0
-                }
+                expectThat(txAtZero.getStoreOrNull("data")).isNull()
 
-                tx.getStore("data").openCursorAtTimestamp(commitTimestamp1 - 1).use { cursor ->
-                    expectThat(cursor.first()).isFalse() // should be empty prior to first insertion
-                }
 
-                tx.getStore("data").openCursorAtTimestamp(commitTimestamp1).use { cursor ->
+                txAtTSN1.getStore("data").withCursor { cursor ->
                     cursor.firstOrThrow()
                     val entries = cursor.ascendingEntrySequenceFromHere().toList()
                     expectThat(entries).map { it.first.asString() to it.second.asString() }.containsExactly(
@@ -343,7 +352,7 @@ class StoreManagementTest {
                     )
                 }
 
-                tx.getStore("data").openCursorAtTimestamp(commitTimestamp2).use { cursor ->
+                txAtTSN2.getStore("data").withCursor { cursor ->
                     cursor.firstOrThrow()
                     val entries = cursor.ascendingEntrySequenceFromHere().toList()
                     expectThat(entries).map { it.first.asString() to it.second.asString() }.containsExactly(
@@ -370,7 +379,7 @@ class StoreManagementTest {
                     )
                 }
 
-                tx.getStore("data").openCursorAtTimestamp(commitTimestamp3).use { cursor ->
+                txAtTSN3.getStore("data").withCursor { cursor ->
                     cursor.firstOrThrow()
                     val entries = cursor.ascendingEntrySequenceFromHere().toList()
                     expectThat(entries).map { it.first.asString() to it.second.asString() }.containsExactly(
@@ -393,7 +402,7 @@ class StoreManagementTest {
                     )
                 }
 
-                tx.getStore("data").openCursorAtTimestamp(commitTimestamp4).use { cursor ->
+                txAtTSN4.getStore("data").withCursor { cursor ->
                     cursor.firstOrThrow()
                     val entries = cursor.ascendingEntrySequenceFromHere().toList()
                     expectThat(entries).map { it.first.asString() to it.second.asString() }.containsExactly(
@@ -424,33 +433,48 @@ class StoreManagementTest {
     fun canIsolateTransactionsFromOneAnother(mode: ChronoStoreMode) {
         mode.withChronoStore { chronoStore ->
             chronoStore.transaction { tx ->
-                val data = tx.createNewStore("data", versioned = true)
+                // TSN start at 1
+                expectThat(tx.lastVisibleSerialNumber).isEqualTo(1)
+
+                val data = tx.createNewStore("data")
+                // creating a store increases the TSN (now at 2)
                 data.put("hello", "world")
                 data.put("john", "doe")
-                val math = tx.createNewStore("math", versioned = false)
+                val math = tx.createNewStore("math")
+                // creating a store increases the TSN (now at 3)
                 math.put("pi", "3.1415")
                 math.put("e", "2.7182")
+
+                // committing a transaction increases the TSN (now at 4)
                 tx.commit()
             }
 
             chronoStore.transaction { tx1 ->
                 chronoStore.transaction { tx2 ->
 
+                    expect {
+                        that(tx1.lastVisibleSerialNumber).isEqualTo(4)
+                        that(tx2.lastVisibleSerialNumber).isEqualTo(4)
+                    }
+
                     tx1.getStore("data").put("foo", "bar")
                     tx1.getStore("data").delete("john")
                     tx1.getStore("math").put("zero", "0")
                     tx1.getStore("math").delete("pi")
 
-                    tx1.commit()
+                    // this commit writes to TSN 5
+                    val writeTSN = tx1.commit()
+
+                    expectThat(writeTSN).isEqualTo(5)
 
                     // tx2 should not see the changes performed by tx1
                     expectThat(tx2) {
-                        get { this.getStore("data").getEntriesOnLatestAscending().asStrings() }.containsExactly(
+                        get { this.getStore("data").getEntriesAscending().asStrings() }.containsExactly(
                             "hello" to "world",
                             "john" to "doe"
                         )
 
-                        get { this.getStore("math").getEntriesOnLatestAscending().asStrings() }.containsExactly(
+                        get { this.getStore("math").getEntriesAscending().asStrings() }.containsExactly(
                             "e" to "2.7182",
                             "pi" to "3.1415"
                         )
@@ -465,22 +489,22 @@ class StoreManagementTest {
         mode.withChronoStore { chronoStore ->
             chronoStore.transaction { tx ->
                 // ok, since we don't have any stores yet.
-                tx.createNewStore("foo/bar", versioned = false)
+                tx.createNewStore("foo/bar")
                 // ok, since "foo" itself is not a store.
-                tx.createNewStore("foo/baz", versioned = false)
+                tx.createNewStore("foo/baz")
                 // not ok, since "foo/bar" and "foo/baz" are stores
                 expectThrows<IllegalArgumentException> {
-                    tx.createNewStore("foo", versioned = false)
+                    tx.createNewStore("foo")
                 }
                 // not ok, since "foo/bar" is already a store
                 expectThrows<IllegalArgumentException> {
-                    tx.createNewStore("foo/bar/baz", versioned = false)
+                    tx.createNewStore("foo/bar/baz")
                 }
                 tx.commit()
             }
 
             chronoStore.transaction { tx ->
-                expectThat( tx.allStores).map { it.storeId.toString() }.containsExactly("foo/bar", "foo/baz")
+                expectThat(tx.allStores).map { it.storeId.toString() }.containsExactly("foo/bar", "foo/baz")
             }
         }
     }
@@ -490,27 +514,27 @@ class StoreManagementTest {
         mode.withChronoStore { chronoStore ->
             chronoStore.transaction { tx ->
                 // ok, since we don't have any stores yet.
-                tx.createNewStore("foo/bar", versioned = false)
+                tx.createNewStore("foo/bar")
                 // ok, since "foo" itself is not a store.
-                tx.createNewStore("foo/baz", versioned = false)
+                tx.createNewStore("foo/baz")
                 tx.commit()
             }
 
             chronoStore.transaction { tx ->
                 // not ok, since "foo/bar" and "foo/baz" are stores
                 expectThrows<IllegalArgumentException> {
-                    tx.createNewStore("foo", versioned = false)
+                    tx.createNewStore("foo")
                 }
                 // not ok, since "foo/bar" is already a store
                 expectThrows<IllegalArgumentException> {
-                    tx.createNewStore("foo/bar/baz", versioned = false)
+                    tx.createNewStore("foo/bar/baz")
                 }
                 // this commit will be empty!
                 tx.commit()
             }
 
             chronoStore.transaction { tx ->
-                expectThat( tx.allStores).map { it.storeId.toString() }.containsExactly("foo/bar", "foo/baz")
+                expectThat(tx.allStores).map { it.storeId.toString() }.containsExactly("foo/bar", "foo/baz")
             }
         }
     }

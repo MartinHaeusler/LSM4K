@@ -1,12 +1,12 @@
 package org.chronos.chronostore.model.command
 
-import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.IOExtensions.withInputStream
 import org.chronos.chronostore.util.LittleEndianExtensions.readLittleEndianLong
 import org.chronos.chronostore.util.LittleEndianExtensions.writeLittleEndianLong
 import org.chronos.chronostore.util.PrefixIO
 import org.chronos.chronostore.util.StringExtensions.ellipsis
-import org.chronos.chronostore.util.Timestamp
+import org.chronos.chronostore.util.TSN
+import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.bytes.BytesBuffer
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
@@ -15,49 +15,50 @@ import java.io.OutputStream
 class Command(
     val opCode: OpCode,
     val key: Bytes,
-    val timestamp: Timestamp,
-    val value: Bytes
+    val tsn: TSN,
+    val value: Bytes,
 ) : Comparable<Command> {
 
     companion object {
 
-        fun put(key: Bytes, timestamp: Timestamp, value: Bytes): Command {
-            return Command(OpCode.PUT, key, timestamp, value)
+        fun put(key: Bytes, tsn: TSN, value: Bytes): Command {
+            return Command(OpCode.PUT, key, tsn, value)
         }
 
-        fun put(key: String, timestamp: Timestamp, value: Bytes): Command {
-            return put(Bytes.wrap(key.toByteArray()), timestamp, value)
+        fun put(key: String, tsn: TSN, value: Bytes): Command {
+            return put(Bytes.wrap(key.toByteArray()), tsn, value)
         }
 
-        fun put(key: Bytes, timestamp: Timestamp, value: String): Command {
-            return put(key, timestamp, Bytes.wrap(value.toByteArray()))
+        fun put(key: Bytes, tsn: TSN, value: String): Command {
+            return put(key, tsn, Bytes.wrap(value.toByteArray()))
         }
 
-        fun put(key: String, timestamp: Timestamp, value: String): Command {
-            return put(Bytes.wrap(key.toByteArray()), timestamp, Bytes.wrap(value.toByteArray()))
+        fun put(key: String, tsn: TSN, value: String): Command {
+            return put(Bytes.wrap(key.toByteArray()), tsn, Bytes.wrap(value.toByteArray()))
         }
 
-        fun del(key: Bytes, timestamp: Timestamp): Command {
-            return Command(OpCode.DEL, key, timestamp, Bytes.EMPTY)
+        fun del(key: Bytes, tsn: TSN): Command {
+            return Command(OpCode.DEL, key, tsn, Bytes.EMPTY)
         }
 
-        fun del(key: String, timestamp: Timestamp): Command {
-            return del(Bytes.wrap(key.toByteArray()), timestamp)
+        fun del(key: String, tsn: TSN): Command {
+            return del(Bytes.wrap(key.toByteArray()), tsn)
         }
 
         fun readFromBytesBuffer(buffer: BytesBuffer): Command? {
             val firstByte = buffer.takeByte()
-            if(firstByte < 0){
+            if (firstByte < 0) {
                 // end of input
                 return null
             }
             val opCode = OpCode.fromByte(firstByte)
             val key = PrefixIO.readBytes(buffer)
-            val timestamp = buffer.takeLittleEndianLong()
+            val tsn = buffer.takeLittleEndianLong()
             val value = when (opCode) {
                 OpCode.PUT -> {
                     PrefixIO.readBytes(buffer)
                 }
+
                 OpCode.DEL -> {
                     Bytes.EMPTY
                 }
@@ -65,7 +66,7 @@ class Command(
             return Command(
                 opCode = opCode,
                 key = key,
-                timestamp = timestamp,
+                tsn = tsn,
                 value = value
             )
         }
@@ -83,13 +84,13 @@ class Command(
 
         fun readFromStreamOrNull(inputStream: InputStream): Command? {
             val firstByte = inputStream.read()
-            if(firstByte < 0){
+            if (firstByte < 0) {
                 // end of input
                 return null
             }
             val opCode = OpCode.fromByte(firstByte)
             val key = PrefixIO.readBytes(inputStream)
-            val timestamp = inputStream.readLittleEndianLong()
+            val tsn = inputStream.readLittleEndianLong()
             val value = when (opCode) {
                 OpCode.PUT -> PrefixIO.readBytes(inputStream)
                 OpCode.DEL -> Bytes.EMPTY
@@ -97,7 +98,7 @@ class Command(
             return Command(
                 opCode = opCode,
                 key = key,
-                timestamp = timestamp,
+                tsn = tsn,
                 value = value
             )
         }
@@ -105,7 +106,7 @@ class Command(
     }
 
     init {
-        require(timestamp >= 0) { "Argument 'timestamp' must not be negative!" }
+        require(tsn >= 0) { "Argument 'tsn' must not be negative!" }
         require(key.isNotEmpty()) { "Argument 'key' must not be empty!" }
     }
 
@@ -133,10 +134,10 @@ class Command(
 
     }
 
-    fun writeToStream(outputStream: OutputStream){
+    fun writeToStream(outputStream: OutputStream) {
         outputStream.write(this.opCode.byte.toInt())
         PrefixIO.writeBytes(outputStream, this.key)
-        outputStream.writeLittleEndianLong(timestamp)
+        outputStream.writeLittleEndianLong(this.tsn)
         when (this.opCode) {
             OpCode.PUT -> {
                 PrefixIO.writeBytes(outputStream, this.value)
@@ -159,25 +160,25 @@ class Command(
             OpCode.PUT -> 1 /* opcode */ +
                 4 /* key length*/ +
                 key.size /* key bytes */ +
-                8 /* timestamp */ +
+                8 /* tsn */ +
                 4 /* value length */ +
                 value.size /* value bytes */
 
             OpCode.DEL -> 1 /* opcode */ +
                 4 /* key length*/ +
                 key.size /* key bytes */ +
-                8 /* timestamp */
+                8 /* tsn */
         }
 
-    val keyAndTimestamp: KeyAndTimestamp
-        get() = KeyAndTimestamp(this.key, this.timestamp)
+    val keyAndTSN: KeyAndTSN
+        get() = KeyAndTSN(this.key, this.tsn)
 
     override fun compareTo(other: Command): Int {
         val keyCmp = this.key.compareTo(other.key)
         if (keyCmp != 0) {
             return keyCmp
         }
-        val timeCmp = this.timestamp.compareTo(other.timestamp)
+        val timeCmp = this.tsn.compareTo(other.tsn)
         if (timeCmp != 0) {
             return timeCmp
         }
@@ -198,22 +199,22 @@ class Command(
 
         if (opCode != other.opCode) return false
         if (key != other.key) return false
-        if (timestamp != other.timestamp) return false
+        if (tsn != other.tsn) return false
         return value == other.value
     }
 
     override fun hashCode(): Int {
         var result = opCode.hashCode()
         result = 31 * result + key.hashCode()
-        result = 31 * result + timestamp.hashCode()
+        result = 31 * result + tsn.hashCode()
         result = 31 * result + value.hashCode()
         return result
     }
 
     override fun toString(): String {
         return when (this.opCode) {
-            OpCode.PUT -> "PUT[${this.key.hex()}@${this.timestamp}: ${this.value.hex().ellipsis(32)}]"
-            OpCode.DEL -> "DEL[${this.key.hex()}@${this.timestamp}]"
+            OpCode.PUT -> "PUT[${this.key.hex()}@${this.tsn}: ${this.value.hex().ellipsis(32)}]"
+            OpCode.DEL -> "DEL[${this.key.hex()}@${this.tsn}]"
         }
     }
 

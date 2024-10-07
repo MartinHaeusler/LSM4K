@@ -1,7 +1,7 @@
 package org.chronos.chronostore.benchmark
 
 import org.chronos.chronostore.api.ChronoStoreConfiguration
-import org.chronos.chronostore.api.TransactionalStore.Companion.withCursorOnLatest
+import org.chronos.chronostore.api.TransactionalStore.Companion.withCursor
 import org.chronos.chronostore.impl.transaction.TransactionalStoreInternal
 import org.chronos.chronostore.lsm.LSMTreeFile
 import org.chronos.chronostore.test.util.ChronoStoreMode
@@ -28,7 +28,7 @@ object MultiFileReadRegressionBenchmark {
 
         ChronoStoreMode.ONDISK.withChronoStore(config) { chronoStore ->
             chronoStore.transaction { tx ->
-                tx.createNewStore("test", versioned = true)
+                tx.createNewStore("test")
                 tx.commit()
             }
 
@@ -67,7 +67,7 @@ object MultiFileReadRegressionBenchmark {
                 val timeBefore = System.currentTimeMillis()
                 chronoStore.transaction { tx ->
                     val store = tx.getStore("test")
-                    store.withCursorOnLatest { cursor ->
+                    store.withCursor { cursor ->
                         cursor.firstOrThrow()
                         for ((key, value) in cursor.ascendingEntrySequenceFromHere()) {
                             entriesInHead += 1

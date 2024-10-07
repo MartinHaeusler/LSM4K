@@ -16,9 +16,9 @@ import org.chronos.chronostore.lsm.LSMTreeFile.Companion.FILE_EXTENSION
 import org.chronos.chronostore.lsm.cache.FileHeaderCache
 import org.chronos.chronostore.lsm.cache.LocalBlockCache
 import org.chronos.chronostore.model.command.Command
-import org.chronos.chronostore.model.command.KeyAndTimestamp
+import org.chronos.chronostore.model.command.KeyAndTSN
 import org.chronos.chronostore.util.StoreId
-import org.chronos.chronostore.util.Timestamp
+import org.chronos.chronostore.util.TSN
 import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.cursor.*
 import org.chronos.chronostore.util.log.LogExtensions.performance
@@ -50,7 +50,7 @@ class LSMTree(
     }
 
     @Volatile
-    private var inMemoryTree = TreePMap.empty<KeyAndTimestamp, Command>()
+    private var inMemoryTree = TreePMap.empty<KeyAndTSN, Command>()
     private val inMemoryTreeSizeInBytes = AtomicLong(0)
     private val lock = ReentrantReadWriteLock(true)
     private val treeSizeChangedCondition = this.lock.writeLock().newCondition()
@@ -83,8 +83,8 @@ class LSMTree(
             .map { it.substringAfterLast(File.separatorChar) }
             .filter { it.endsWith(FILE_EXTENSION) }
             .mapNotNull(::createLsmTreeFileOrNull)
-            // sort by oldest timestamp ascending (i.e. latest data is at the end of the list)
-            .sortedBy { it.header.metaData.minTimestamp }
+            // sort by oldest TSN ascending (i.e. latest data is at the end of the list)
+            .sortedBy { it.header.metaData.minTSN }
             .toMutableList()
     }
 
@@ -135,39 +135,46 @@ class LSMTree(
     val allFiles: List<LSMTreeFile>
         get() = this.lock.read { this.fileList.toList() }
 
-    val latestReceivedCommitTimestamp: Timestamp?
+    val latestReceivedCommitTSN: TSN?
         get() {
             this.lock.read {
                 // first, check if we have commits in memory.
-                val latestInMemoryCommitTimestamp = this.inMemoryTree.keys.maxOfOrNull { it.timestamp }
-                if (latestInMemoryCommitTimestamp != null) {
-                    return latestInMemoryCommitTimestamp
+                val latestInMemoryCommitTSN = this.inMemoryTree.keys.maxOfOrNull { it.tsn }
+                if (latestInMemoryCommitTSN != null) {
+                    return latestInMemoryCommitTSN
                 }
                 // we have no in-memory changes, so we have
-                // to check our latest persisted timestamp
-                return this.latestPersistedCommitTimestamp
+                // to check our latest persisted TSN
+                return this.latestPersistedCommitTSN
             }
         }
 
-    val latestPersistedCommitTimestamp: Timestamp?
+    val latestPersistedCommitTSN: TSN?
         get() {
             this.lock.read {
                 // we don't have in-memory commits, check the files.
-                // IMPORTANT: we assume here that the highest timestamp is in the file with the HIGHEST index!
-                return this.fileList.lastOrNull()?.header?.metaData?.maxTimestamp
+                // IMPORTANT: we assume here that the highest TSN is in the file with the HIGHEST index!
+                return this.fileList.lastOrNull()?.header?.metaData?.maxTSN
             }
         }
 
-    fun get(keyAndTimestamp: KeyAndTimestamp): Command? {
+    val estimatedNumberOfEntries: Long
+        get() {
+            this.lock.read {
+                return this.fileList.sumOf { it.header.metaData.headEntries }
+            }
+        }
+
+    fun get(keyAndTSN: KeyAndTSN): Command? {
         this.lock.read {
             // first, check the in-memory tree
-            val inMemoryEntry = this.inMemoryTree.floorEntry(keyAndTimestamp)
-            if ((inMemoryEntry != null) && (inMemoryEntry.key.key == keyAndTimestamp.key)) {
+            val inMemoryEntry = this.inMemoryTree.floorEntry(keyAndTSN)
+            if ((inMemoryEntry != null) && (inMemoryEntry.key.key == keyAndTSN.key)) {
                 return inMemoryEntry.value
             }
             // then, search the on-disk files (in reverse order, latest first)
             for (lsmTreeFile in this.fileList.asReversed()) {
-                val result = lsmTreeFile.get(keyAndTimestamp)
+                val result = lsmTreeFile.get(keyAndTSN)
                 if (result != null) {
                     return result
                 }
@@ -176,8 +183,8 @@ class LSMTree(
         }
     }
 
-    fun openCursor(transaction: ChronoStoreTransaction, timestamp: Timestamp): Cursor<Bytes, Command> {
-        require(timestamp <= transaction.lastVisibleTimestamp) { "Cannot open cursor on timestamp ${timestamp}, because the last visible timestamp in the transaction is ${transaction.lastVisibleTimestamp}!" }
+    fun openCursor(transaction: ChronoStoreTransaction): Cursor<Bytes, Command> {
+        val tsn = transaction.lastVisibleSerialNumber
         this.lock.read {
             val inMemoryDataMap = this.inMemoryTree
             val inMemoryCursor = if (inMemoryDataMap.isEmpty()) {
@@ -187,13 +194,13 @@ class LSMTree(
             }
             val fileCursors = this.fileList.asSequence().map { this.cursorManager.openCursorOn(transaction, it) }.toMutableList()
             if (fileCursors.isEmpty()) {
-                return VersioningCursor(inMemoryCursor, timestamp, includeDeletions = true)
+                return VersioningCursor(inMemoryCursor, tsn, includeDeletions = true)
             }
             if (inMemoryCursor !is EmptyCursor) {
                 fileCursors.add(inMemoryCursor)
             }
 
-            val versioningCursors = fileCursors.map { VersioningCursor(it, timestamp, includeDeletions = true) }
+            val versioningCursors = fileCursors.map { VersioningCursor(it, tsn, includeDeletions = true) }
 
             // we need to create a single cursor across all versioning cursors.
             // A single overlay cursor takes one cursor and "overlays" the result of another on top of it
@@ -243,13 +250,13 @@ class LSMTree(
 
     fun putAll(commands: Iterable<Command>) {
         this.lock.write {
-            val containedEntry = commands.asSequence().map { it.keyAndTimestamp }.firstOrNull(this.inMemoryTree::containsKey)
+            val containedEntry = commands.asSequence().map { it.keyAndTSN }.firstOrNull(this.inMemoryTree::containsKey)
             require(containedEntry == null) {
-                "The key-and-timestamp ${containedEntry} is already contained in in-memory LSM tree '${this.storeId}'!"
+                "The key-and-tsn ${containedEntry} is already contained in in-memory LSM tree '${this.storeId}'!"
             }
 
-            val keyAndTimestampToCommand = commands.associateBy { it.keyAndTimestamp }
-            val bytesToInsert = keyAndTimestampToCommand.values.sumOf { it.byteSize }.toLong()
+            val keyAndTSNToCommand = commands.associateBy { it.keyAndTSN }
+            val bytesToInsert = keyAndTSNToCommand.values.sumOf { it.byteSize }.toLong()
 
             // if the tree size gets too big, we have to block the writes until we have enough space
             // again. This is very unfortunate, but cannot be avoided. If the writer generates more
@@ -262,7 +269,7 @@ class LSMTree(
             // data to disk which absolutely has to be avoided; otherwise efficient startup recovery
             // is not possible. By updating the "this.inMemoryTree" reference only with the fully
             // updated tree, we guarantee that each flush task either reads all commands, or none.
-            this.inMemoryTree = this.inMemoryTree.plusAll(keyAndTimestampToCommand)
+            this.inMemoryTree = this.inMemoryTree.plusAll(keyAndTSNToCommand)
             this.inMemoryTreeSizeInBytes.getAndAdd(bytesToInsert)
 
             // the in-memory tree size has changed, notify listeners
@@ -274,9 +281,9 @@ class LSMTree(
         this.forest.onBeforeInMemoryInsert(this, bytesToInsert)
     }
 
-    fun getMaxPersistedTimestamp(): Timestamp {
+    fun getMaxPersistedTSN(): TSN {
         return fileList.asSequence()
-            .mapNotNull { it.header.metaData.maxTimestamp }
+            .mapNotNull { it.header.metaData.maxTSN }
             .maxOrNull() ?: -1
     }
 
@@ -326,7 +333,7 @@ class LSMTree(
                     this.lock.write {
                         this.fileList += this.createLsmTreeFile(file)
                         // ensure that the merged file is at the correct position in the list
-                        this.fileList.sortBy { it.header.metaData.minTimestamp }
+                        this.fileList.sortBy { it.header.metaData.minTSN }
                         log.performance { "Removing ${commands.keys.size} keys from the in-memory tree (which has ${this.inMemoryTree.size} keys)..." }
                         this.inMemoryTree = this.inMemoryTree.minusAll(commands.keys)
                         log.performance { "${inMemoryTree.size} entries remaining in-memory after flush of tree ${this.path}" }
@@ -373,7 +380,7 @@ class LSMTree(
         taskMonitor.reportDone()
     }
 
-    fun mergeFiles(fileIndices: Set<Int>, retainOldVersions: Boolean, monitor: TaskMonitor) {
+    fun mergeFiles(fileIndices: Set<Int>, monitor: TaskMonitor) {
         log.debug { "TASK: merge files: ${fileIndices.sorted().joinToString(prefix = "[", separator = ", ", postfix = "]")}" }
         this.performAsyncWriteTask(monitor) {
             monitor.reportStarted("Merging ${fileIndices.size} files")
@@ -399,7 +406,12 @@ class LSMTree(
                         outputStream = overWriter.outputStream,
                         settings = this.newFileSettings,
                     ).use { writer ->
-                        CompactionUtil.compact(cursors, retainOldVersions, writer, maxMerge, totalEntries)
+                        CompactionUtil.compact(
+                            cursors = cursors,
+                            writer = writer,
+                            maxMerge = maxMerge,
+                            totalEntries = totalEntries
+                        )
                     }
                 } finally {
                     for (cursor in cursors) {

@@ -19,7 +19,7 @@ import org.chronos.chronostore.lsm.cache.BlockCacheManager
 import org.chronos.chronostore.lsm.cache.FileHeaderCache
 import org.chronos.chronostore.util.IOExtensions.withInputStream
 import org.chronos.chronostore.util.StoreId
-import org.chronos.chronostore.util.Timestamp
+import org.chronos.chronostore.util.TSN
 import org.chronos.chronostore.util.TransactionId
 import org.chronos.chronostore.util.json.JsonUtil
 import java.util.concurrent.locks.ReentrantReadWriteLock
@@ -104,9 +104,8 @@ class StoreManagerImpl(
         val storeId = StoreId.of(storeInfo.storeId)
         return StoreImpl(
             storeId = storeId,
-            retainOldVersions = storeInfo.retainOldVersions,
-            validFrom = storeInfo.validFrom,
-            validTo = storeInfo.validTo,
+            validFromTSN = storeInfo.validFromTSN,
+            validToTSN = storeInfo.validToTSN,
             createdByTransactionId = storeInfo.createdByTransactionId,
             directory = directory,
             forest = this.forest,
@@ -133,10 +132,10 @@ class StoreManagerImpl(
         }
     }
 
-    override fun createNewStore(transaction: ChronoStoreTransaction, name: StoreId, versioned: Boolean, validFrom: Timestamp): Store {
+    override fun createNewStore(transaction: ChronoStoreTransaction, name: StoreId, validFromTSN: TSN): Store {
         check(this.isOpen) { DB_ALREADY_CLOSED }
         check(transaction.isOpen) { "Argument 'transaction' must refer to an open transaction, but the given transaction has already been closed!" }
-        require(validFrom >= transaction.lastVisibleTimestamp) { "Argument 'validFrom' (${validFrom}) must not be smaller than the transaction timestamp (${transaction.lastVisibleTimestamp})!" }
+        require(validFromTSN >= transaction.lastVisibleSerialNumber) { "Argument 'validFrom' (${validFromTSN}) must not be smaller than the transaction last visible TSN (${transaction.lastVisibleSerialNumber})!" }
         this.lock.write {
             assertInitialized()
             require(!name.isSystemInternal) { "Store names must not start with '_' (reserved for internal purposes)!" }
@@ -148,15 +147,14 @@ class StoreManagerImpl(
                 "The given StoreID '${name}' collides with existing StoreID '${offendingStore}' - StoreID paths must not be prefixes of one another (Stores cannot be 'nested')!"
             }
             val transactionId = transaction.id
-            return createAndRegisterStoreInternal(name, versioned, validFrom, transactionId)
+            return createAndRegisterStoreInternal(name, validFromTSN, transactionId)
         }
     }
 
     private fun createAndRegisterStoreInternal(
         storeId: StoreId,
-        versioned: Boolean,
-        validFrom: Timestamp,
-        transactionId: TransactionId
+        validFromTSN: TSN,
+        transactionId: TransactionId,
     ): StoreImpl {
         // do a small probing by creating the directory, but don't do anything with it just yet.
         // We still have to update the storeInfo.json first before going ahead. Creating the
@@ -168,9 +166,8 @@ class StoreManagerImpl(
         this.storesById.values.asSequence().map { it.storeInfo }.toCollection(storeInfoList)
         val newStoreInfo = StoreInfo(
             storeId = storeId.toString(),
-            retainOldVersions = versioned,
-            validFrom = validFrom,
-            validTo = null,
+            validFromTSN = validFromTSN,
+            validToTSN = null,
             createdByTransactionId = transactionId
         )
         storeInfoList.add(newStoreInfo)
@@ -205,8 +202,7 @@ class StoreManagerImpl(
             }
             return this.createAndRegisterStoreInternal(
                 storeId = systemStore.storeId,
-                versioned = systemStore.isVersioned,
-                validFrom = 0L,
+                validFromTSN = 0L,
                 transactionId = TransactionId.fromString("11111111-1111-1111-2222-000000000001")
             )
         }
@@ -234,7 +230,7 @@ class StoreManagerImpl(
     /**
      * Returns all stores.
      *
-     * Internal method which returns all stores, regardless of the [Store.validFrom] timestamp.
+     * Internal method which returns all stores, regardless of the [Store.validFromTSN].
      *
      * Public API users should use [getAllStores] instead.
      *
@@ -272,34 +268,34 @@ class StoreManagerImpl(
         monitor.reportDone()
     }
 
-    override fun getHighWatermarkTimestamp(): Timestamp {
+    override fun getHighWatermarkTSN(): TSN {
         this.lock.read {
-            if(!this.watermarkQueriesAllowed){
+            if (!this.watermarkQueriesAllowed) {
                 throw IllegalStateException(
-                    "Cannot perform 'getHighWatermarkTimestamp()' on this StoreManager" +
+                    "Cannot perform 'getHighWatermarkTSN()' on this StoreManager" +
                         " because startup recovery hasn't been completed yet!"
                 )
             }
 
-            val latestTimestamp = this.storesById.values.asSequence()
-                .mapNotNull { it.highWatermarkTimestamp }
+            val latestTSN = this.storesById.values.asSequence()
+                .mapNotNull { it.highWatermarkTSN }
                 .maxOrNull()
-            return latestTimestamp ?: -1L
+            return latestTSN ?: -1L
         }
     }
 
-    override fun getLowWatermarkTimestamp(): Timestamp {
+    override fun getLowWatermarkTSN(): TSN {
         this.lock.read {
-            if(!this.watermarkQueriesAllowed){
+            if (!this.watermarkQueriesAllowed) {
                 throw IllegalStateException(
-                    "Cannot perform 'getLowWatermarkTimestamp()' on this StoreManager" +
+                    "Cannot perform 'getLowWatermarkTSN()' on this StoreManager" +
                         " because startup recovery hasn't been completed yet!"
                 )
             }
-            val highWatermark = this.getHighWatermarkTimestamp()
+            val highWatermark = this.getHighWatermarkTSN()
             val minLowWatermark = this.storesById.values.asSequence()
                 .filter(Store::hasInMemoryChanges)
-                .mapNotNull { it.lowWatermarkTimestamp }
+                .mapNotNull { it.lowWatermarkTSN }
                 .minOrNull()
 
             return if (minLowWatermark == null) {
@@ -353,18 +349,17 @@ class StoreManagerImpl(
     private val Store.storeInfo: StoreInfo
         get() = StoreInfo(
             storeId = storeId.toString(),
-            retainOldVersions = retainOldVersions,
-            validFrom = validFrom,
-            validTo = validTo,
-            createdByTransactionId = createdByTransactionId
+            validFromTSN = this.validFromTSN,
+            validToTSN = this.validToTSN,
+            createdByTransactionId = this.createdByTransactionId,
         )
 
     private fun Store.isVisibleFor(transaction: ChronoStoreTransaction): Boolean {
-        val validFrom = this.validFrom
-        val validTo = this.validTo ?: Timestamp.MAX_VALUE
-        val txTimestamp = transaction.lastVisibleTimestamp
+        val validFrom = this.validFromTSN
+        val validTo = this.validToTSN ?: TSN.MAX_VALUE
+        val txTSN = transaction.lastVisibleSerialNumber
         val createdByThisTransaction = this.createdByTransactionId == transaction.id
-        return (validFrom < txTimestamp || createdByThisTransaction) && (txTimestamp < validTo || this.retainOldVersions)
+        return (validFrom < txTSN || createdByThisTransaction) && (txTSN < validTo)
     }
 
     private fun StoreId.collidesWith(other: StoreId): Boolean {
@@ -386,14 +381,13 @@ class StoreManagerImpl(
 
     private data class StoreInfo(
         val storeId: String,
-        val retainOldVersions: Boolean,
-        val validFrom: Timestamp,
-        val validTo: Timestamp?,
-        val createdByTransactionId: TransactionId
+        val validFromTSN: TSN,
+        val validToTSN: TSN?,
+        val createdByTransactionId: TransactionId,
     ) {
 
         val terminated: Boolean
-            get() = validTo != null
+            get() = validToTSN != null
 
         override fun equals(other: Any?): Boolean {
             if (this === other) return true

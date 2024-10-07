@@ -101,6 +101,7 @@ object UnsignedBytesComparator : ByteArrayComparator {
         private val theUnsafe: Unsafe = fetchTheUnsafe()
         private val BYTE_ARRAY_BASE_OFFSET: Int = theUnsafe.arrayBaseOffset(ByteArray::class.java)
 
+        @Suppress("removal")
         private fun fetchTheUnsafe(): Unsafe {
             try {
                 return Unsafe.getUnsafe()

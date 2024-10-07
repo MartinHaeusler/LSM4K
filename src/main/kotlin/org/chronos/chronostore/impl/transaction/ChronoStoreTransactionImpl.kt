@@ -4,15 +4,14 @@ import mu.KotlinLogging
 import org.chronos.chronostore.api.*
 import org.chronos.chronostore.impl.TransactionManager
 import org.chronos.chronostore.util.StoreId
-import org.chronos.chronostore.util.Timestamp
+import org.chronos.chronostore.util.TSN
 import org.chronos.chronostore.util.TransactionId
-import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.statistics.ChronoStoreStatistics
 import org.chronos.chronostore.wal.WriteAheadLogTransaction
 
 class ChronoStoreTransactionImpl(
     override val id: TransactionId,
-    override val lastVisibleTimestamp: Timestamp,
+    override val lastVisibleSerialNumber: TSN,
     val transactionManager: TransactionManager,
     val storeManager: StoreManager,
 ) : ChronoStoreTransaction {
@@ -31,7 +30,7 @@ class ChronoStoreTransactionImpl(
     override var isOpen: Boolean = true
 
     init {
-        log.trace { "Started transaction ${this.id} at timestamp ${lastVisibleTimestamp}." }
+        log.trace { "Started transaction ${this.id} at TSN ${lastVisibleSerialNumber}." }
     }
 
     override fun getStoreOrNull(name: StoreId): TransactionalReadWriteStore? {
@@ -46,13 +45,12 @@ class ChronoStoreTransactionImpl(
         return this.bindStore(store)
     }
 
-    override fun createNewStore(name: StoreId, versioned: Boolean): TransactionalReadWriteStore {
+    override fun createNewStore(name: StoreId): TransactionalReadWriteStore {
         check(this.isOpen) { TX_ALREADY_CLOSED }
         val newStore = this.storeManager.createNewStore(
             transaction = this,
             name = name,
-            versioned = versioned,
-            validFrom = this.transactionManager.timeManager.getUniqueWallClockTimestamp()
+            validFromTSN = this.transactionManager.tsnManager.getUniqueTSN()
         )
         return this.bindStore(newStore)
     }
@@ -67,11 +65,11 @@ class ChronoStoreTransactionImpl(
                 .toList()
         }
 
-    override fun commit(metadata: Bytes?): Timestamp {
+    override fun commit(): TSN {
         check(this.isOpen) { TX_ALREADY_CLOSED }
         this.isOpen = false
 
-        return this.transactionManager.performCommit(this, metadata)
+        return this.transactionManager.performCommit(this)
     }
 
     fun deleteStore(txStore: TransactionalStoreImpl) {
@@ -79,16 +77,15 @@ class ChronoStoreTransactionImpl(
         this.storeManager.deleteStore(this, txStore.storeId)
     }
 
-    fun toWALTransaction(commitTimestamp: Timestamp, metadata: Bytes?): WriteAheadLogTransaction {
+    fun toWALTransaction(commitTSN: TSN): WriteAheadLogTransaction {
         val changes = this.openStoresByName.values.associate { txStore ->
-            txStore.store.storeId to txStore.transactionContext.convertToCommands(commitTimestamp)
+            txStore.store.storeId to txStore.transactionContext.convertToCommands(commitTSN)
         }
 
         return WriteAheadLogTransaction(
             transactionId = this.id,
-            commitTimestamp = commitTimestamp,
+            commitTSN = commitTSN,
             storeIdToCommands = changes,
-            commitMetadata = metadata ?: Bytes.EMPTY
         )
     }
 
@@ -107,6 +104,8 @@ class ChronoStoreTransactionImpl(
         return txBoundStore
     }
 
+    // the finalizer contains a safety net which could be removed.
+    @Suppress("removal")
     protected fun finalize() {
         // This is the object finalizer which is called by the JVM garbage collector.
         // If the Garbage Collector encounters a transaction which is no longer referenced but is still

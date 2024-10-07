@@ -1,5 +1,6 @@
 package org.chronos.chronostore.api
 
+import org.chronos.chronostore.util.TSN
 import org.chronos.chronostore.util.Timestamp
 import org.chronos.chronostore.util.bytes.Bytes
 
@@ -31,12 +32,12 @@ interface GetResult {
     val isModifiedInTransactionContext: Boolean
 
     /**
-     * Returns the timestamp at which the last modification has occurred on the key (which may have been an overwrite or a deletion).
+     * Returns the [TSN] at which the last modification has occurred on the key (which may have been an overwrite or a deletion).
      *
      * If the key was absent from the store or if the value originates from a [transient modification][isModifiedInTransactionContext],
      * `null` will be returned instead.
      */
-    val lastModifiedAtTimestamp: Timestamp?
+    val lastModificationTSN: TSN?
 
     /** The value associated with the [key]. */
     val value: Bytes?

@@ -3,6 +3,7 @@ package org.chronos.chronostore.api
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor
 import org.chronos.chronostore.lsm.LSMTree
 import org.chronos.chronostore.util.StoreId
+import org.chronos.chronostore.util.TSN
 import org.chronos.chronostore.util.Timestamp
 
 interface StoreManager {
@@ -18,11 +19,11 @@ interface StoreManager {
         return this.getStoreByIdOrNull(transaction, name) != null
     }
 
-    fun getHighWatermarkTimestamp(): Timestamp
+    fun getHighWatermarkTSN(): TSN
 
-    fun getLowWatermarkTimestamp(): Timestamp
+    fun getLowWatermarkTSN(): TSN
 
-    fun createNewStore(transaction: ChronoStoreTransaction, name: StoreId, versioned: Boolean, validFrom: Timestamp): Store
+    fun createNewStore(transaction: ChronoStoreTransaction, name: StoreId, validFromTSN: TSN): Store
 
     fun deleteStore(transaction: ChronoStoreTransaction, name: StoreId): Boolean
 

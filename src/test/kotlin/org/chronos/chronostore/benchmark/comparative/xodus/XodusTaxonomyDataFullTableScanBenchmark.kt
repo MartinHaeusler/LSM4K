@@ -5,7 +5,7 @@ import jetbrains.exodus.ByteIterator
 import jetbrains.exodus.env.Environments
 import jetbrains.exodus.env.StoreConfig
 import org.chronos.chronostore.model.command.Command
-import org.chronos.chronostore.model.command.KeyAndTimestamp
+import org.chronos.chronostore.model.command.KeyAndTSN
 import java.io.File
 import java.io.InputStream
 
@@ -26,10 +26,10 @@ object XodusTaxonomyDataFullTableScanBenchmark {
                     while (cursor.next) {
                         val binaryKey = cursor.key
                         val binaryValue = cursor.value
-                        val keyAndTimestamp = XodusByteInputStream(binaryKey).use(KeyAndTimestamp.Companion::readFromStream)
+                        val keyAndTSN = XodusByteInputStream(binaryKey).use(KeyAndTSN.Companion::readFromStream)
                         val command = XodusByteInputStream(binaryValue).use(Command.Companion::readFromStream)
                         blackHole += command.value.size
-                        blackHole += keyAndTimestamp.key.size
+                        blackHole += keyAndTSN.key.size
                         commandCount += 1
                     }
                 }

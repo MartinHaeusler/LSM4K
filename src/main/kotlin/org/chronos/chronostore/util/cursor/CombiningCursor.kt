@@ -1,7 +1,5 @@
 package org.chronos.chronostore.util.cursor
 
-import org.chronos.chronostore.api.exceptions.ChronoStoreCursorException
-import org.chronos.chronostore.api.exceptions.ChronoStoreException
 import org.chronos.chronostore.util.Order
 
 abstract class CombiningCursor<C1 : Cursor<*, *>, C2 : Cursor<*, *>, K, V>(

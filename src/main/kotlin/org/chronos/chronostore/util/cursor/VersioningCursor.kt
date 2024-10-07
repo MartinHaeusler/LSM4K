@@ -1,17 +1,17 @@
 package org.chronos.chronostore.util.cursor
 
 import org.chronos.chronostore.model.command.Command
-import org.chronos.chronostore.model.command.KeyAndTimestamp
+import org.chronos.chronostore.model.command.KeyAndTSN
 import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.Order
-import org.chronos.chronostore.util.Timestamp
+import org.chronos.chronostore.util.TSN
 import org.chronos.chronostore.util.statistics.ChronoStoreStatistics
 
 class VersioningCursor(
-    treeCursor: Cursor<KeyAndTimestamp, Command>,
-    private val timestamp: Timestamp,
+    treeCursor: Cursor<KeyAndTSN, Command>,
+    private val tsn: TSN,
     private val includeDeletions: Boolean,
-) : WrappingCursor<Cursor<KeyAndTimestamp, Command>, Bytes, Command>(treeCursor), Cursor<Bytes, Command> {
+) : WrappingCursor<Cursor<KeyAndTSN, Command>, Bytes, Command>(treeCursor), Cursor<Bytes, Command> {
 
     init {
         ChronoStoreStatistics.VERSIONING_CURSORS.incrementAndGet()
@@ -85,7 +85,7 @@ class VersioningCursor(
         val temporalKey = this.convertUserKeyToUnqualifiedTemporalKey(key)
 
         // note: we use "seekExactlyOrPREVIOUS" on purpose on the inner cursor, because in
-        // the event of an exact match, our timestamp may be higher. Using "seekExactlyOrNEXT" on the
+        // the event of an exact match, our TSN may be higher. Using "seekExactlyOrNEXT" on the
         // inner key would cause us to miss that. If the search fails on the inner cursor,
         // we know that equality is not an option (otherwise we would have found something),
         // so we retry with "seekExactlyOrNext".
@@ -99,7 +99,7 @@ class VersioningCursor(
             // do we have an equality match?
             val currentKey = this.innerCursor.key
             return if (currentKey.key == key) {
-                // equality match with equal/lower timestamp -> good!
+                // equality match with equal/lower TSN -> good!
                 true
             } else {
                 // we ended up on a different key which is less than our key, scan for the next-higher entry
@@ -114,8 +114,8 @@ class VersioningCursor(
         return true
     }
 
-    private fun convertUserKeyToUnqualifiedTemporalKey(userKey: Bytes): KeyAndTimestamp {
-        return KeyAndTimestamp(userKey, this.timestamp)
+    private fun convertUserKeyToUnqualifiedTemporalKey(userKey: Bytes): KeyAndTSN {
+        return KeyAndTSN(userKey, this.tsn)
     }
 
     override val keyOrNullInternal: Bytes?
@@ -128,13 +128,13 @@ class VersioningCursor(
             return this.innerCursor.valueOrNull
         }
 
-    private fun getTemporalKeyOrNull(): KeyAndTimestamp? {
+    private fun getTemporalKeyOrNull(): KeyAndTSN? {
         return this.innerCursor.keyOrNull
     }
 
     private fun seekToNextHigherTemporalEntry(): Boolean {
-        var currentKey: KeyAndTimestamp
-        var nextHigherKey: KeyAndTimestamp?
+        var currentKey: KeyAndTSN
+        var nextHigherKey: KeyAndTSN?
         do {
             if (!this.innerCursor.next()) {
                 return false
@@ -147,8 +147,8 @@ class VersioningCursor(
     }
 
     private fun seekToNextLowerTemporalEntry(): Boolean {
-        var currentKey: KeyAndTimestamp
-        var nextHigherKey: KeyAndTimestamp?
+        var currentKey: KeyAndTSN
+        var nextHigherKey: KeyAndTSN?
         do {
             nextHigherKey = this.getTemporalKeyOrNull()
                 ?: return false
@@ -162,9 +162,9 @@ class VersioningCursor(
     }
 
     @Suppress("RedundantIf")
-    private fun isOutputKey(currentKey: KeyAndTimestamp, nextHigherKey: KeyAndTimestamp?): Boolean {
-        if (currentKey.timestamp > this.timestamp) {
-            // the timestamp of this entry is *higher* than our request timestamp -> we can't see it.
+    private fun isOutputKey(currentKey: KeyAndTSN, nextHigherKey: KeyAndTSN?): Boolean {
+        if (currentKey.tsn > this.tsn) {
+            // the TSN of this entry is *higher* than our request TSN -> we can't see it.
             return false
         }
         // we can see the current key, but it might not be the latest version.
@@ -175,7 +175,7 @@ class VersioningCursor(
             return true
         }
         // the next entry has the same (user) key as this entry. Check if we would be able to see the next entry
-        if (nextHigherKey.timestamp > this.timestamp) {
+        if (nextHigherKey.tsn > this.tsn) {
             // we can't see the next version of the same key
             // => this is the latest version of the current (user) key
             // => we need to include it in the output
@@ -184,7 +184,7 @@ class VersioningCursor(
         return false
     }
 
-    private fun peekNextKey(): KeyAndTimestamp? {
+    private fun peekNextKey(): KeyAndTSN? {
         if(this.getTemporalKeyOrNull() == null){
             // cursor state is invalid
             return null
@@ -199,6 +199,6 @@ class VersioningCursor(
     }
 
     override fun toString(): String {
-        return "VersioningCursor[${this.timestamp} in ${this.innerCursor}]"
+        return "VersioningCursor[${this.tsn} in ${this.innerCursor}]"
     }
 }

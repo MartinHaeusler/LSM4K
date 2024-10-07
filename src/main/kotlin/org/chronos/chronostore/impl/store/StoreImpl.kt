@@ -10,14 +10,14 @@ import org.chronos.chronostore.lsm.LSMTree
 import org.chronos.chronostore.lsm.cache.FileHeaderCache
 import org.chronos.chronostore.lsm.merge.strategy.MergeService
 import org.chronos.chronostore.util.StoreId
+import org.chronos.chronostore.util.TSN
 import org.chronos.chronostore.util.Timestamp
 import org.chronos.chronostore.util.TransactionId
 
 class StoreImpl(
     override val storeId: StoreId,
-    override val retainOldVersions: Boolean,
-    override val validFrom: Timestamp,
-    override var validTo: Timestamp?,
+    override val validFromTSN: TSN,
+    override var validToTSN: TSN?,
     override val createdByTransactionId: TransactionId,
     override val directory: VirtualDirectory,
     forest: LSMForestMemoryManager,
@@ -37,10 +37,10 @@ class StoreImpl(
         fileHeaderCache = fileHeaderCache,
     )
 
-    override val highWatermarkTimestamp: Timestamp?
-        get() = this.tree.latestReceivedCommitTimestamp
+    override val highWatermarkTSN: TSN?
+        get() = this.tree.latestReceivedCommitTSN
 
-    override val lowWatermarkTimestamp: Timestamp?
+    override val lowWatermarkTSN: TSN?
         get() {
             if(!this.hasInMemoryChanges()){
                 // we have no in-memory changes, therefore ALL data belonging
@@ -48,7 +48,7 @@ class StoreImpl(
                 // contribute to the low watermark.
                 return null
             }
-            return this.tree.latestPersistedCommitTimestamp
+            return this.tree.latestPersistedCommitTSN
         }
 
     override fun hasInMemoryChanges(): Boolean {

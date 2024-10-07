@@ -2,6 +2,7 @@ package org.chronos.chronostore.benchmark
 
 import mu.KotlinLogging
 import org.chronos.chronostore.api.ChronoStoreConfiguration
+import org.chronos.chronostore.api.TransactionalStore.Companion.withCursor
 import org.chronos.chronostore.test.util.ChronoStoreMode
 import org.chronos.chronostore.util.bytes.BasicBytes
 import org.chronos.chronostore.util.bytes.Bytes
@@ -39,7 +40,7 @@ object SerialReadWriteBenchmark {
 
         ChronoStoreMode.ONDISK.withChronoStore(config) { chronoStore ->
             chronoStore.transaction { tx ->
-                tx.createNewStore("test", versioned = true)
+                tx.createNewStore("test")
                 tx.commit()
             }
 
@@ -88,7 +89,7 @@ object SerialReadWriteBenchmark {
                     totalSize += chronoStore.transaction { tx ->
                         val store = tx.getStore("test")
                         val keyBytes = BasicBytes(uniqueKeys.random())
-                        store.openCursorOnLatest().use { cursor ->
+                        store.withCursor { cursor ->
                             val sum = if (cursor.seekExactlyOrNext(keyBytes)) {
                                 var i = 0
                                 var sum = 0

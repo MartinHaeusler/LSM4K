@@ -9,7 +9,7 @@ import org.chronos.chronostore.io.vfs.VirtualReadWriteFile.Companion.withOverWri
 import org.chronos.chronostore.lsm.cache.BlockCacheManagerImpl
 import org.chronos.chronostore.lsm.cache.LocalBlockCache
 import org.chronos.chronostore.model.command.Command
-import org.chronos.chronostore.model.command.KeyAndTimestamp
+import org.chronos.chronostore.model.command.KeyAndTSN
 import org.chronos.chronostore.test.util.VFSMode
 import org.chronos.chronostore.test.util.VirtualFileSystemTest
 import org.chronos.chronostore.util.StoreId
@@ -54,8 +54,8 @@ class ChronoStoreFileTest {
                             get { this.metaData }.and {
                                 get { this.minKey }.isNull()
                                 get { this.maxKey }.isNull()
-                                get { this.minTimestamp }.isNull()
-                                get { this.maxTimestamp }.isNull()
+                                get { this.minTSN }.isNull()
+                                get { this.maxTSN }.isNull()
                                 get { this.headEntries }.isEqualTo(0L)
                                 get { this.historyEntries }.isEqualTo(0L)
                                 get { this.totalEntries }.isEqualTo(0)
@@ -72,7 +72,7 @@ class ChronoStoreFileTest {
                                 get { this.beginOfIndexOfBlocks == this.beginOfMetadata }.isTrue()
                             }
                         }
-                        get { this.get(KeyAndTimestamp(BasicBytes("bullshit"), 1234)) }.isNull()
+                        get { this.get(KeyAndTSN(BasicBytes("bullshit"), 1234)) }.isNull()
                     }
                 }
             }
@@ -106,24 +106,24 @@ class ChronoStoreFileTest {
             val factory = FileChannelDriver.Factory
             factory.createDriver(file).use { driver ->
                 ChronoStoreFileReader(driver, blockCache.getBlockCache(StoreId.of("doesnt-matter"))).use { reader ->
-                    val min = reader.fileHeader.metaData.minTimestamp!!
-                    val max = reader.fileHeader.metaData.maxTimestamp!!
+                    val min = reader.fileHeader.metaData.minTSN!!
+                    val max = reader.fileHeader.metaData.maxTSN!!
 
                     expectThat(reader) {
                         get { fileHeader.indexOfBlocks.size }.isEqualTo(1)
 
-                        get { get(KeyAndTimestamp(theKey, max + 1)) }.isNotNull().and {
+                        get { get(KeyAndTSN(theKey, max + 1)) }.isNotNull().and {
                             get { key }.isEqualTo(theKey)
-                            get { timestamp }.isEqualTo(max)
+                            get { tsn }.isEqualTo(max)
                             get { opCode }.isEqualTo(Command.OpCode.PUT)
                             get { value.asString() }.isEqualTo("hello")
                         }
 
-                        get { get(KeyAndTimestamp(theKey, min - 1)) }.isNull()
+                        get { get(KeyAndTSN(theKey, min - 1)) }.isNull()
 
-                        get { get(KeyAndTimestamp(theKey, 1000)) }.isNotNull().and {
+                        get { get(KeyAndTSN(theKey, 1000)) }.isNotNull().and {
                             get { opCode }.isEqualTo(Command.OpCode.PUT)
-                            get { timestamp }.isEqualTo(1000)
+                            get { tsn }.isEqualTo(1000)
                             get { value.asString() }.isEqualTo("hello")
                         }
                     }
@@ -165,64 +165,64 @@ class ChronoStoreFileTest {
             val factory = FileChannelDriver.Factory
             factory.createDriver(file).use { driver ->
                 ChronoStoreFileReader(driver, blockCache.getBlockCache(StoreId.of("doesnt-matter"))).use { reader ->
-                    val min = reader.fileHeader.metaData.minTimestamp!!
-                    val max = reader.fileHeader.metaData.maxTimestamp!!
+                    val min = reader.fileHeader.metaData.minTSN!!
+                    val max = reader.fileHeader.metaData.maxTSN!!
 
                     expectThat(reader) {
                         get { fileHeader.indexOfBlocks.size }.isGreaterThan(1)
 
-                        get { get(KeyAndTimestamp(theKey, max + 1)) }.isNotNull().and {
+                        get { get(KeyAndTSN(theKey, max + 1)) }.isNotNull().and {
                             get { key }.isEqualTo(theKey)
-                            get { timestamp }.isEqualTo(max)
+                            get { tsn }.isEqualTo(max)
                             get { opCode }.isEqualTo(Command.OpCode.PUT)
                             get { value }.hasSize(1024)
                         }
 
-                        get { get(KeyAndTimestamp(theKey, min - 1)) }.isNull()
+                        get { get(KeyAndTSN(theKey, min - 1)) }.isNull()
 
-                        get { get(KeyAndTimestamp(theKey, 101_000)) }.isNotNull().and {
+                        get { get(KeyAndTSN(theKey, 101_000)) }.isNotNull().and {
                             get { opCode }.isEqualTo(Command.OpCode.DEL)
-                            get { timestamp }.isEqualTo(101_000)
+                            get { tsn }.isEqualTo(101_000)
                             get { value }.isEmpty()
                         }
-                        get { get(KeyAndTimestamp(theKey, 101_001)) }.isNotNull().and {
+                        get { get(KeyAndTSN(theKey, 101_001)) }.isNotNull().and {
                             get { opCode }.isEqualTo(Command.OpCode.DEL)
-                            get { timestamp }.isEqualTo(101_000)
+                            get { tsn }.isEqualTo(101_000)
                             get { value }.isEmpty()
                         }
-                        get { get(KeyAndTimestamp(theKey, 101_002)) }.isNotNull().and {
+                        get { get(KeyAndTSN(theKey, 101_002)) }.isNotNull().and {
                             get { opCode }.isEqualTo(Command.OpCode.DEL)
-                            get { timestamp }.isEqualTo(101_000)
+                            get { tsn }.isEqualTo(101_000)
                             get { value }.isEmpty()
                         }
-                        get { get(KeyAndTimestamp(theKey, 101_010)) }.isNotNull().and {
+                        get { get(KeyAndTSN(theKey, 101_010)) }.isNotNull().and {
                             get { opCode }.isEqualTo(Command.OpCode.DEL)
-                            get { timestamp }.isEqualTo(101_000)
+                            get { tsn }.isEqualTo(101_000)
                             get { value }.isEmpty()
                         }
-                        get { get(KeyAndTimestamp(theKey, 101_100)) }.isNotNull().and {
+                        get { get(KeyAndTSN(theKey, 101_100)) }.isNotNull().and {
                             get { opCode }.isEqualTo(Command.OpCode.DEL)
-                            get { timestamp }.isEqualTo(101_000)
+                            get { tsn }.isEqualTo(101_000)
                             get { value }.isEmpty()
                         }
-                        get { get(KeyAndTimestamp(theKey, 101_990)) }.isNotNull().and {
+                        get { get(KeyAndTSN(theKey, 101_990)) }.isNotNull().and {
                             get { opCode }.isEqualTo(Command.OpCode.DEL)
-                            get { timestamp }.isEqualTo(101_000)
+                            get { tsn }.isEqualTo(101_000)
                             get { value }.isEmpty()
                         }
-                        get { get(KeyAndTimestamp(theKey, 101_999)) }.isNotNull().and {
+                        get { get(KeyAndTSN(theKey, 101_999)) }.isNotNull().and {
                             get { opCode }.isEqualTo(Command.OpCode.DEL)
-                            get { timestamp }.isEqualTo(101_000)
+                            get { tsn }.isEqualTo(101_000)
                             get { value }.isEmpty()
                         }
-                        get { get(KeyAndTimestamp(theKey, 102_000)) }.isNotNull().and {
+                        get { get(KeyAndTSN(theKey, 102_000)) }.isNotNull().and {
                             get { opCode }.isEqualTo(Command.OpCode.PUT)
-                            get { timestamp }.isEqualTo(102_000)
+                            get { tsn }.isEqualTo(102_000)
                             get { value }.hasSize(1024)
                         }
-                        get { get(KeyAndTimestamp(theKey, 102_001)) }.isNotNull().and {
+                        get { get(KeyAndTSN(theKey, 102_001)) }.isNotNull().and {
                             get { opCode }.isEqualTo(Command.OpCode.PUT)
-                            get { timestamp }.isEqualTo(102_000)
+                            get { tsn }.isEqualTo(102_000)
                             get { value }.hasSize(1024)
                         }
                     }
@@ -314,14 +314,14 @@ class ChronoStoreFileTest {
                         get { this.isValidBlockIndex(0) }.isTrue()
                         get { this.isValidBlockIndex(1) }.isFalse()
                         get { this.isValidBlockIndex(-1) }.isFalse()
-                        get { this.getBlockIndexForKeyAndTimestampAscending(KeyAndTimestamp(BasicBytes("hello"), 1237)) }.isEqualTo(0)
-                        get { this.getBlockIndexForKeyAndTimestampAscending(KeyAndTimestamp(BasicBytes("hello"), 1240)) }.isEqualTo(0)
-                        get { this.getBlockIndexForKeyAndTimestampAscending(KeyAndTimestamp(BasicBytes("hello"), 1241)) }.isEqualTo(0)
-                        get { this.getBlockIndexForKeyAndTimestampAscending(KeyAndTimestamp(BasicBytes("hello"), 0)) }.isEqualTo(0)
-                        get { this.getBlockIndexForKeyAndTimestampAscending(KeyAndTimestamp(BasicBytes("foo"), 0)) }.isNull()
-                        get { this.getBlockIndexForKeyAndTimestampAscending(KeyAndTimestamp(BasicBytes("foo"), 9_999)) }.isNull()
-                        get { this.getBlockIndexForKeyAndTimestampAscending(KeyAndTimestamp(BasicBytes("foo"), 10_000)) }.isEqualTo(0)
-                        get { this.getBlockIndexForKeyAndTimestampAscending(KeyAndTimestamp(BasicBytes("foo"), 200_000)) }.isEqualTo(0)
+                        get { this.getBlockIndexForKeyAndTimestampAscending(KeyAndTSN(BasicBytes("hello"), 1237)) }.isEqualTo(0)
+                        get { this.getBlockIndexForKeyAndTimestampAscending(KeyAndTSN(BasicBytes("hello"), 1240)) }.isEqualTo(0)
+                        get { this.getBlockIndexForKeyAndTimestampAscending(KeyAndTSN(BasicBytes("hello"), 1241)) }.isEqualTo(0)
+                        get { this.getBlockIndexForKeyAndTimestampAscending(KeyAndTSN(BasicBytes("hello"), 0)) }.isEqualTo(0)
+                        get { this.getBlockIndexForKeyAndTimestampAscending(KeyAndTSN(BasicBytes("foo"), 0)) }.isNull()
+                        get { this.getBlockIndexForKeyAndTimestampAscending(KeyAndTSN(BasicBytes("foo"), 9_999)) }.isNull()
+                        get { this.getBlockIndexForKeyAndTimestampAscending(KeyAndTSN(BasicBytes("foo"), 10_000)) }.isEqualTo(0)
+                        get { this.getBlockIndexForKeyAndTimestampAscending(KeyAndTSN(BasicBytes("foo"), 200_000)) }.isEqualTo(0)
                     }
                     get { this.trailer }.and {
                         get { this.beginOfBlocks }.isGreaterThan(0L)
@@ -339,8 +339,8 @@ class ChronoStoreFileTest {
                         get { this.numberOfBlocks }.isEqualTo(1)
                         get { this.minKey }.isNotNull().get { this.asString() }.isEqualTo("foo")
                         get { this.maxKey }.isNotNull().get { this.asString() }.isEqualTo("hello")
-                        get { this.minTimestamp }.isEqualTo(1234)
-                        get { this.maxTimestamp }.isEqualTo(100_000)
+                        get { this.minTSN }.isEqualTo(1234)
+                        get { this.maxTSN }.isEqualTo(100_000)
                         get { this.settings }.and {
                             get { this.maxBlockSize }.isEqualTo(16.KiB)
                             get { this.compression }.isEqualTo(CompressionAlgorithm.SNAPPY)
@@ -353,11 +353,11 @@ class ChronoStoreFileTest {
                         cursor.ascendingEntrySequenceFromHere().toList()
                     }
                     expectThat(entries).containsExactly(
-                        KeyAndTimestamp(BasicBytes("foo"), 10_000) to Command.put("foo", 10_000, "bar"),
-                        KeyAndTimestamp(BasicBytes("foo"), 100_000) to Command.put("foo", 100_000, "baz"),
-                        KeyAndTimestamp(BasicBytes("hello"), 1234) to Command.put("hello", 1234, "world"),
-                        KeyAndTimestamp(BasicBytes("hello"), 1235) to Command.put("hello", 1235, "foo"),
-                        KeyAndTimestamp(BasicBytes("hello"), 1240) to Command.put(BasicBytes("hello"), 1240, Bytes.EMPTY),
+                        KeyAndTSN(BasicBytes("foo"), 10_000) to Command.put("foo", 10_000, "bar"),
+                        KeyAndTSN(BasicBytes("foo"), 100_000) to Command.put("foo", 100_000, "baz"),
+                        KeyAndTSN(BasicBytes("hello"), 1234) to Command.put("hello", 1234, "world"),
+                        KeyAndTSN(BasicBytes("hello"), 1235) to Command.put("hello", 1235, "foo"),
+                        KeyAndTSN(BasicBytes("hello"), 1240) to Command.put(BasicBytes("hello"), 1240, Bytes.EMPTY),
                     )
                 }
             }
@@ -414,14 +414,14 @@ class ChronoStoreFileTest {
                         get { this.isValidBlockIndex(0) }.isTrue()
                         get { this.isValidBlockIndex(1) }.isFalse()
                         get { this.isValidBlockIndex(-1) }.isFalse()
-                        get { this.getBlockIndexForKeyAndTimestampAscending(KeyAndTimestamp(BasicBytes("hello"), 1237)) }.isEqualTo(0)
-                        get { this.getBlockIndexForKeyAndTimestampAscending(KeyAndTimestamp(BasicBytes("hello"), 1240)) }.isEqualTo(0)
-                        get { this.getBlockIndexForKeyAndTimestampAscending(KeyAndTimestamp(BasicBytes("hello"), 1241)) }.isEqualTo(0)
-                        get { this.getBlockIndexForKeyAndTimestampAscending(KeyAndTimestamp(BasicBytes("hello"), 0)) }.isEqualTo(0)
-                        get { this.getBlockIndexForKeyAndTimestampAscending(KeyAndTimestamp(BasicBytes("foo"), 0)) }.isNull()
-                        get { this.getBlockIndexForKeyAndTimestampAscending(KeyAndTimestamp(BasicBytes("foo"), 9_999)) }.isNull()
-                        get { this.getBlockIndexForKeyAndTimestampAscending(KeyAndTimestamp(BasicBytes("foo"), 10_000)) }.isEqualTo(0)
-                        get { this.getBlockIndexForKeyAndTimestampAscending(KeyAndTimestamp(BasicBytes("foo"), 200_000)) }.isEqualTo(0)
+                        get { this.getBlockIndexForKeyAndTimestampAscending(KeyAndTSN(BasicBytes("hello"), 1237)) }.isEqualTo(0)
+                        get { this.getBlockIndexForKeyAndTimestampAscending(KeyAndTSN(BasicBytes("hello"), 1240)) }.isEqualTo(0)
+                        get { this.getBlockIndexForKeyAndTimestampAscending(KeyAndTSN(BasicBytes("hello"), 1241)) }.isEqualTo(0)
+                        get { this.getBlockIndexForKeyAndTimestampAscending(KeyAndTSN(BasicBytes("hello"), 0)) }.isEqualTo(0)
+                        get { this.getBlockIndexForKeyAndTimestampAscending(KeyAndTSN(BasicBytes("foo"), 0)) }.isNull()
+                        get { this.getBlockIndexForKeyAndTimestampAscending(KeyAndTSN(BasicBytes("foo"), 9_999)) }.isNull()
+                        get { this.getBlockIndexForKeyAndTimestampAscending(KeyAndTSN(BasicBytes("foo"), 10_000)) }.isEqualTo(0)
+                        get { this.getBlockIndexForKeyAndTimestampAscending(KeyAndTSN(BasicBytes("foo"), 200_000)) }.isEqualTo(0)
                     }
                     get { this.trailer }.and {
                         get { this.beginOfBlocks }.isGreaterThan(0L)
@@ -439,8 +439,8 @@ class ChronoStoreFileTest {
                         get { this.numberOfBlocks }.isEqualTo(1)
                         get { this.minKey }.isNotNull().get { this.asString() }.isEqualTo("foo")
                         get { this.maxKey }.isNotNull().get { this.asString() }.isEqualTo("hello")
-                        get { this.minTimestamp }.isEqualTo(1234)
-                        get { this.maxTimestamp }.isEqualTo(100_000)
+                        get { this.minTSN }.isEqualTo(1234)
+                        get { this.maxTSN }.isEqualTo(100_000)
                         get { this.settings }.and {
                             get { this.maxBlockSize }.isEqualTo(16.KiB)
                             get { this.compression }.isEqualTo(CompressionAlgorithm.SNAPPY)
@@ -453,11 +453,11 @@ class ChronoStoreFileTest {
                         cursor.ascendingEntrySequenceFromHere().toList()
                     }
                     expectThat(entries).containsExactly(
-                        KeyAndTimestamp(BasicBytes("foo"), 10_000) to Command.put("foo", 10_000, "bar"),
-                        KeyAndTimestamp(BasicBytes("foo"), 100_000) to Command.put("foo", 100_000, "baz"),
-                        KeyAndTimestamp(BasicBytes("hello"), 1234) to Command.put("hello", 1234, "world"),
-                        KeyAndTimestamp(BasicBytes("hello"), 1235) to Command.put("hello", 1235, "foo"),
-                        KeyAndTimestamp(BasicBytes("hello"), 1240) to Command.put(BasicBytes("hello"), 1240, Bytes.EMPTY),
+                        KeyAndTSN(BasicBytes("foo"), 10_000) to Command.put("foo", 10_000, "bar"),
+                        KeyAndTSN(BasicBytes("foo"), 100_000) to Command.put("foo", 100_000, "baz"),
+                        KeyAndTSN(BasicBytes("hello"), 1234) to Command.put("hello", 1234, "world"),
+                        KeyAndTSN(BasicBytes("hello"), 1235) to Command.put("hello", 1235, "foo"),
+                        KeyAndTSN(BasicBytes("hello"), 1240) to Command.put(BasicBytes("hello"), 1240, Bytes.EMPTY),
                     )
                 }
             }

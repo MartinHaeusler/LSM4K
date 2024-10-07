@@ -2,8 +2,10 @@ package org.chronos.chronostore.api
 
 import org.chronos.chronostore.util.bytes.Bytes
 
+/**
+ * A [TransactionalStore] which additionally allows for write operations.
+ */
 interface TransactionalReadWriteStore: TransactionalStore {
-
 
     /**
      * Inserts the given [key]-[value] pair into the store (in the context of the transaction).
@@ -31,9 +33,6 @@ interface TransactionalReadWriteStore: TransactionalStore {
      * concurrent transactions have been completed. However, the store will immediately be terminated,
      * i.e. any further data changes to the store (including by this transaction) will be rejected with
      * an exception.
-     *
-     * Please note that versioned stores will continue to exist even after they have been deleted in
-     * order to preserve the history.
      *
      * Deleting a store does not mean that the data on disk will be cleaned up immediately, nor does
      * it entail that its StoreID will become available immediately for reuse.

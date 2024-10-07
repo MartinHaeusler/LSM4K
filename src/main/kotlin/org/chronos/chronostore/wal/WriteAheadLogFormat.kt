@@ -4,16 +4,13 @@ import org.chronos.chronostore.api.exceptions.TruncatedInputException
 import org.chronos.chronostore.api.exceptions.WriteAheadLogEntryCorruptedException
 import org.chronos.chronostore.io.format.CompressionAlgorithm
 import org.chronos.chronostore.model.command.Command
+import org.chronos.chronostore.util.*
 import org.chronos.chronostore.util.IOExtensions.withInputStream
 import org.chronos.chronostore.util.LittleEndianExtensions.readLittleEndianInt
 import org.chronos.chronostore.util.LittleEndianExtensions.readLittleEndianLong
 import org.chronos.chronostore.util.LittleEndianExtensions.writeLittleEndianInt
 import org.chronos.chronostore.util.LittleEndianExtensions.writeLittleEndianLong
-import org.chronos.chronostore.util.PrefixIO
-import org.chronos.chronostore.util.StoreId
 import org.chronos.chronostore.util.StoreId.Companion.write
-import org.chronos.chronostore.util.Timestamp
-import org.chronos.chronostore.util.TransactionId
 import org.chronos.chronostore.util.UUIDExtensions.readUUIDFrom
 import org.chronos.chronostore.util.UUIDExtensions.toBytes
 import org.chronos.chronostore.util.bytes.Bytes
@@ -33,9 +30,8 @@ import java.util.zip.CheckedOutputStream
  * ```
  * +--------------------------------------+--------+
  * | Transaction ID                       |        |
- * | Commit Timestamp                     | HEADER |
+ * | Commit TSN                           | HEADER |
  * | Compression Algorithm                |        |
- * | Commit Metadata                      |        |
  * +--------------------------------------+--------+
  * | Block 1 Header                       |        |
  * |   Target Store ID                    |  BODY  |
@@ -101,7 +97,7 @@ import java.util.zip.CheckedOutputStream
  *   interleavings between entries are allowed. This means
  *   that this WAL format can only process one transaction
  *   commit at a time, which is fine because we expect the
- *   transaction commit timestamps to be unique.
+ *   transaction commit TSNs to be unique.
  */
 object WriteAheadLogFormat {
 
@@ -138,9 +134,8 @@ object WriteAheadLogFormat {
         out: OutputStream,
     ) {
         PrefixIO.writeBytes(out, tx.transactionId.toBytes())
-        out.writeLittleEndianLong(tx.commitTimestamp)
+        out.writeLittleEndianLong(tx.commitTSN)
         out.writeLittleEndianInt(compressionAlgorithm.algorithmIndex)
-        PrefixIO.writeBytes(out, tx.commitMetadata)
     }
 
     private fun writeBody(
@@ -227,26 +222,23 @@ object WriteAheadLogFormat {
         val storeIdToCommands = decompressedBody.withInputStream(this::decodeBody)
         return WriteAheadLogTransaction(
             transactionId = header.transactionId,
-            commitTimestamp = header.commitTimestamp,
+            commitTSN = header.commitTSN,
             storeIdToCommands = storeIdToCommands,
-            commitMetadata = header.commitMetadata,
         )
     }
 
     private fun readHeader(input: InputStream): Header {
         val transactionIdBytes = PrefixIO.readBytes(input)
         val transactionId = readUUIDFrom(transactionIdBytes)
-        val commitTimestamp = input.readLittleEndianLong()
-        checkForValidity(commitTimestamp >= 0) {
-            "Error reading WAL entry header: commit timestamp must not be negative (${commitTimestamp})!" +
+        val commitTSN = input.readLittleEndianLong()
+        checkForValidity(commitTSN >= 0) {
+            "Error reading WAL entry header: commit TSN must not be negative (${commitTSN})!" +
                 " The entry is corrupted or truncated!"
         }
         val compressionAlgorithm = CompressionAlgorithm.fromAlgorithmIndex(input.readLittleEndianInt())
-        val commitMetadata = PrefixIO.readBytes(input)
         return Header(
             transactionId = transactionId,
-            commitTimestamp = commitTimestamp,
-            commitMetadata = commitMetadata,
+            commitTSN = commitTSN,
             compressionAlgorithm = compressionAlgorithm,
         )
     }
@@ -307,8 +299,7 @@ object WriteAheadLogFormat {
 
     private class Header(
         val transactionId: TransactionId,
-        val commitTimestamp: Timestamp,
-        val commitMetadata: Bytes,
+        val commitTSN: TSN,
         val compressionAlgorithm: CompressionAlgorithm,
     )
 }

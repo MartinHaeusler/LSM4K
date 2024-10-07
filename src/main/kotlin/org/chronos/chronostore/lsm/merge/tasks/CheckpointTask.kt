@@ -23,7 +23,7 @@ class CheckpointTask(
         monitor.subTask(0.7, "Shortening Write-Ahead-Log") {
             if (this.writeAheadLog.needsToBeShortened()) {
                 // save the checkpoint data first because it's faster than the shortening
-                val lowWatermark = this.storeManager.getLowWatermarkTimestamp()
+                val lowWatermark = this.storeManager.getLowWatermarkTSN()
                 this.checkpointManager.saveCheckpoint(CheckpointData(lowWatermark))
                 // shorten the WAL by discarding old files based on the low watermark
                 this.writeAheadLog.shorten(lowWatermark)

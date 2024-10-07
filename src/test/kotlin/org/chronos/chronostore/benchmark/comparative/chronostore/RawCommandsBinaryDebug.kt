@@ -1,7 +1,7 @@
 package org.chronos.chronostore.benchmark.comparative.chronostore
 
 import org.chronos.chronostore.model.command.Command
-import org.chronos.chronostore.model.command.KeyAndTimestamp
+import org.chronos.chronostore.model.command.KeyAndTSN
 import java.io.File
 
 object RawCommandsBinaryDebug {
@@ -19,8 +19,8 @@ object RawCommandsBinaryDebug {
                 val command = Command.readFromStreamOrNull(inputStream)
                     ?: break
 
-                val isKeyAndTimestamp = KeyAndTimestamp.readFromBytesOrNull(command.key) != null
-                if (isKeyAndTimestamp) {
+                val isKeyAndTSN = KeyAndTSN.readFromBytesOrNull(command.key) != null
+                if (isKeyAndTSN) {
                     println("Command #${index.toString().padStart(12, '0')} has a key-and-timestamp in the key!")
                 }
 

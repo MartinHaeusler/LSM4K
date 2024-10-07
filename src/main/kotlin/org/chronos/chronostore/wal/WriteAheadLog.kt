@@ -11,7 +11,7 @@ import org.chronos.chronostore.io.vfs.VirtualDirectory
 import org.chronos.chronostore.io.vfs.VirtualFile
 import org.chronos.chronostore.io.vfs.VirtualReadWriteFile
 import org.chronos.chronostore.util.StreamExtensions.hasNext
-import org.chronos.chronostore.util.Timestamp
+import org.chronos.chronostore.util.TSN
 import org.chronos.chronostore.util.iterator.IteratorExtensions.peekOrNull
 import org.chronos.chronostore.util.iterator.IteratorExtensions.toPeekingIterator
 import org.chronos.chronostore.util.unit.Bytes
@@ -39,9 +39,9 @@ import kotlin.concurrent.write
  * to the actual stores.
  *
  * In order to determine which WAL files can be discarded, we consider the
- * largest transaction timestamp which has been (persistently) written by all
+ * largest transaction TSN which has been (persistently) written by all
  * stores. This is called the "low watermark". If the transaction with the
- * highest timestamp in a WAL file is less than or equal to the low watermark,
+ * highest TSN in a WAL file is less than or equal to the low watermark,
  * we can safely discard the WAL file because all of its data has already been
  * transferred to and been persisted by the actual stores.
  *
@@ -77,7 +77,7 @@ class WriteAheadLog(
         }
         this.directory.listFiles().asSequence()
             .mapNotNull(::createWALFileOrNull)
-            .sortedBy { it.minTimestamp }
+            .sortedBy { it.minTSN }
             .forEach(walFiles::add)
     }
 
@@ -102,26 +102,26 @@ class WriteAheadLog(
      */
     fun addCommittedTransaction(walTransaction: WriteAheadLogTransaction) {
         this.lock.write {
-            val targetFile = getOrCreateTargetWALFileForTransactionTimestamp(walTransaction.commitTimestamp)
+            val targetFile = getOrCreateTargetWALFileForTransactionTSN(walTransaction.commitTSN)
             targetFile.append { out ->
                 WriteAheadLogFormat.writeTransaction(walTransaction, this.compressionAlgorithm, out)
             }
         }
     }
 
-    private fun getOrCreateTargetWALFileForTransactionTimestamp(newTransactionTimestamp: Timestamp): WALFile {
+    private fun getOrCreateTargetWALFileForTransactionTSN(newTransactionTSN: TSN): WALFile {
         val currentWALFile = this.walFiles.lastOrNull()
         if (currentWALFile != null && !currentWALFile.isFull(this.maxWalFileSizeBytes)) {
             // we still have room in our current file.
-            check(currentWALFile.minTimestamp <= newTransactionTimestamp) {
-                "Cannot write transaction with commit timestamp ${newTransactionTimestamp} into WAL file with min timestamp ${currentWALFile.minTimestamp}!"
+            check(currentWALFile.minTSN <= newTransactionTSN) {
+                "Cannot write transaction with commit TSN ${newTransactionTSN} into WAL file with min TSN ${currentWALFile.minTSN}!"
             }
             return currentWALFile
         }
         // current WAL file either doesn't exist or is full.
-        val newFile = this.directory.file("${WRITE_AHEAD_LOG_FILE_PREFIX}${newTransactionTimestamp}${WRITE_AHEAD_LOG_FILE_SUFFIX}")
+        val newFile = this.directory.file("${WRITE_AHEAD_LOG_FILE_PREFIX}${newTransactionTSN}${WRITE_AHEAD_LOG_FILE_SUFFIX}")
         newFile.create()
-        val newWALFile = WALFile(newFile, newTransactionTimestamp)
+        val newWALFile = WALFile(newFile, newTransactionTSN)
         this.walFiles.add(newWALFile)
         return newWALFile
     }
@@ -130,25 +130,25 @@ class WriteAheadLog(
      * Sequentially reads the Write Ahead Log, permitting a given [consumer] to read the contained transactions one after another.
      *
      * If the file contains invalid entries (e.g. incomplete transactions due to a system shutdown during WAL writes), these
-     * entries will **not** be reported to the [consumer]. The consumer will receive the transactions in ascending timestamp order.
+     * entries will **not** be reported to the [consumer]. The consumer will receive the transactions in ascending [TSN] order.
      *
      * @param consumer The consumer function which will receive the transactions in the write-ahead log for further processing.
-     *                 The transactions will be provided to the consumer in a lazy fashion, in ascending timestamp order.
+     *                 The transactions will be provided to the consumer in a lazy fashion, in ascending [TSN] order.
      */
     fun readWalStreaming(consumer: (WriteAheadLogTransaction) -> Unit) {
         this.lock.read {
-            var previousTxCommitTimestamp = -1L
+            var previousTxCommitTSN = -1L
             for ((index, walFile) in this.walFiles.withIndex()) {
                 log.debug { "Replaying file '${walFile}' (${walFile.length.Bytes.toHumanReadableString()}) [${index + 1} / ${this.walFiles.size}]" }
                 walFile.withInputStream { input ->
                     PushbackInputStream(input).use { pbIn ->
                         while (pbIn.hasNext()) {
                             val tx = WriteAheadLogFormat.readTransaction(pbIn)
-                            if (tx.commitTimestamp <= previousTxCommitTimestamp) {
-                                throw WriteAheadLogEntryCorruptedException("Found non-ascending commit timestamp in the WAL! The WAL file is corrupted!")
+                            if (tx.commitTSN <= previousTxCommitTSN) {
+                                throw WriteAheadLogEntryCorruptedException("Found non-ascending commit serial number in the WAL! The WAL file is corrupted!")
                             }
                             consumer(tx)
-                            previousTxCommitTimestamp = tx.commitTimestamp
+                            previousTxCommitTSN = tx.commitTSN
                         }
                     }
                 }
@@ -179,16 +179,16 @@ class WriteAheadLog(
      *
      * Please note that calling this method has no effect if [needsToBeShortened] returns `false`.
      *
-     * @param lowWatermarkTimestamp The maximum timestamp for which it is guaranteed that *all* stores have
-     *                              persistently stored the results of *all* transactions with commit timestamps
+     * @param lowWatermarkTSN The maximum [TSN] for which it is guaranteed that *all* stores have
+     *                              persistently stored the results of *all* transactions with commit [TSN]s
      *                              less than or equal to the watermark.
      */
-    fun shorten(lowWatermarkTimestamp: Timestamp) {
+    fun shorten(lowWatermarkTSN: TSN) {
         this.lock.write {
             if (!this.needsToBeShortened()) {
                 return
             }
-            log.debug { "Attempt to shorten Write-Ahead-Log. Low Watermark: ${lowWatermarkTimestamp}" }
+            log.debug { "Attempt to shorten Write-Ahead-Log. Low Watermark: ${lowWatermarkTSN}" }
             val iterator = this.walFiles.iterator().toPeekingIterator()
             val filesToDelete = mutableSetOf<WALFile>()
             while (iterator.hasNext()) {
@@ -196,9 +196,9 @@ class WriteAheadLog(
                 val nextWALFile = iterator.peekOrNull()
                     ?: break // the currentWALFile is actually the LAST file in our WAL, don't drop it.
 
-                if (currentWALFile.minTimestamp < lowWatermarkTimestamp && nextWALFile.minTimestamp < lowWatermarkTimestamp) {
-                    // the current file is below the watermark, because the HIGHEST timestamp in this file is strictly
-                    // smaller than the min timestamp of the next file. Since that is below the watermark, we DEFINITELY
+                if (currentWALFile.minTSN < lowWatermarkTSN && nextWALFile.minTSN < lowWatermarkTSN) {
+                    // the current file is below the watermark, because the HIGHEST TSN in this file is strictly
+                    // smaller than the min TSN of the next file. Since that is below the watermark, we DEFINITELY
                     // are below the watermark.
                     filesToDelete += currentWALFile
                 }
@@ -218,7 +218,7 @@ class WriteAheadLog(
      *
      * In particular, this method will remove any invalid or incomplete transactions from the WAL.
      */
-    fun performStartupRecoveryCleanup(getHighWatermarkTimestamp: () -> Timestamp) {
+    fun performStartupRecoveryCleanup(getHighWatermarkTSN: () -> TSN) {
         this.lock.write {
             log.debug { "Checking Write-Ahead-Log for incomplete transactions and data corruption." }
             val timeBefore = System.currentTimeMillis()
@@ -229,7 +229,7 @@ class WriteAheadLog(
 
                 // Perform a checksum validation if we have a *.md5 file available.
                 // This will be much faster than actual content checking but equally effective.
-                if(walFile.validateChecksum() == true){
+                if (walFile.validateChecksum() == true) {
                     // we can skip this file, the checksum is valid
                     continue
                 }
@@ -239,19 +239,19 @@ class WriteAheadLog(
                     PushbackInputStream(input.buffered()).use { pbIn ->
                         CountingInputStream(pbIn).use { cIn ->
                             var startOfBlock: Long
-                            var lastSuccessfulTransactionTimestamp = -1L
+                            var lastSuccessfulTransactionTSN = -1L
                             while (pbIn.hasNext()) {
                                 startOfBlock = cIn.count
                                 try {
                                     val tx = WriteAheadLogFormat.readTransaction(cIn)
-                                    lastSuccessfulTransactionTimestamp = tx.commitTimestamp
+                                    lastSuccessfulTransactionTSN = tx.commitTSN
                                 } catch (e: TruncatedInputException) {
                                     if (isLastFile) {
                                         // the last file in our WAL may become truncated if the last
                                         // commit was interrupted by process kill or power outage. We
                                         // can tolerate that, as long as no store has ever seen a
-                                        // higher timestamp than the previous entry.
-                                        if (getHighWatermarkTimestamp() > lastSuccessfulTransactionTimestamp) {
+                                        // higher TSN than the previous entry.
+                                        if (getHighWatermarkTSN() > lastSuccessfulTransactionTSN) {
                                             throw WriteAheadLogEntryCorruptedException("WAL file '${walFile.file.path}' is has been truncated and cannot be read!")
                                         }
                                         // truncate the file
@@ -281,16 +281,16 @@ class WriteAheadLog(
 
         // grab a copy of the WAL files list
         val walFiles = this.lock.read { this.walFiles.toMutableList() }
-        if(walFiles.isEmpty()){
+        if (walFiles.isEmpty()) {
             // we don't have any WAL files yet, nothing to do.
             return
         }
 
-        // just a safeguard: sort the WAL files ascending by min timestamp. This
+        // just a safeguard: sort the WAL files ascending by min TSN. This
         // *should* already be the case anyway. Since we're constantly shortening
         // the WAL again, this list should not have thousands of entries, so the
         // overhead for sorting should be negligible.
-        walFiles.sortBy { it.minTimestamp }
+        walFiles.sortBy { it.minTSN }
 
         // drop the last file from the list because this is the "active" WAL
         // which is not complete yet; no point in computing a checksum for it.

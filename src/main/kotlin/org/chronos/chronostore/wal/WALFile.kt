@@ -4,6 +4,7 @@ import org.chronos.chronostore.io.vfs.VirtualReadWriteFile
 import org.chronos.chronostore.io.vfs.VirtualReadWriteFile.Companion.withOverWriter
 import org.chronos.chronostore.util.ByteArrayExtensions.hex
 import org.chronos.chronostore.util.IOExtensions.withInputStream
+import org.chronos.chronostore.util.TSN
 import org.chronos.chronostore.util.Timestamp
 import org.chronos.chronostore.util.io.ChecksumUtils.computeMD5
 import java.io.InputStream
@@ -11,14 +12,14 @@ import java.io.OutputStream
 
 class WALFile(
     val file: VirtualReadWriteFile,
-    val minTimestamp: Timestamp,
+    val minTSN: TSN,
 ) {
 
     val checksumFile: VirtualReadWriteFile = this.file.parent?.file(this.file.name + ".md5")
         ?: throw IllegalStateException("Could not determine parent directory of Write-Ahead-Log file '${file.path}'!")
 
     init {
-        require(minTimestamp >= 0) { "Argument 'minTimestamp' (${minTimestamp}) must not be negative!" }
+        require(minTSN >= 0) { "Argument 'minTSN' (${minTSN}) must not be negative!" }
     }
 
     fun isFull(maxWalFileSizeBytes: Long): Boolean {

@@ -68,7 +68,7 @@ class MemorySegmentFileDriver(
         this.arena.close()
     }
 
-    object Factory : RandomFileAccessDriverFactory {
+    data object Factory : RandomFileAccessDriverFactory {
 
         private val log = KotlinLogging.logger { }
 

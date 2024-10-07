@@ -1,7 +1,5 @@
 package org.chronos.chronostore.api.exceptions
 
-import org.chronos.chronostore.api.exceptions.ChronoStoreException
-
 class WriteAheadLogEntryCorruptedException : ChronoStoreException {
 
     constructor() : super()

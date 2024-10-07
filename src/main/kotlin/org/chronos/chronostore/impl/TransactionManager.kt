@@ -5,16 +5,12 @@ import mu.KotlinLogging
 import org.chronos.chronostore.api.ChronoStoreTransaction
 import org.chronos.chronostore.api.Store
 import org.chronos.chronostore.api.StoreManager
-import org.chronos.chronostore.api.SystemStore
 import org.chronos.chronostore.api.exceptions.ChronoStoreCommitException
 import org.chronos.chronostore.impl.store.StoreImpl
 import org.chronos.chronostore.impl.transaction.ChronoStoreTransactionImpl
-import org.chronos.chronostore.model.command.Command
-import org.chronos.chronostore.util.InverseQualifiedTemporalKey
 import org.chronos.chronostore.util.StoreId
-import org.chronos.chronostore.util.Timestamp
+import org.chronos.chronostore.util.TSN
 import org.chronos.chronostore.util.TransactionId
-import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.statistics.ChronoStoreStatistics
 import org.chronos.chronostore.wal.WriteAheadLog
 import org.chronos.chronostore.wal.WriteAheadLogTransaction
@@ -26,7 +22,7 @@ import kotlin.concurrent.write
 
 class TransactionManager(
     val storeManager: StoreManager,
-    val timeManager: TimeManager,
+    val tsnManager: TSNManager,
     val writeAheadLog: WriteAheadLog,
 ) : AutoCloseable {
 
@@ -52,7 +48,7 @@ class TransactionManager(
         this.openTransactionsLock.write {
             val newTx = ChronoStoreTransactionImpl(
                 id = TransactionId.randomUUID(),
-                lastVisibleTimestamp = this.timeManager.getNow(),
+                lastVisibleSerialNumber = this.tsnManager.getLastReturnedTSN(),
                 storeManager = this.storeManager,
                 transactionManager = this,
             )
@@ -62,10 +58,10 @@ class TransactionManager(
     }
 
 
-    fun getOpenTransactionIdsAndTimestamps(): Map<TransactionId, Timestamp> {
+    fun getOpenTransactionIdsAndTSNs(): Map<TransactionId, TSN> {
         check(this.isOpen) { DB_ALREADY_CLOSED }
         this.openTransactionsLock.read {
-            return this.openTransactions.values.associate { it.id to it.lastVisibleTimestamp }
+            return this.openTransactions.values.associate { it.id to it.lastVisibleSerialNumber }
         }
     }
 
@@ -76,11 +72,11 @@ class TransactionManager(
         }
     }
 
-    fun performCommit(tx: ChronoStoreTransactionImpl, commitMetadata: Bytes?): Timestamp {
+    fun performCommit(tx: ChronoStoreTransactionImpl): TSN {
         check(this.isOpen) { DB_ALREADY_CLOSED }
         this.commitLock.withLock {
-            val commitTimestamp = this.timeManager.getUniqueWallClockTimestamp()
-            val walTransaction = tx.toWALTransaction(commitTimestamp, commitMetadata)
+            val commitTSN = this.tsnManager.getUniqueTSN()
+            val walTransaction = tx.toWALTransaction(commitTSN)
             this.storeManager.withStoreReadLock {
                 // ensure first that all stores are indeed writeable, otherwise we may
                 // write something into our WAL file which isn't actually "legal".
@@ -89,25 +85,17 @@ class TransactionManager(
                 // once we know that all target stores exist, add it to the WAL
                 this.writeAheadLog.addCommittedTransaction(walTransaction)
 
-                // we've successfully added the new transaction to the WAL (so it is technically
-                // already persistent). Add it to the in-memory stores to make the data available
-                // to clients.
-                val commitLogStore = this.storeManager.getSystemStore(SystemStore.COMMIT_LOG)
-
                 for ((storeId, commands) in walTransaction.storeIdToCommands.entries) {
                     val store = storeNameToStore.getValue(storeId)
                     // we're missing the changes from this transaction, put them into the store.
                     (store as StoreImpl).tree.putAll(commands)
-
-                    val commitLogCommands = commands.map { createCommitLogEntry(commitTimestamp, storeId, it) }
-                    (commitLogStore as StoreImpl).tree.putAll(commitLogCommands)
                 }
 
             }
-            log.trace { "Performed commit of transaction ${tx.id}. Transaction timestamp: ${tx.lastVisibleTimestamp}, commit timestamp: ${commitTimestamp}." }
+            log.trace { "Performed commit of transaction ${tx.id}. Transaction TSN: ${tx.lastVisibleSerialNumber}, commit TSN: ${commitTSN}." }
             this.closeTransaction(tx)
             ChronoStoreStatistics.TRANSACTION_COMMITS.incrementAndGet()
-            return commitTimestamp
+            return commitTSN
         }
     }
 
@@ -130,19 +118,6 @@ class TransactionManager(
             }
             store
         }
-    }
-
-    private fun createCommitLogEntry(
-        commitTimestamp: Timestamp,
-        storeId: StoreId,
-        it: Command
-    ): Command {
-        val value = when (it.opCode) {
-            Command.OpCode.PUT -> Bytes.TRUE
-            Command.OpCode.DEL -> Bytes.FALSE
-        }
-        val inverseQualifiedTemporalKey = InverseQualifiedTemporalKey(commitTimestamp, storeId, it.key)
-        return Command.put(inverseQualifiedTemporalKey.toBytes(), commitTimestamp, value)
     }
 
     override fun close() {

@@ -1,6 +1,6 @@
 package org.chronos.chronostore.io.format
 
-import org.chronos.chronostore.model.command.KeyAndTimestamp
+import org.chronos.chronostore.model.command.KeyAndTSN
 import org.chronos.chronostore.io.fileaccess.RandomFileAccessDriver
 import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.IOExtensions.withInputStream
@@ -75,8 +75,8 @@ object ChronoStoreFileFormat {
                         val blockSequenceNumber = inputStream.readLittleEndianIntOrNull()
                             ?: return@generateSequence null // we're done
                         val blockStartPosition = inputStream.readLittleEndianLong()
-                        val blockMinKeyAndTimestamp = KeyAndTimestamp.readFromStream(inputStream)
-                        Triple(blockSequenceNumber, blockStartPosition, blockMinKeyAndTimestamp)
+                        val blockMinKeyAndTSN = KeyAndTSN.readFromStream(inputStream)
+                        Triple(blockSequenceNumber, blockStartPosition, blockMinKeyAndTSN)
                     }.toList()
                     IndexOfBlocks(entries, trailer.beginOfIndexOfBlocks)
                 }

@@ -17,7 +17,7 @@ import org.chronos.chronostore.lsm.garbagecollector.tasks.GarbageCollectorTask
 import org.chronos.chronostore.lsm.merge.strategy.MergeService
 import org.chronos.chronostore.lsm.merge.strategy.MergeServiceImpl
 import org.chronos.chronostore.lsm.merge.tasks.CheckpointTask
-import org.chronos.chronostore.util.Timestamp
+import org.chronos.chronostore.util.TSN
 import org.chronos.chronostore.wal.WriteAheadLog
 import java.util.concurrent.Executors
 import kotlin.math.max
@@ -40,7 +40,7 @@ class ChronoStoreImpl(
     private var state: ChronoStoreState = ChronoStoreState.STARTING
 
     private val checkpointManager: CheckpointManager
-    private val timeManager: TimeManager
+    private val tsnManager: TSNManager
     private val blockCacheManager = BlockCacheManager.create(configuration.blockCacheSize)
     private val fileHeaderCache = FileHeaderCache.create(configuration.fileHeaderCacheSize)
 
@@ -96,7 +96,7 @@ class ChronoStoreImpl(
             maxWalFileSizeBytes = this.configuration.maxWriteAheadLogFileSize.bytes,
             minNumberOfFiles = this.configuration.minNumberOfWriteAheadLogFiles
         )
-        val currentTimestamp = if (isEmptyDatabase) {
+        val currentTSN = if (isEmptyDatabase) {
             // The WAL file doesn't exist. It's a new, empty database.
             // We don't need a recovery, but we have to "set up camp".
             this.createNewEmptyDatabase()
@@ -105,24 +105,16 @@ class ChronoStoreImpl(
             this.performStartupRecovery()
         }
 
-        if (currentTimestamp + 1000 > System.currentTimeMillis()) {
-            throw IllegalStateException(
-                "Last commit timestamp in the database is at ${currentTimestamp} but" +
-                    " System clock is at ${System.currentTimeMillis()} and therefore" +
-                    " behind the database insertions!"
-            )
-        }
-
         // let the store manager know that watermark queries are valid from now on.
         // Watermark queries deliver invalid results when performed before the WAL
         // recovery has been performed.
         this.storeManager.enableWatermarks()
 
-        this.timeManager = TimeManager(currentTimestamp)
+        this.tsnManager = TSNManager(currentTSN)
 
         this.transactionManager = TransactionManager(
             storeManager = this.storeManager,
-            timeManager = this.timeManager,
+            tsnManager = this.tsnManager,
             writeAheadLog = this.writeAheadLog
         )
 
@@ -146,13 +138,13 @@ class ChronoStoreImpl(
         this.state = ChronoStoreState.RUNNING
     }
 
-    private fun createNewEmptyDatabase(): Timestamp {
+    private fun createNewEmptyDatabase(): TSN {
         log.info { "Creating a new, empty database in: ${this.vfs}" }
         this.storeManager.initialize(isEmptyDatabase = true)
-        return 0L
+        return 1L
     }
 
-    private fun performStartupRecovery(): Timestamp {
+    private fun performStartupRecovery(): TSN {
         log.info { "Opening database in: ${this.vfs}" }
         // initialize the store manager so that we can read from it.
         this.storeManager.initialize(isEmptyDatabase = false)
@@ -163,33 +155,33 @@ class ChronoStoreImpl(
         }
 
         // remove any incomplete transactions from the WAL file.
-        this.writeAheadLog.performStartupRecoveryCleanup(this.storeManager::getHighWatermarkTimestamp)
+        this.writeAheadLog.performStartupRecoveryCleanup(this.storeManager::getHighWatermarkTSN)
         val allStores = this.storeManager.getAllStoresInternal()
         // with the store info, replay the changes found in the WAL.
         return this.replayWriteAheadLogChanges(allStores)
     }
 
-    private fun replayWriteAheadLogChanges(allStores: List<Store>): Timestamp {
+    private fun replayWriteAheadLogChanges(allStores: List<Store>): TSN {
         val storeNameToStore = allStores.associateBy { it.storeId }
-        val storeIdToMaxTimestamp = allStores.associate { store ->
-            val maxPersistedTimestamp = (store as StoreImpl).tree.getMaxPersistedTimestamp()
-            store.storeId to maxPersistedTimestamp
+        val storeIdToMaxTSN = allStores.associate { store ->
+            val maxPersistedTSN = (store as StoreImpl).tree.getMaxPersistedTSN()
+            store.storeId to maxPersistedTSN
         }
         log.info { "Replaying Write-Ahead-Log" }
         // replay the entries in the WAL which have not been persisted yet
         var totalTransactions = 0
         var missingTransactions = 0
-        var maxTimestamp = 0L
+        var maxTSN = 0L
         val timeBefore = System.currentTimeMillis()
         this.writeAheadLog.readWalStreaming { walTransaction ->
             totalTransactions++
-            maxTimestamp = max(maxTimestamp, walTransaction.commitTimestamp)
+            maxTSN = max(maxTSN, walTransaction.commitTSN)
             var changed = false
             for (entry in walTransaction.storeIdToCommands.entries) {
-                val storeMaxTimestamp = storeIdToMaxTimestamp[entry.key]
+                val storeMaxTimestamp = storeIdToMaxTSN[entry.key]
                     ?: continue // the store doesn't exist anymore, skip
 
-                if (storeMaxTimestamp >= walTransaction.commitTimestamp) {
+                if (storeMaxTimestamp >= walTransaction.commitTSN) {
                     // we already have these changes in our store.
                     continue
                 }
@@ -212,7 +204,7 @@ class ChronoStoreImpl(
         }
         val timeAfter = System.currentTimeMillis()
         log.info { "Successfully replayed ${totalTransactions} transactions in the WAL file in ${timeAfter - timeBefore}ms. ${missingTransactions} transactions were missing in store files." }
-        return maxTimestamp
+        return maxTSN
     }
 
 

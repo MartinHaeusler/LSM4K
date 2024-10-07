@@ -2,25 +2,35 @@ package org.chronos.chronostore.wal
 
 import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.util.StoreId
-import org.chronos.chronostore.util.Timestamp
+import org.chronos.chronostore.util.TSN
 import org.chronos.chronostore.util.TransactionId
 import org.chronos.chronostore.util.bytes.Bytes
 
 class WriteAheadLogTransaction(
     val transactionId: TransactionId,
-    val commitTimestamp: Timestamp,
+    val commitTSN: TSN,
     val storeIdToCommands: Map<StoreId, List<Command>>,
-    val commitMetadata: Bytes,
 ) {
 
     init {
-        val deviatingCommands = this.storeIdToCommands.values.asSequence().flatten().filter { it.timestamp != commitTimestamp }.toList()
-        require(deviatingCommands.isEmpty()){
-            "${deviatingCommands.size} commands have a timestamp which deviates from the transaction commit timestamp (${commitTimestamp})!"
+        require(!hasDeviatingTSNInCommands()) {
+            "${countCommandsWithDeviatingTSNs()} commands have a TSN which deviates from the transaction commit TSN (${commitTSN})!"
         }
     }
 
+    private fun countCommandsWithDeviatingTSNs(): Int {
+        return this.storeIdToCommands.values.asSequence().flatten().count(::hasDeviatingTSN)
+    }
+
+    private fun hasDeviatingTSNInCommands(): Boolean {
+        return this.storeIdToCommands.values.any { commands -> commands.any(::hasDeviatingTSN) }
+    }
+
+    private fun hasDeviatingTSN(it: Command): Boolean {
+        return it.tsn != commitTSN
+    }
+
     override fun toString(): String {
-        return "WALTransaction[${transactionId}@${commitTimestamp}]"
+        return "WALTransaction[${transactionId}@${commitTSN}]"
     }
 }

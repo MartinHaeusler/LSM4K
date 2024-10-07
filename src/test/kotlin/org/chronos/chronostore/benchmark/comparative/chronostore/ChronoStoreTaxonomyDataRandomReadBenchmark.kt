@@ -2,6 +2,7 @@ package org.chronos.chronostore.benchmark.comparative.chronostore
 
 import org.chronos.chronostore.api.ChronoStore
 import org.chronos.chronostore.api.ChronoStoreConfiguration
+import org.chronos.chronostore.api.TransactionalStore.Companion.withCursor
 import org.chronos.chronostore.benchmark.util.Statistics.Companion.statistics
 import org.chronos.chronostore.util.bytes.BasicBytes
 import org.chronos.chronostore.util.bytes.Bytes
@@ -33,7 +34,7 @@ object ChronoStoreTaxonomyDataRandomReadBenchmark {
             measureTimeMillis {
                 chronoStore.transaction { tx ->
                     val store = tx.getStore("data")
-                    store.openCursorOnLatest().use { cursor ->
+                    store.withCursor { cursor ->
                         cursor.firstOrThrow()
                         allKeys += cursor.ascendingKeySequenceFromHere().map { it.own() }
                     }
@@ -54,7 +55,7 @@ object ChronoStoreTaxonomyDataRandomReadBenchmark {
                                 keyList.random()
                             }
 
-                            val value = store.getLatest(keyToRead)
+                            val value = store.get(keyToRead)
                             blackHole += value?.size ?: 1
                         }
                     }

@@ -2,16 +2,14 @@ package org.chronos.chronostore.io.format
 
 import org.chronos.chronostore.api.exceptions.ChronoStoreBlockReadException
 import org.chronos.chronostore.io.fileaccess.RandomFileAccessDriver
-import org.chronos.chronostore.io.fileaccess.RandomFileAccessDriverFactory
 import org.chronos.chronostore.io.format.datablock.DataBlock
 import org.chronos.chronostore.lsm.cache.LocalBlockCache
 import org.chronos.chronostore.model.command.Command
-import org.chronos.chronostore.model.command.KeyAndTimestamp
+import org.chronos.chronostore.model.command.KeyAndTSN
 import org.chronos.chronostore.util.cursor.CloseHandler
 import org.chronos.chronostore.util.cursor.Cursor
 import org.chronos.chronostore.util.cursor.CursorUtils
 import org.chronos.chronostore.util.statistics.ChronoStoreStatistics
-import kotlin.system.measureTimeMillis
 
 class ChronoStoreFileReader : AutoCloseable {
 
@@ -82,23 +80,23 @@ class ChronoStoreFileReader : AutoCloseable {
         this.blockCache = blockCache
     }
 
-    fun get(keyAndTimestamp: KeyAndTimestamp): Command? {
-        if (!this.fileHeader.metaData.mayContainKey(keyAndTimestamp.key)) {
+    fun get(keyAndTSN: KeyAndTSN): Command? {
+        if (!this.fileHeader.metaData.mayContainKey(keyAndTSN.key)) {
             // key is definitely not in this file, no point in searching.
             return null
         }
-        if (!this.fileHeader.metaData.mayContainDataRelevantForTimestamp(keyAndTimestamp.timestamp)) {
+        if (!this.fileHeader.metaData.mayContainDataRelevantForTSN(keyAndTSN.tsn)) {
             // the data in this file is too new and doesn't contain anything relevant for the request timestamp.
             return null
         }
         // the key may be contained, let's check.
-        var blockIndex = this.fileHeader.indexOfBlocks.getBlockIndexForKeyAndTimestampAscending(keyAndTimestamp)
+        var blockIndex = this.fileHeader.indexOfBlocks.getBlockIndexForKeyAndTimestampAscending(keyAndTSN)
             ?: return null // we don't have a block for this key and timestamp.
         var matchingCommandFromPreviousBlock: Command? = null
         while (true) {
             val dataBlock = this.getBlockForIndex(blockIndex)
                 ?: return matchingCommandFromPreviousBlock
-            val (command, isLastInBlock) = dataBlock.get(keyAndTimestamp)
+            val (command, isLastInBlock) = dataBlock.get(keyAndTSN)
                 ?: return matchingCommandFromPreviousBlock
             if (!isLastInBlock) {
                 return command
@@ -146,11 +144,11 @@ class ChronoStoreFileReader : AutoCloseable {
         }
     }
 
-    inline fun <T> withCursor(action: (Cursor<KeyAndTimestamp, Command>) -> T): T {
+    inline fun <T> withCursor(action: (Cursor<KeyAndTSN, Command>) -> T): T {
         return this.openCursor().use(action)
     }
 
-    fun openCursor(): Cursor<KeyAndTimestamp, Command> {
+    fun openCursor(): Cursor<KeyAndTSN, Command> {
         return ChronoStoreFileCursor()
     }
 
@@ -184,7 +182,7 @@ class ChronoStoreFileReader : AutoCloseable {
         this.driver.close()
     }
 
-    private inner class ChronoStoreFileCursor : Cursor<KeyAndTimestamp, Command> {
+    private inner class ChronoStoreFileCursor : Cursor<KeyAndTSN, Command> {
 
         override var modCount: Long = 0
 
@@ -193,7 +191,7 @@ class ChronoStoreFileReader : AutoCloseable {
         override var isValidPosition: Boolean = false
 
         private var currentBlock: DataBlock? = null
-        private var currentCursor: Cursor<KeyAndTimestamp, Command>? = null
+        private var currentCursor: Cursor<KeyAndTSN, Command>? = null
 
         private val closeHandlers = mutableListOf<CloseHandler>()
 
@@ -312,7 +310,7 @@ class ChronoStoreFileReader : AutoCloseable {
             return true
         }
 
-        override fun peekNext(): Pair<KeyAndTimestamp, Command>? {
+        override fun peekNext(): Pair<KeyAndTSN, Command>? {
             if (!this.isValidPosition) {
                 return null
             }
@@ -323,7 +321,7 @@ class ChronoStoreFileReader : AutoCloseable {
                 ?: return super.peekNext() // fall back to default implementation
         }
 
-        override fun peekPrevious(): Pair<KeyAndTimestamp, Command>? {
+        override fun peekPrevious(): Pair<KeyAndTSN, Command>? {
             if (!this.isValidPosition) {
                 return null
             }
@@ -334,7 +332,7 @@ class ChronoStoreFileReader : AutoCloseable {
                 ?: return super.peekPrevious()
         }
 
-        override val keyOrNull: KeyAndTimestamp?
+        override val keyOrNull: KeyAndTSN?
             get() {
                 check(this.isOpen, this::getAlreadyClosedMessage)
                 if (!this.isValidPosition) {
@@ -352,7 +350,7 @@ class ChronoStoreFileReader : AutoCloseable {
                 return this.currentCursor?.valueOrNull
             }
 
-        override fun onClose(action: CloseHandler): Cursor<KeyAndTimestamp, Command> {
+        override fun onClose(action: CloseHandler): Cursor<KeyAndTSN, Command> {
             check(this.isOpen, this::getAlreadyClosedMessage)
             this.closeHandlers += action
             return this
@@ -372,7 +370,7 @@ class ChronoStoreFileReader : AutoCloseable {
             CursorUtils.executeCloseHandlers(currentCursorCloseHandler, this.closeHandlers)
         }
 
-        override fun seekExactlyOrNext(key: KeyAndTimestamp): Boolean {
+        override fun seekExactlyOrNext(key: KeyAndTSN): Boolean {
             check(this.isOpen, this::getAlreadyClosedMessage)
             ChronoStoreStatistics.FILE_CURSOR_EXACTLY_OR_NEXT_SEEKS.incrementAndGet()
             if (key == this.keyOrNull) {
@@ -396,7 +394,7 @@ class ChronoStoreFileReader : AutoCloseable {
             return true
         }
 
-        override fun seekExactlyOrPrevious(key: KeyAndTimestamp): Boolean {
+        override fun seekExactlyOrPrevious(key: KeyAndTSN): Boolean {
             check(this.isOpen, this::getAlreadyClosedMessage)
             ChronoStoreStatistics.FILE_CURSOR_EXACTLY_OR_PREVIOUS_SEEKS.incrementAndGet()
             if (key == this.keyOrNull) {

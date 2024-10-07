@@ -3,7 +3,6 @@ package org.chronos.chronostore.benchmark.comparative.chronostore
 import org.chronos.chronostore.api.ChronoStore
 import org.chronos.chronostore.api.ChronoStoreConfiguration
 import org.chronos.chronostore.impl.ChronoStoreImpl
-import org.chronos.chronostore.io.format.CompressionAlgorithm
 import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.util.IOExtensions.size
 import org.chronos.chronostore.util.bytes.Bytes
@@ -43,7 +42,7 @@ object ChronoStoreTaxonomyDataWriterBenchmark {
 
                 val timeBefore = System.currentTimeMillis()
                 chronoStore.transaction { tx ->
-                    tx.createNewStore("data", false)
+                    tx.createNewStore("data")
                     tx.commit()
                 }
 
@@ -54,7 +53,7 @@ object ChronoStoreTaxonomyDataWriterBenchmark {
                     chronoStore.transaction { tx ->
                         val store = tx.getStore("data")
                         for (entry in chunk) {
-                            store.put(entry.keyAndTimestamp.toBytes(), entry.value)
+                            store.put(entry.keyAndTSN.toBytes(), entry.value)
                             entries++
                         }
                         transactionCount++

@@ -2,7 +2,7 @@ package org.chronos.chronostore.lsm
 
 import org.chronos.chronostore.api.ChronoStoreTransaction
 import org.chronos.chronostore.model.command.Command
-import org.chronos.chronostore.model.command.KeyAndTimestamp
+import org.chronos.chronostore.model.command.KeyAndTSN
 import org.chronos.chronostore.util.cursor.Cursor
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.concurrent.read
@@ -13,7 +13,7 @@ class CursorManager {
     private val fileNameToOpenCursors = mutableMapOf<String, MutableSet<CursorAndTransaction>>()
     private val lock = ReentrantReadWriteLock(true)
 
-    fun openCursorOn(transaction: ChronoStoreTransaction, lsmTreeFile: LSMTreeFile): Cursor<KeyAndTimestamp, Command> {
+    fun openCursorOn(transaction: ChronoStoreTransaction, lsmTreeFile: LSMTreeFile): Cursor<KeyAndTSN, Command> {
         this.lock.write {
             val rawCursor = lsmTreeFile.cursor()
             val cursorAndTransaction = CursorAndTransaction(rawCursor, transaction)
@@ -43,7 +43,7 @@ class CursorManager {
         }
     }
 
-    private fun closeCursor(fileName: String, transaction: ChronoStoreTransaction, cursor: Cursor<KeyAndTimestamp, Command>) {
+    private fun closeCursor(fileName: String, transaction: ChronoStoreTransaction, cursor: Cursor<KeyAndTSN, Command>) {
         val cursorAndTransaction = CursorAndTransaction(cursor, transaction)
         this.lock.write {
             val cursorSet = fileNameToOpenCursors[fileName]
@@ -57,7 +57,7 @@ class CursorManager {
     }
 
     private data class CursorAndTransaction(
-        val cursor: Cursor<KeyAndTimestamp, Command>,
+        val cursor: Cursor<KeyAndTSN, Command>,
         val transaction: ChronoStoreTransaction
     )
 

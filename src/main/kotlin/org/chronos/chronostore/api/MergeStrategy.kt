@@ -13,7 +13,7 @@ enum class MergeStrategy {
             // only files with adjacent timestamp ranges are valid merge groups. To find these files easily,
             // we sort by the minTimestamp. Since we assert in our LSMTree that the time ranges are non-overlapping,
             // sorting by minTimestamp is sufficient to create an ordering of ascending adjacent timestamp ranges.
-            val filesAscending = allFiles.sortedBy { it.header.metaData.minTimestamp }
+            val filesAscending = allFiles.sortedBy { it.header.metaData.minTSN }
 
             // boosters:
             // - number of files in the group (multiplicative)

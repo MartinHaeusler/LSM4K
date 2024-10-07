@@ -5,6 +5,7 @@ import org.chronos.chronostore.util.LittleEndianExtensions.readLittleEndianLong
 import org.chronos.chronostore.util.LittleEndianExtensions.writeLittleEndianInt
 import org.chronos.chronostore.util.LittleEndianExtensions.writeLittleEndianLong
 import org.chronos.chronostore.util.PrefixIO
+import org.chronos.chronostore.util.TSN
 import org.chronos.chronostore.util.Timestamp
 import org.chronos.chronostore.util.UUIDExtensions.readUUIDFrom
 import org.chronos.chronostore.util.UUIDExtensions.toBytes
@@ -21,14 +22,14 @@ class FileMetaData(
     val settings: ChronoStoreFileSettings,
     /** The UUID of the file. */
     val fileUUID: UUID,
-    /** The smallest key in the file (independent of the timestamp). May be `null` if the file is empty. */
+    /** The smallest key in the file (independent of the TSN). May be `null` if the file is empty. */
     val minKey: Bytes?,
-    /** The largest key in the file (independent of the timestamp). May be `null` if the file is empty. */
+    /** The largest key in the file (independent of the TSN). May be `null` if the file is empty. */
     val maxKey: Bytes?,
-    /** The smallest timestamp in the file (independent of the key). May be `null` if the file is empty. */
-    val minTimestamp: Timestamp?,
-    /** The largest timestamp in the file (independent of the key). May be `null` if the file is empty. */
-    val maxTimestamp: Timestamp?,
+    /** The smallest [TSN] in the file (independent of the key). May be `null` if the file is empty. */
+    val minTSN: TSN?,
+    /** The largest [TSN] in the file (independent of the key). May be `null` if the file is empty. */
+    val maxTSN: TSN?,
     /** The number of non-overwritten non-delete entries in this file (i.e. the size of the "head" key set of the file). */
     val headEntries: Long,
     /** The total number of entries in this file. */
@@ -54,8 +55,8 @@ class FileMetaData(
             val fileUUID = readUUIDFrom(inputStream.readNBytes(Long.SIZE_BYTES * 2))
             val minKey = PrefixIO.readBytes(inputStream).takeIf { it.isNotEmpty() }
             val maxKey = PrefixIO.readBytes(inputStream).takeIf { it.isNotEmpty() }
-            val minTimestamp = inputStream.readLittleEndianLong().takeIf { it > 0 }
-            val maxTimestamp = inputStream.readLittleEndianLong().takeIf { it > 0 }
+            val minTSN = inputStream.readLittleEndianLong().takeIf { it > 0 }
+            val maxTSN = inputStream.readLittleEndianLong().takeIf { it > 0 }
             val headEntries = inputStream.readLittleEndianLong()
             val totalEntries = inputStream.readLittleEndianLong()
             val numberOfBlocks = inputStream.readLittleEndianInt()
@@ -68,8 +69,8 @@ class FileMetaData(
                 fileUUID = fileUUID,
                 minKey = minKey,
                 maxKey = maxKey,
-                minTimestamp = minTimestamp,
-                maxTimestamp = maxTimestamp,
+                minTSN = minTSN,
+                maxTSN = maxTSN,
                 headEntries = headEntries,
                 totalEntries = totalEntries,
                 numberOfBlocks = numberOfBlocks,
@@ -87,8 +88,8 @@ class FileMetaData(
         outputStream.writeBytesWithoutSize(fileUUID.toBytes())
         PrefixIO.writeBytes(outputStream, this.minKey ?: Bytes.EMPTY)
         PrefixIO.writeBytes(outputStream, this.maxKey ?: Bytes.EMPTY)
-        outputStream.writeLittleEndianLong(this.minTimestamp ?: 0)
-        outputStream.writeLittleEndianLong(this.maxTimestamp ?: 0)
+        outputStream.writeLittleEndianLong(this.minTSN ?: 0)
+        outputStream.writeLittleEndianLong(this.maxTSN ?: 0)
         outputStream.writeLittleEndianLong(this.headEntries)
         outputStream.writeLittleEndianLong(this.totalEntries)
         outputStream.writeLittleEndianInt(this.numberOfBlocks)
@@ -112,15 +113,15 @@ class FileMetaData(
         return this.bloomFilter.mightContain(key)
     }
 
-    fun mayContainDataRelevantForTimestamp(timestamp: Timestamp): Boolean {
-        if (this.minTimestamp == null) {
+    fun mayContainDataRelevantForTSN(tsn: TSN): Boolean {
+        if (this.minTSN == null) {
             // the file is empty
             return false
         }
-        // if the min timestamp is GREATER than the request timestamp,
-        // this file only contains data which is NEWER than the timestamp
-        // we're looking for, thus there's no data in this file affecting that timestamp.
-        return this.minTimestamp <= timestamp
+        // if the min TSN is GREATER than the request TSN,
+        // this file only contains data which is NEWER than the TSN
+        // we're looking for, thus there's no data in this file affecting that TSN.
+        return this.minTSN <= tsn
     }
 
     /** The number of entries in this file which have been overwritten by newer entries on the same keys. */
@@ -142,8 +143,8 @@ class FileMetaData(
             val fileUUIDSize = Long.SIZE_BYTES * 2
             val minKeySize = this.minKey?.size ?: 0
             val maxKeySize = this.maxKey?.size ?: 0
-            val minTimestampSize = Timestamp.SIZE_BYTES
-            val maxTimestampSize = Timestamp.SIZE_BYTES
+            val minTSNSize = TSN.SIZE_BYTES
+            val maxTSNSize = TSN.SIZE_BYTES
             val statsSize = Long.SIZE_BYTES * 3 + Int.SIZE_BYTES
             val createdAtSize = Timestamp.SIZE_BYTES
             val bloomFilterSize = Int.SIZE_BYTES + this.bloomFilter.sizeBytes
@@ -151,15 +152,15 @@ class FileMetaData(
                 fileUUIDSize +
                 minKeySize +
                 maxKeySize +
-                minTimestampSize +
-                maxTimestampSize +
+                minTSNSize +
+                maxTSNSize +
                 statsSize +
                 createdAtSize +
                 bloomFilterSize
         }
 
     override fun toString(): String {
-        return "FileMetaData(settings=$settings, fileUUID=$fileUUID, minKey=$minKey, maxKey=$maxKey, minTimestamp=$minTimestamp, maxTimestamp=$maxTimestamp, headEntries=$headEntries, totalEntries=$totalEntries, numberOfBlocks=$numberOfBlocks, numberOfMerges=$numberOfMerges, createdAt=$createdAt, historyEntries=$historyEntries, headHistoryRatio=$headHistoryRatio)"
+        return "FileMetaData(settings=$settings, fileUUID=$fileUUID, minKey=$minKey, maxKey=$maxKey, minTSN=$minTSN, maxTSN=$maxTSN, headEntries=$headEntries, totalEntries=$totalEntries, numberOfBlocks=$numberOfBlocks, numberOfMerges=$numberOfMerges, createdAt=$createdAt, historyEntries=$historyEntries, headHistoryRatio=$headHistoryRatio)"
     }
 
 

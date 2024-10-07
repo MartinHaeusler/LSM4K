@@ -3,10 +3,11 @@ package org.chronos.chronostore.io.format
 import com.google.common.collect.Iterators
 import com.google.common.collect.PeekingIterator
 import org.chronos.chronostore.model.command.Command
-import org.chronos.chronostore.model.command.KeyAndTimestamp
+import org.chronos.chronostore.model.command.KeyAndTSN
 import org.chronos.chronostore.util.LittleEndianExtensions.writeLittleEndianInt
 import org.chronos.chronostore.util.LittleEndianExtensions.writeLittleEndianLong
 import org.chronos.chronostore.util.PositionTrackingStream
+import org.chronos.chronostore.util.TSN
 import org.chronos.chronostore.util.Timestamp
 import org.chronos.chronostore.util.bloom.BytesBloomFilter
 import org.chronos.chronostore.util.bytes.Bytes
@@ -97,8 +98,8 @@ class ChronoStoreFileWriter : AutoCloseable {
         val metadata = FileMetaData(
             settings = this.settings,
             fileUUID = UUID.randomUUID(),
-            minTimestamp = blockWriteResult.minTimestamp,
-            maxTimestamp = blockWriteResult.maxTimestamp,
+            minTSN = blockWriteResult.minTSN,
+            maxTSN = blockWriteResult.maxTSN,
             minKey = blockWriteResult.minKey,
             maxKey = blockWriteResult.maxKey,
             headEntries = blockWriteResult.headEntries,
@@ -138,8 +139,8 @@ class ChronoStoreFileWriter : AutoCloseable {
         var totalEntries = 0L
         var headEntries = 0L
 
-        var minTimestamp = Timestamp.MAX_VALUE
-        var maxTimestamp = 0L
+        var minTSN = TSN.MAX_VALUE
+        var maxTSN = 0L
 
         var minKey: Bytes? = null
         var maxKey: Bytes? = null
@@ -147,8 +148,8 @@ class ChronoStoreFileWriter : AutoCloseable {
         val commands = ObservingPeekingIterator(commandsIterator) { command ->
             // each command contributes towards the total entries
             totalEntries += 1
-            minTimestamp = min(command.timestamp, minTimestamp)
-            maxTimestamp = max(command.timestamp, maxTimestamp)
+            minTSN = min(command.tsn, minTSN)
+            maxTSN = max(command.tsn, maxTSN)
             minKey = min(minKey ?: command.key, command.key)
             maxKey = max(maxKey ?: command.key, command.key)
 
@@ -163,24 +164,24 @@ class ChronoStoreFileWriter : AutoCloseable {
 
         // write the individual blocks into the file until we
         // run out of commands.
-        val blockIndexToStartPositionAndMinKey = mutableListOf<Triple<Int, Long, KeyAndTimestamp>>()
+        val blockIndexToStartPositionAndMinKey = mutableListOf<Triple<Int, Long, KeyAndTSN>>()
 
         var blockSequenceNumber = 0
         while (commands.hasNext()) {
             val nextCommand = commands.peek()
-            val minKeyAndTimestamp = KeyAndTimestamp(
+            val minKeyAndTSN = KeyAndTSN(
                 // It is ESSENTIAL That we call ".own()" on the key here.
                 // If we don't do that, we keep the whole backing array
                 // of EVERY page in memory. This will eventually lead to
                 // out-of-memory issues if the file we're writing has
                 // enough blocks in it.
                 nextCommand.key.own(),
-                nextCommand.timestamp
+                nextCommand.tsn
             )
             blockIndexToStartPositionAndMinKey += Triple(
                 blockSequenceNumber,
                 this.outputStream.position,
-                minKeyAndTimestamp
+                minKeyAndTSN
             )
 
             // for debugging purposes, we write the block into a byte array first
@@ -199,8 +200,8 @@ class ChronoStoreFileWriter : AutoCloseable {
         return BlockWriteResult(
             totalEntries = totalEntries,
             headEntries = headEntries,
-            minTimestamp = minTimestamp.takeIf { it < Timestamp.MAX_VALUE },
-            maxTimestamp = maxTimestamp.takeIf { it > 0 },
+            minTSN = minTSN.takeIf { it < TSN.MAX_VALUE },
+            maxTSN = maxTSN.takeIf { it > 0 },
             minKey = minKey,
             maxKey = maxKey,
             numberOfBlocks = blockSequenceNumber,
@@ -225,8 +226,8 @@ class ChronoStoreFileWriter : AutoCloseable {
         // for the block metadata, we also need to keep track of the number of commands
         // in the block as well as the minimum and maximum timestamps we've encountered.
         var commandCount = 0
-        var minTimestamp = Timestamp.MAX_VALUE
-        var maxTimestamp = 0L
+        var minTSN = TSN.MAX_VALUE
+        var maxTSN = 0L
 
         // in order to create an appropriately sized bloom filter for the block later on,
         // we must keep track of all keys within the block.
@@ -251,10 +252,10 @@ class ChronoStoreFileWriter : AutoCloseable {
             command.writeToStream(blockPositionTrackingStream)
             bloomFilter.put(command.key)
 
-            minTimestamp = min(minTimestamp, command.timestamp)
-            maxTimestamp = max(maxTimestamp, command.timestamp)
+            minTSN = min(minTSN, command.tsn)
+            maxTSN = max(maxTSN, command.tsn)
 
-            val currentKey = command.keyAndTimestamp.key
+            val currentKey = command.keyAndTSN.key
             firstKey = firstKey ?: currentKey
             lastKey = currentKey
             commandCount++
@@ -278,8 +279,8 @@ class ChronoStoreFileWriter : AutoCloseable {
             blockSequenceNumber = blockSequenceNumber,
             minKey = firstKey!!, // we know for a fact that we will have a first key
             maxKey = lastKey!!, // and a last key at this point because the iterator is non-empty.
-            minTimestamp = minTimestamp,
-            maxTimestamp = maxTimestamp,
+            minTSN = minTSN,
+            maxTSN = maxTSN,
             commandCount = commandCount,
             compressedDataSize = compressedSize,
             uncompressedDataSize = uncompressedSize,
@@ -339,10 +340,10 @@ class ChronoStoreFileWriter : AutoCloseable {
         val headEntries: Long,
         val minKey: Bytes?,
         val maxKey: Bytes?,
-        val minTimestamp: Timestamp?,
-        val maxTimestamp: Timestamp?,
+        val minTSN: TSN?,
+        val maxTSN: TSN?,
         val numberOfBlocks: Int,
-        val indexOfBlocks: List<Triple<Int, Long, KeyAndTimestamp>>,
+        val indexOfBlocks: List<Triple<Int, Long, KeyAndTSN>>,
     )
 
     private class ObservingPeekingIterator<E>(

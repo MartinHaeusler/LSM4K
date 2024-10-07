@@ -1,10 +1,30 @@
 package org.chronos.chronostore.api
 
 import org.chronos.chronostore.util.StoreId
+import org.chronos.chronostore.util.TSN
 import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.Timestamp
 import org.chronos.chronostore.util.TransactionId
 
+/**
+ * A transaction on a [ChronoStore] instance.
+ *
+ * Transactions can be opened e.g. via [ChronoStore.beginTransaction] and need to be [closed][close] manually.
+ *
+ * There are three ways to close a transaction:
+ *
+ * - [commit]
+ *   closes the transaction and atomically applies all of its modifications to the store in an all-or-nothing fashion.
+ *   When the call to [commit] returns successfully, the modifications within the transaction are guaranteed
+ *   to be persistent on disc.
+ *
+ * - [rollback]
+ *   closes the transaction and discards any changes.
+ *
+ * - [close]
+ *   is for convenience and conformance with [AutoCloseable]. It is equivalent to [rollback].
+ *
+ */
 interface ChronoStoreTransaction : AutoCloseable {
 
     // =================================================================================================================
@@ -17,9 +37,9 @@ interface ChronoStoreTransaction : AutoCloseable {
     val id: TransactionId
 
     /**
-     * The latest timestamp visible to this transaction.
+     * The latest transaction serial number visible to this transaction.
      */
-    val lastVisibleTimestamp: Timestamp
+    val lastVisibleSerialNumber: TSN
 
     /**
      * Returns `true` if the transaction is still open, or `false` if it has been [committed][commit] or [rolled back][rollback].
@@ -126,12 +146,10 @@ interface ChronoStoreTransaction : AutoCloseable {
      * and they may continue to exist even if the current transaction is [rolled back][rollback].
      *
      * @param name The name of the store to create. Must be unique among all stores.
-     * @param versioned Use `true` to apply version control on the store and keep old versions of entries,
-     * or `false` to discard old versions of entries when they're overwritten.
      *
      * @return The newly created store.
      */
-    fun createNewStore(name: StoreId, versioned: Boolean): TransactionalReadWriteStore
+    fun createNewStore(name: StoreId): TransactionalReadWriteStore
 
     /**
      * Creates a new store with the given [name].
@@ -140,13 +158,11 @@ interface ChronoStoreTransaction : AutoCloseable {
      * and they may continue to exist even if the current transaction is [rolled back][rollback].
      *
      * @param name The name of the store to create. Must be unique among all stores.
-     * @param versioned Use `true` to apply version control on the store and keep old versions of entries,
-     * or `false` to discard old versions of entries when they're overwritten.
      *
      * @return The newly created store.
      */
-    fun createNewStore(name: String, versioned: Boolean): TransactionalReadWriteStore {
-        return this.createNewStore(StoreId.of(name), versioned)
+    fun createNewStore(name: String): TransactionalReadWriteStore {
+        return this.createNewStore(StoreId.of(name))
     }
 
     /**
@@ -161,20 +177,12 @@ interface ChronoStoreTransaction : AutoCloseable {
     /**
      * Commits the transaction.
      *
-     * @return The unique timestamp of the commit.
-     */
-    fun commit(): Timestamp {
-        return commit(null)
-    }
-
-    /**
-     * Commits the transaction.
+     * Calling [commit] on a transaction which [is closed][isOpen] will
+     * throw an [IllegalStateException].
      *
-     * @param metadata The metadata to attach to the commit
-     *
-     * @return The unique timestamp of the commit.
+     * @return The unique [TSN] of the commit.
      */
-    fun commit(metadata: Bytes? = null): Timestamp
+    fun commit(): TSN
 
     /**
      * Rolls back the transaction.
@@ -185,6 +193,8 @@ interface ChronoStoreTransaction : AutoCloseable {
      *
      * After this method has been called, no further queries
      * or modifications on this object will be permitted.
+     *
+     * Calling [rollback] on a transaction which [is closed][isOpen] has no effect.
      */
     fun rollback()
 
@@ -192,6 +202,8 @@ interface ChronoStoreTransaction : AutoCloseable {
      * Closes the transaction.
      *
      * This is equivalent to calling [rollback].
+     *
+     * Calling [close] on a transaction which [is closed][isOpen] has no effect.
      */
     override fun close() {
         this.rollback()

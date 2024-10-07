@@ -1,20 +1,20 @@
 package org.chronos.chronostore.io.format
 
-import org.chronos.chronostore.model.command.KeyAndTimestamp
+import org.chronos.chronostore.model.command.KeyAndTSN
 import java.util.*
 
 class IndexOfBlocks {
 
     private val startPositions: LongArray
     private val endOfLastBlock: Long
-    private val minKeyAndTimestampToBlockIndex: TreeMap<KeyAndTimestamp, Int>
+    private val minKeyAndTSNToBlockIndex: TreeMap<KeyAndTSN, Int>
 
     @Suppress("ConvertSecondaryConstructorToPrimary")
-    constructor(entries: List<Triple<Int, Long, KeyAndTimestamp>>, endOfLastBlock: Long) {
+    constructor(entries: List<Triple<Int, Long, KeyAndTSN>>, endOfLastBlock: Long) {
         val sortedEntries = entries.sortedBy { it.first }
         this.startPositions = LongArray(sortedEntries.size)
         this.endOfLastBlock = endOfLastBlock
-        this.minKeyAndTimestampToBlockIndex = TreeMap()
+        this.minKeyAndTSNToBlockIndex = TreeMap()
         for (i in entries.indices) {
             val entry = sortedEntries[i]
             // we have to make sure that there are no duplicates and no "holes" in the indices
@@ -22,17 +22,17 @@ class IndexOfBlocks {
                 throw IllegalArgumentException("Cannot build Index-Of-Blocks: the persistent format is missing block #${i}!")
             }
             this.startPositions[i] = entry.second
-            this.minKeyAndTimestampToBlockIndex[entry.third] = entry.first
+            this.minKeyAndTSNToBlockIndex[entry.third] = entry.first
         }
     }
 
     val isEmpty: Boolean
         get() {
-            return this.minKeyAndTimestampToBlockIndex.isEmpty()
+            return this.minKeyAndTSNToBlockIndex.isEmpty()
         }
 
     val size: Int
-        get() = this.minKeyAndTimestampToBlockIndex.size
+        get() = this.minKeyAndTSNToBlockIndex.size
 
     private var binarySizeCached: Long? = null
 
@@ -49,7 +49,7 @@ class IndexOfBlocks {
 
     private fun computeBinarySizeUncached(): Long{
         val startPositionsSize = startPositions.size * Long.SIZE_BYTES
-        val treeSize = minKeyAndTimestampToBlockIndex.entries.sumOf { (it.key.byteSize + Int.SIZE_BYTES).toLong() }
+        val treeSize = minKeyAndTSNToBlockIndex.entries.sumOf { (it.key.byteSize + Int.SIZE_BYTES).toLong() }
         return treeSize + startPositionsSize + Long.SIZE_BYTES
     }
 
@@ -78,14 +78,14 @@ class IndexOfBlocks {
         }
     }
 
-    fun getBlockIndexForKeyAndTimestampAscending(keyAndTimestamp: KeyAndTimestamp): Int? {
-        val floorEntry = this.minKeyAndTimestampToBlockIndex.floorEntry(keyAndTimestamp)
+    fun getBlockIndexForKeyAndTimestampAscending(keyAndTSN: KeyAndTSN): Int? {
+        val floorEntry = this.minKeyAndTSNToBlockIndex.floorEntry(keyAndTSN)
             ?: return null // the key is too small to exist in this file
         return floorEntry.value
     }
 
-    fun getBlockIndexForKeyAndTimestampDescending(keyAndTimestamp: KeyAndTimestamp): Int? {
-        val ceilEntry = this.minKeyAndTimestampToBlockIndex.ceilingEntry(keyAndTimestamp)
+    fun getBlockIndexForKeyAndTimestampDescending(keyAndTSN: KeyAndTSN): Int? {
+        val ceilEntry = this.minKeyAndTSNToBlockIndex.ceilingEntry(keyAndTSN)
             ?: return null // the key is too large to exist in this file
         return ceilEntry.value
     }

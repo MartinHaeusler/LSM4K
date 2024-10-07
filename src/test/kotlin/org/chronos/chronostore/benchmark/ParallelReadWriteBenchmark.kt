@@ -1,5 +1,6 @@
 package org.chronos.chronostore.benchmark
 
+import org.chronos.chronostore.api.TransactionalStore.Companion.withCursor
 import org.chronos.chronostore.test.util.ChronoStoreMode
 import org.chronos.chronostore.util.bytes.BasicBytes
 import org.chronos.chronostore.util.statistics.ChronoStoreStatistics
@@ -24,7 +25,7 @@ object ParallelReadWriteBenchmark {
         val uniqueKeys = (0 until NUMBER_OF_UNIQUE_KEYS).map { "key#${it}" }
         ChronoStoreMode.ONDISK.withChronoStore { chronoStore ->
             chronoStore.transaction { tx ->
-                tx.createNewStore("test", versioned = true)
+                tx.createNewStore("test")
                 tx.commit()
             }
 
@@ -67,7 +68,7 @@ object ParallelReadWriteBenchmark {
                         totalSum += chronoStore.transaction { tx ->
                             val store = tx.getStore("test")
                             val keyBytes = BasicBytes(uniqueKeys.random())
-                            store.openCursorOnLatest().use { cursor ->
+                            store.withCursor { cursor ->
                                 val sum = if (cursor.seekExactlyOrNext(keyBytes)) {
                                     var i = 0
                                     var sum = 0

@@ -14,7 +14,6 @@ import org.chronos.chronostore.util.StoreId
 import org.chronos.chronostore.util.TransactionId
 import org.chronos.chronostore.util.bytes.BasicBytes
 import org.chronos.chronostore.util.bytes.Bytes
-import org.chronos.chronostore.util.unit.MiB
 import org.chronos.chronostore.wal.WALFile
 import org.chronos.chronostore.wal.WriteAheadLogTransaction
 import org.chronos.chronostore.wal.WriteAheadLog
@@ -40,7 +39,7 @@ class WriteAheadLogTest {
 
             val tx1 = WriteAheadLogTransaction(
                 transactionId = tx1Id,
-                commitTimestamp = 1000,
+                commitTSN = 1000,
                 storeIdToCommands = mapOf(
                     store1Name to listOf(
                         Command.put(BasicBytes("hello"), 1000, BasicBytes("world")),
@@ -55,20 +54,18 @@ class WriteAheadLogTest {
                         Command.put(BasicBytes("jane"), 1000, BasicBytes("doe")),
                     )
                 ),
-                commitMetadata = BasicBytes("John was here")
             )
 
             val tx2 = WriteAheadLogTransaction(
                 transactionId = tx2Id,
-                commitTimestamp = 1234,
+                commitTSN = 1234,
                 storeIdToCommands = emptyMap(),
-                commitMetadata = BasicBytes("Empty Commit")
             )
 
 
             val tx3 = WriteAheadLogTransaction(
                 transactionId = tx3Id,
-                commitTimestamp = 777777,
+                commitTSN = 777777,
                 storeIdToCommands = mapOf(
                     store1Name to listOf(
                         Command.del(BasicBytes("hello"), 777777),
@@ -78,7 +75,6 @@ class WriteAheadLogTest {
                         Command.put(BasicBytes("sarah"), 777777, BasicBytes("doe")),
                     )
                 ),
-                commitMetadata = BasicBytes("Jane did this")
             )
 
             wal.addCommittedTransaction(tx1)
@@ -91,8 +87,7 @@ class WriteAheadLogTest {
             expectThat(readTx).hasSize(3).and {
                 get(0).and {
                     get { this.transactionId }.isEqualTo(tx1Id)
-                    get { this.commitTimestamp }.isEqualTo(1000)
-                    get { this.commitMetadata }.isEqualTo(BasicBytes("John was here"))
+                    get { this.commitTSN }.isEqualTo(1000)
                     get { this.storeIdToCommands }.hasSize(3).and {
                         get(store1Name).isNotNull().hasSize(2).and {
                             get(0).isEqualTo(Command.put(BasicBytes("hello"), 1000, BasicBytes("world")))
@@ -110,14 +105,12 @@ class WriteAheadLogTest {
                 }
                 get(1).and {
                     get { this.transactionId }.isEqualTo(tx2Id)
-                    get { this.commitTimestamp }.isEqualTo(1234)
-                    get { this.commitMetadata }.isEqualTo(BasicBytes("Empty Commit"))
+                    get { this.commitTSN }.isEqualTo(1234)
                     get { this.storeIdToCommands }.isEmpty()
                 }
                 get(2).and {
                     get { this.transactionId }.isEqualTo(tx3Id)
-                    get { this.commitTimestamp }.isEqualTo(777777)
-                    get { this.commitMetadata }.isEqualTo(BasicBytes("Jane did this"))
+                    get { this.commitTSN }.isEqualTo(777777)
                     get { this.storeIdToCommands }.hasSize(2).and {
                         get(store1Name).isNotNull().hasSize(2).and {
                             get(0).isEqualTo(Command.del(BasicBytes("hello"), 777777))
@@ -158,14 +151,13 @@ class WriteAheadLogTest {
                         compressionAlgorithm = CompressionAlgorithm.SNAPPY,
                         tx = WriteAheadLogTransaction(
                             transactionId = tx1Id,
-                            commitTimestamp = commitTimestamp1,
+                            commitTSN = commitTimestamp1,
                             storeIdToCommands = mapOf(
                                 storeId to listOf(
                                     Command.put("foo", commitTimestamp1, "bar"),
                                     Command.put("hello", commitTimestamp1, "world"),
                                 )
                             ),
-                            commitMetadata = Bytes.EMPTY
                         )
                     )
 
@@ -176,14 +168,13 @@ class WriteAheadLogTest {
                         compressionAlgorithm = CompressionAlgorithm.SNAPPY,
                         tx = WriteAheadLogTransaction(
                             transactionId = tx2Id,
-                            commitTimestamp = commitTimestamp2,
+                            commitTSN = commitTimestamp2,
                             storeIdToCommands = mapOf(
                                 storeId to listOf(
                                     Command.put("foo", commitTimestamp2, "baz"),
                                     Command.put("pi", commitTimestamp2, "3.1415")
                                 )
                             ),
-                            commitMetadata = Bytes.EMPTY
                         )
                     )
 
@@ -220,7 +211,6 @@ class WriteAheadLogTest {
 
                 expectThat(transactions).single().and {
                     get { this.transactionId }.isEqualTo(tx1Id)
-                    get { this.commitMetadata }.isEqualTo(Bytes.EMPTY)
                     get { this.storeIdToCommands.entries }.single().and {
                         get { this.key }.isEqualTo(storeId)
                         get { this.value }.hasSize(2).and {
@@ -228,13 +218,13 @@ class WriteAheadLogTest {
                                 get { this.key }.isEqualTo(BasicBytes("foo"))
                                 get { this.value }.isEqualTo(BasicBytes("bar"))
                                 get { this.opCode }.isEqualTo(Command.OpCode.PUT)
-                                get { this.timestamp }.isEqualTo(123456)
+                                get { this.tsn }.isEqualTo(123456)
                             }
                             one {
                                 get { this.key }.isEqualTo(BasicBytes("hello"))
                                 get { this.value }.isEqualTo(BasicBytes("world"))
                                 get { this.opCode }.isEqualTo(Command.OpCode.PUT)
-                                get { this.timestamp }.isEqualTo(123456)
+                                get { this.tsn }.isEqualTo(123456)
                             }
                         }
                     }
@@ -256,7 +246,7 @@ class WriteAheadLogTest {
 
             val wal = WriteAheadLog(walDirectory)
 
-            wal.shorten(lowWatermarkTimestamp = 2000)
+            wal.shorten(lowWatermarkTSN = 2000)
 
             // for a low watermark of 2000:
             // - The file 1234 can safely be deleted, because the next-higher file has timestamp 1999 (less than low watermark)
@@ -286,14 +276,13 @@ class WriteAheadLogTest {
                     compressionAlgorithm = CompressionAlgorithm.SNAPPY,
                     tx = WriteAheadLogTransaction(
                         transactionId = TransactionId.randomUUID(),
-                        commitTimestamp = 1300,
+                        commitTSN = 1300,
                         storeIdToCommands = mapOf(
                             StoreId.of("hello") to listOf(
                                 Command.put("foo", 1300, "baz"),
                                 Command.put("pi", 1300, "3.1415")
                             )
                         ),
-                        commitMetadata = Bytes.EMPTY
                     )
                 )
                 overWriter.commit()
@@ -343,14 +332,13 @@ class WriteAheadLogTest {
                     compressionAlgorithm = CompressionAlgorithm.SNAPPY,
                     tx = WriteAheadLogTransaction(
                         transactionId = TransactionId.randomUUID(),
-                        commitTimestamp = 1300,
+                        commitTSN = 1300,
                         storeIdToCommands = mapOf(
                             StoreId.of("hello") to listOf(
                                 Command.put("foo", 1300, "baz"),
                                 Command.put("pi", 1300, "3.1415")
                             )
                         ),
-                        commitMetadata = Bytes.EMPTY
                     )
                 )
                 overWriter.commit()
