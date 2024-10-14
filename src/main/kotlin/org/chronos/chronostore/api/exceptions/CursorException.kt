@@ -1,6 +1,6 @@
 package org.chronos.chronostore.api.exceptions
 
-open class ChronoStoreCursorException : ChronoStoreException {
+open class CursorException : ChronoStoreException {
 
     companion object {
 
@@ -16,7 +16,7 @@ open class ChronoStoreCursorException : ChronoStoreException {
             // the causes may be ChronoStoreCursorExceptions themselves.
             // No need to keep these, resolve their causes.
             val allExceptions = exceptions.flatMap { e ->
-                if (e is ChronoStoreCursorException) {
+                if (e is CursorException) {
                     val causes = e.suppressedExceptions + listOfNotNull(e.cause)
                     causes.ifEmpty { listOf(e) }
                 } else {
@@ -30,12 +30,12 @@ open class ChronoStoreCursorException : ChronoStoreException {
 
             if (allExceptions.size == 1) {
                 val cause = allExceptions.single()
-                throw ChronoStoreCursorException("An error occurred in a close handler. Cause: ${cause}", cause)
+                throw CursorException("An error occurred in a close handler. Cause: ${cause}", cause)
             } else {
                 // we include the first suppressed exception in the message because on some error reporting
                 // systems, the suppressed exceptions are not delivered. It's better to know at least one cause
                 // rather than knowing none at all.
-                throw ChronoStoreCursorException(
+                throw CursorException(
                     message = "An error occurred in ${exceptions.size} close handler(s)." +
                         " Please see suppressed exceptions for details." +
                         " First suppressed exception is: ${exceptions.first()}",

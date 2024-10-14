@@ -15,8 +15,8 @@ import org.chronos.chronostore.test.util.VirtualFileSystemTest
 import org.chronos.chronostore.util.StoreId
 import org.chronos.chronostore.util.bytes.BasicBytes
 import org.chronos.chronostore.util.bytes.Bytes
-import org.chronos.chronostore.util.unit.KiB
-import org.chronos.chronostore.util.unit.MiB
+import org.chronos.chronostore.util.unit.BinarySize.Companion.KiB
+import org.chronos.chronostore.util.unit.BinarySize.Companion.MiB
 import strikt.api.expectThat
 import strikt.assertions.*
 import kotlin.random.Random

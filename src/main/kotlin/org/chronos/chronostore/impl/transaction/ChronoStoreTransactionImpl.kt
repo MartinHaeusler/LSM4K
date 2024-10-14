@@ -1,7 +1,11 @@
 package org.chronos.chronostore.impl.transaction
 
 import mu.KotlinLogging
-import org.chronos.chronostore.api.*
+import org.chronos.chronostore.api.ChronoStoreTransaction
+import org.chronos.chronostore.api.Store
+import org.chronos.chronostore.api.StoreManager
+import org.chronos.chronostore.api.TransactionalReadWriteStore
+import org.chronos.chronostore.api.compaction.CompactionStrategy
 import org.chronos.chronostore.impl.TransactionManager
 import org.chronos.chronostore.util.StoreId
 import org.chronos.chronostore.util.TSN
@@ -45,12 +49,13 @@ class ChronoStoreTransactionImpl(
         return this.bindStore(store)
     }
 
-    override fun createNewStore(name: StoreId): TransactionalReadWriteStore {
+    override fun createNewStore(storeId: StoreId, compactionStrategy: CompactionStrategy?): TransactionalReadWriteStore {
         check(this.isOpen) { TX_ALREADY_CLOSED }
         val newStore = this.storeManager.createNewStore(
             transaction = this,
-            name = name,
-            validFromTSN = this.transactionManager.tsnManager.getUniqueTSN()
+            storeId = storeId,
+            validFromTSN = this.transactionManager.tsnManager.getUniqueTSN(),
+            compactionStrategy = compactionStrategy,
         )
         return this.bindStore(newStore)
     }

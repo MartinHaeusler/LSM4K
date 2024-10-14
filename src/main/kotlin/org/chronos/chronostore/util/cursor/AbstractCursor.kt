@@ -1,8 +1,8 @@
 package org.chronos.chronostore.util.cursor
 
-import org.chronos.chronostore.api.exceptions.ChronoStoreCursorException
 import org.chronos.chronostore.util.Order
-import org.chronos.chronostore.util.Order.*
+import org.chronos.chronostore.util.Order.ASCENDING
+import org.chronos.chronostore.util.Order.DESCENDING
 
 abstract class AbstractCursor<K, V> : Cursor<K, V> {
 

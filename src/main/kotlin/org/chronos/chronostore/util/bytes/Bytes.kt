@@ -6,6 +6,7 @@ import org.chronos.chronostore.io.vfs.InputSource
 import org.chronos.chronostore.util.LittleEndianUtil
 import org.chronos.chronostore.util.bits.BitTricks.writeStableInt
 import org.chronos.chronostore.util.bits.BitTricks.writeStableLong
+import org.chronos.chronostore.util.bytes.Bytes.Companion.wrap
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.io.OutputStream

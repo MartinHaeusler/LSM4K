@@ -1,7 +1,5 @@
 package org.chronos.chronostore.lsm
 
-import org.chronos.chronostore.model.command.Command
-import org.chronos.chronostore.model.command.KeyAndTSN
 import org.chronos.chronostore.io.fileaccess.RandomFileAccessDriverFactory
 import org.chronos.chronostore.io.fileaccess.RandomFileAccessDriverFactory.Companion.withDriver
 import org.chronos.chronostore.io.format.ChronoStoreFileReader
@@ -9,11 +7,14 @@ import org.chronos.chronostore.io.format.FileHeader
 import org.chronos.chronostore.io.vfs.VirtualFile
 import org.chronos.chronostore.lsm.cache.FileHeaderCache
 import org.chronos.chronostore.lsm.cache.LocalBlockCache
+import org.chronos.chronostore.model.command.Command
+import org.chronos.chronostore.model.command.KeyAndTSN
+import org.chronos.chronostore.util.FileIndex
 import org.chronos.chronostore.util.cursor.Cursor
 
 class LSMTreeFile(
     val virtualFile: VirtualFile,
-    val index: Int,
+    val index: FileIndex,
     val driverFactory: RandomFileAccessDriverFactory,
     val blockCache: LocalBlockCache,
     val fileHeaderCache: FileHeaderCache,

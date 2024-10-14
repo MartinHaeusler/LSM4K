@@ -12,7 +12,7 @@ import org.chronos.chronostore.util.UUIDExtensions.toBytes
 import org.chronos.chronostore.util.bloom.BytesBloomFilter
 import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.bytes.Bytes.Companion.writeBytesWithoutSize
-import org.chronos.chronostore.util.unit.Bytes
+import org.chronos.chronostore.util.unit.BinarySize.Companion.Bytes
 import java.io.InputStream
 import java.io.OutputStream
 import java.util.*

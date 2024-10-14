@@ -14,8 +14,8 @@ import org.chronos.chronostore.util.StreamExtensions.hasNext
 import org.chronos.chronostore.util.TSN
 import org.chronos.chronostore.util.iterator.IteratorExtensions.peekOrNull
 import org.chronos.chronostore.util.iterator.IteratorExtensions.toPeekingIterator
-import org.chronos.chronostore.util.unit.Bytes
-import org.chronos.chronostore.util.unit.MiB
+import org.chronos.chronostore.util.unit.BinarySize.Companion.Bytes
+import org.chronos.chronostore.util.unit.BinarySize.Companion.MiB
 import java.io.PushbackInputStream
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.concurrent.read

@@ -8,14 +8,14 @@ import org.chronos.chronostore.io.vfs.disk.DiskBasedVirtualFileSystem
 import org.chronos.chronostore.io.vfs.disk.DiskBasedVirtualFileSystemSettings
 import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.util.bytes.Bytes
-import org.chronos.chronostore.util.unit.Bytes
-import org.chronos.chronostore.util.unit.MiB
+import org.chronos.chronostore.util.unit.BinarySize.Companion.Bytes
+import org.chronos.chronostore.util.unit.BinarySize.Companion.MiB
 import java.io.File
 
 object ChronoStoreTaxonomyDataWriterDirectBenchmark {
 
-    val compressionAlgorithm = CompressionAlgorithm.NONE
-    val blockSize = 16.MiB
+    private val compressionAlgorithm = CompressionAlgorithm.NONE
+    private val blockSize = 16.MiB
 
     @JvmStatic
     fun main(args: Array<String>) {

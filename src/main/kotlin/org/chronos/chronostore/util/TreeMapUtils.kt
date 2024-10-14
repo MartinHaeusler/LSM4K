@@ -1,7 +1,6 @@
 package org.chronos.chronostore.util
 
 import java.util.*
-import kotlin.Comparator
 
 object TreeMapUtils {
 

@@ -6,8 +6,8 @@ import org.chronos.chronostore.impl.transaction.TransactionalStoreInternal
 import org.chronos.chronostore.lsm.LSMTreeFile
 import org.chronos.chronostore.test.util.ChronoStoreMode
 import org.chronos.chronostore.util.bytes.Bytes
-import org.chronos.chronostore.util.unit.GiB
-import org.chronos.chronostore.util.unit.KiB
+import org.chronos.chronostore.util.unit.BinarySize.Companion.GiB
+import org.chronos.chronostore.util.unit.BinarySize.Companion.KiB
 import kotlin.random.Random
 
 /**
@@ -19,12 +19,13 @@ object MultiFileReadRegressionBenchmark {
     fun main(args: Array<String>) {
         val random = Random(System.currentTimeMillis())
 
-        val config = ChronoStoreConfiguration()
-        config.maxForestSize = 1.GiB
-        // don't merge automatically
-        config.mergeInterval = null
-        // disable caching
-        config.blockCacheSize = null
+        val config = ChronoStoreConfiguration(
+            maxForestSize = 1.GiB,
+            // don't merge automatically
+            compactionInterval = null,
+            // disable caching
+            blockCacheSize = null,
+        )
 
         ChronoStoreMode.ONDISK.withChronoStore(config) { chronoStore ->
             chronoStore.transaction { tx ->
@@ -62,7 +63,7 @@ object MultiFileReadRegressionBenchmark {
             println("Preparations complete. Files in store: ${numberOfFiles}")
 
             val dataPoints = mutableListOf<Long>()
-            repeat(30){ runIndex ->
+            repeat(30) { runIndex ->
                 entriesInHead = 0
                 val timeBefore = System.currentTimeMillis()
                 chronoStore.transaction { tx ->

@@ -3,7 +3,6 @@ package org.chronos.chronostore.api
 import org.chronos.chronostore.impl.ChronoStoreImpl
 import org.chronos.chronostore.io.vfs.VirtualFileSystem
 import org.chronos.chronostore.io.vfs.disk.DiskBasedVirtualFileSystem
-import org.chronos.chronostore.io.vfs.disk.DiskBasedVirtualFileSystemSettings
 import org.chronos.chronostore.io.vfs.inmemory.InMemoryVirtualFileSystem
 import java.io.File
 

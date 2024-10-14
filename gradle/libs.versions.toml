@@ -1,7 +1,7 @@
 [versions]
 java = "21"
-kotlin = "2.0.20"
-jackson = "2.17.2"
+kotlin = "2.0.21"
+jackson = "2.18.0"
 junit5 = "5.11.1"
 xodus = "2.0.1"
 
@@ -13,6 +13,8 @@ guava = { group = "com.google.guava", name = "guava", version = "33.3.1-jre" }
 jackson-core = { group = "com.fasterxml.jackson.core", name = "jackson-core", version.ref = "jackson" }
 jackson-databind = { group = "com.fasterxml.jackson.core", name = "jackson-databind", version.ref = "jackson" }
 jackson-module-kotlin = { group = "com.fasterxml.jackson.module", name = "jackson-module-kotlin", version.ref = "jackson" }
+jackson-datatype-pcollections = { group = "com.fasterxml.jackson.datatype", name = "jackson-datatype-pcollections", version.ref = "jackson" }
+jackson-datatype-duration = { group = "com.fasterxml.jackson.datatype", name = "jackson-datatype-jsr310", version.ref = "jackson" }
 
 # Compression
 snappy = { group = "org.xerial.snappy", name = "snappy-java", version = "1.1.10.7" }
@@ -39,7 +41,7 @@ xodus-openAPI = { group = "org.jetbrains.xodus", name = "xodus-openAPI", version
 xodus-environment = { group = "org.jetbrains.xodus", name = "xodus-environment", version.ref = "xodus" }
 
 [bundles]
-jackson = ["jackson-core", "jackson-databind", "jackson-module-kotlin"]
+jackson = ["jackson-core", "jackson-databind", "jackson-module-kotlin", "jackson-datatype-pcollections", "jackson-datatype-duration"]
 loggingApi = ["slf4j", "kotlinLogging"]
 jUnit5 = ["junit-jupiter", "junit-engine"]
 xodus = ["xodus-openAPI", "xodus-environment"]

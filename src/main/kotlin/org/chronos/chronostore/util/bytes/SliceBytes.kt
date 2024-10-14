@@ -3,10 +3,9 @@ package org.chronos.chronostore.util.bytes
 import com.google.common.collect.Iterators
 import org.chronos.chronostore.util.ByteArrayExtensions.hex
 import org.chronos.chronostore.util.comparator.UnsignedBytesComparator
-import org.chronos.chronostore.util.unit.Bytes
+import org.chronos.chronostore.util.unit.BinarySize.Companion.Bytes
 import java.io.OutputStream
 import kotlin.math.min
-import kotlin.math.sign
 
 class SliceBytes(
     private val array: ByteArray,

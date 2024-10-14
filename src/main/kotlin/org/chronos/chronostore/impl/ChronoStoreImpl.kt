@@ -1,6 +1,5 @@
 package org.chronos.chronostore.impl
 
-import com.google.common.annotations.VisibleForTesting
 import mu.KotlinLogging
 import org.chronos.chronostore.api.*
 import org.chronos.chronostore.async.executor.AsyncTaskManagerImpl
@@ -17,6 +16,7 @@ import org.chronos.chronostore.lsm.garbagecollector.tasks.GarbageCollectorTask
 import org.chronos.chronostore.lsm.merge.strategy.MergeService
 import org.chronos.chronostore.lsm.merge.strategy.MergeServiceImpl
 import org.chronos.chronostore.lsm.merge.tasks.CheckpointTask
+import org.chronos.chronostore.manifest.ManifestFile
 import org.chronos.chronostore.util.TSN
 import org.chronos.chronostore.wal.WriteAheadLog
 import java.util.concurrent.Executors
@@ -39,6 +39,8 @@ class ChronoStoreImpl(
     @Volatile
     private var state: ChronoStoreState = ChronoStoreState.STARTING
 
+    private val manifestFile = ManifestFile(this.vfs.file(ManifestFile.FILE_NAME))
+
     private val checkpointManager: CheckpointManager
     private val tsnManager: TSNManager
     private val blockCacheManager = BlockCacheManager.create(configuration.blockCacheSize)
@@ -49,8 +51,7 @@ class ChronoStoreImpl(
         getChronoStoreState = this::state,
     )
 
-    @VisibleForTesting
-    val mergeService: MergeService = MergeServiceImpl(this.taskManager, this.configuration)
+    val mergeService: MergeService
 
     val forest: LSMForestMemoryManager = LSMForestMemoryManager(
         asyncTaskManager = this.taskManager,
@@ -65,6 +66,8 @@ class ChronoStoreImpl(
         forest = this.forest,
         driverFactory = this.configuration.randomFileAccessDriverFactory,
         newFileSettings = ChronoStoreFileSettings(configuration.compressionAlgorithm, configuration.maxBlockSize),
+        manifestFile = this.manifestFile,
+        configuration = this.configuration,
     )
 
     private val writeAheadLog: WriteAheadLog
@@ -134,7 +137,12 @@ class ChronoStoreImpl(
             this.taskManager.scheduleRecurringWithCron(garbageCollectorTask, garbageCollectionCron)
         }
 
-        this.mergeService.initialize(this.storeManager, writeAheadLog)
+        this.mergeService = MergeServiceImpl(
+            taskManager = this.taskManager,
+            storeConfig = this.configuration,
+            manifestFile = this.manifestFile,
+            storeManager = this.storeManager,
+        )
         this.state = ChronoStoreState.RUNNING
     }
 

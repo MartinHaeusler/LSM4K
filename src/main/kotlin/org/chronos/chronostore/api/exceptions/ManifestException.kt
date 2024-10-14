@@ -1,6 +1,7 @@
 package org.chronos.chronostore.api.exceptions
 
-class ChronoStoreFlushException: ChronoStoreException {
+class ManifestException : ChronoStoreException {
+
 
     constructor() : super()
 

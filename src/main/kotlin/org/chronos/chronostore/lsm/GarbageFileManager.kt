@@ -2,7 +2,6 @@ package org.chronos.chronostore.lsm
 
 import org.chronos.chronostore.io.vfs.VirtualReadWriteFile
 import org.chronos.chronostore.util.IOExtensions.withInputStream
-import java.lang.IllegalStateException
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.concurrent.read
 import kotlin.concurrent.write

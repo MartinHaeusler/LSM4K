@@ -52,5 +52,8 @@ enum class ChronoStoreMode {
         return this.withChronoStore(ChronoStoreConfiguration(), action)
     }
 
+    fun <T> withChronoStore(action: (ChronoStoreImpl, VirtualFileSystem) -> T): T {
+        return this.withChronoStore(ChronoStoreConfiguration(), action)
+    }
 
 }

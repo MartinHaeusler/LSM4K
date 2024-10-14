@@ -7,14 +7,14 @@ import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.util.IOExtensions.size
 import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.statistics.ChronoStoreStatistics
-import org.chronos.chronostore.util.unit.MiB
+import org.chronos.chronostore.util.unit.BinarySize.Companion.MiB
 import org.xerial.snappy.Snappy
 import java.io.File
 
 object ChronoStoreTaxonomyDataWriterBenchmark {
 
-    val inputFile = File("/home/martin/Documents/chronostore-test/rawCommandsBinary")
-    val storeDir = File("/home/martin/Documents/chronostore-test/taxonomyChronoStore")
+    private val inputFile = File("/home/martin/Documents/chronostore-test/rawCommandsBinary")
+    private val storeDir = File("/home/martin/Documents/chronostore-test/taxonomyChronoStore")
 
     @JvmStatic
     fun main(args: Array<String>) {
@@ -24,15 +24,16 @@ object ChronoStoreTaxonomyDataWriterBenchmark {
 
         println("STARTING BENCHMARK")
 
-        if(storeDir.exists()){
+        if (storeDir.exists()) {
             storeDir.deleteRecursively()
         }
         storeDir.mkdirs()
 
-        val configuration = ChronoStoreConfiguration()
-        configuration.maxBlockSize = 16.MiB
-        // disable the checkpoints during shutdown on purpose to provoke potential errors in the reader.
-        configuration.checkpointOnShutdown = false
+        val configuration = ChronoStoreConfiguration(
+            maxBlockSize = 16.MiB,
+            // disable the checkpoints during shutdown on purpose to provoke potential errors in the reader.
+            checkpointOnShutdown = false,
+        )
 
         ChronoStore.openOnDirectory(this.storeDir, configuration).use { chronoStore ->
             inputFile.inputStream().buffered().use { input ->

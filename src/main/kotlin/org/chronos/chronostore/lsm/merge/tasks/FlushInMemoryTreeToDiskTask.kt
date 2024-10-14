@@ -5,9 +5,9 @@ import org.chronos.chronostore.async.taskmonitor.TaskMonitor
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.subTaskWithMonitor
 import org.chronos.chronostore.async.tasks.AsyncTask
 import org.chronos.chronostore.lsm.LSMTree
-import org.chronos.chronostore.util.log.LogMarkers
+import org.chronos.chronostore.util.logging.LogMarkers
 import org.chronos.chronostore.util.statistics.ChronoStoreStatistics
-import org.chronos.chronostore.util.unit.Bytes
+import org.chronos.chronostore.util.unit.BinarySize.Companion.Bytes
 import java.util.concurrent.atomic.AtomicLong
 
 class FlushInMemoryTreeToDiskTask(

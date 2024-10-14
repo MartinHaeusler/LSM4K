@@ -1,7 +1,7 @@
 package org.chronos.chronostore.async.tasks
 
 import mu.KotlinLogging
-import org.chronos.chronostore.api.exceptions.ChronoStoreFlushException
+import org.chronos.chronostore.api.exceptions.FlushException
 import org.chronos.chronostore.async.executor.AsyncTaskManager
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor
 import org.chronos.chronostore.impl.ChronoStoreState
@@ -86,7 +86,7 @@ interface AsyncTask {
      */
     private fun isExceptionIgnoredDuringShutdown(exception: Throwable): Boolean {
         return when (exception) {
-            is ChronoStoreFlushException -> {
+            is FlushException -> {
                 val cause = exception.cause
                 return if (cause != null && cause !== exception) {
                     isExceptionIgnoredDuringShutdown(cause)

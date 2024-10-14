@@ -3,7 +3,10 @@ package org.chronos.chronostore.test.cases.api
 import org.chronos.chronostore.api.ChronoStoreConfiguration
 import org.chronos.chronostore.api.ChronoStoreTransaction
 import org.chronos.chronostore.api.TransactionalStore.Companion.withCursor
+import org.chronos.chronostore.io.vfs.VirtualDirectory
+import org.chronos.chronostore.io.vfs.VirtualFile
 import org.chronos.chronostore.lsm.LSMTreeFile
+import org.chronos.chronostore.manifest.ManifestFile
 import org.chronos.chronostore.test.extensions.transaction.ChronoStoreTransactionTestExtensions.allEntries
 import org.chronos.chronostore.test.extensions.transaction.ChronoStoreTransactionTestExtensions.delete
 import org.chronos.chronostore.test.extensions.transaction.ChronoStoreTransactionTestExtensions.get
@@ -14,7 +17,7 @@ import org.chronos.chronostore.test.util.junit.IntegrationTest
 import org.chronos.chronostore.util.StoreId
 import org.chronos.chronostore.util.bytes.BasicBytes
 import org.chronos.chronostore.util.bytes.Bytes
-import org.chronos.chronostore.util.unit.GiB
+import org.chronos.chronostore.util.unit.BinarySize.Companion.GiB
 import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.fail
 import strikt.api.expect
@@ -22,7 +25,6 @@ import strikt.api.expectThat
 import strikt.api.expectThrows
 import strikt.assertions.*
 import kotlin.math.min
-import kotlin.time.Duration.Companion.minutes
 
 @IntegrationTest
 class StoreManagementTest {
@@ -124,7 +126,7 @@ class StoreManagementTest {
             }
         }
 
-        mode.withChronoStore { chronoStore ->
+        mode.withChronoStore { chronoStore, vfs ->
             chronoStore.transaction { tx ->
                 val test = tx.createNewStore("test")
                 test.put("foo", "bar")
@@ -136,8 +138,15 @@ class StoreManagementTest {
 
                 tx.commit()
             }
+
             chronoStore.transaction { tx ->
                 performAssertions(tx)
+            }
+
+            expectThat(vfs.listRootLevelElements()) {
+                filterIsInstance<VirtualDirectory>().filter { it.name == "test" }.hasSize(1)
+                filterIsInstance<VirtualDirectory>().filter { it.name == "math" }.hasSize(1)
+                filterIsInstance<VirtualFile>().filter { it.name == ManifestFile.FILE_NAME }.hasSize(1)
             }
         }
     }
@@ -157,10 +166,11 @@ class StoreManagementTest {
             }
         }
 
-        val config = ChronoStoreConfiguration()
-        // disable flushing and merging, we will do it manually in this test
-        config.maxForestSize = 10.GiB
-        config.mergeInterval = (-1).minutes
+        val config = ChronoStoreConfiguration(
+            // disable flushing and merging, we will do it manually in this test
+            maxForestSize = 10.GiB,
+            compactionInterval = null,
+        )
         mode.withChronoStore(config) { chronoStore ->
             chronoStore.transaction { tx ->
                 val data = tx.createNewStore("data")
@@ -206,10 +216,11 @@ class StoreManagementTest {
 
     @ChronoStoreTest
     fun canIterateOverAllVersionsWithMultipleFiles(mode: ChronoStoreMode) {
-        val config = ChronoStoreConfiguration()
-        // disable flushing and merging, we will do it manually in this test
-        config.maxForestSize = 10.GiB
-        config.mergeInterval = (-1).minutes
+        val config = ChronoStoreConfiguration(
+            // disable flushing and merging, we will do it manually in this test
+            maxForestSize = 10.GiB,
+            compactionInterval = null,
+        )
 
         val numberOfEntries = 20
         mode.withChronoStore(config) { chronoStore, vfs ->
@@ -252,7 +263,7 @@ class StoreManagementTest {
 
             val txAtTSN1 = chronoStore.beginTransaction()
 
-           chronoStore.transaction { tx ->
+            chronoStore.transaction { tx ->
                 val data = tx.getStore("data")
                 for (i in (0..<numberOfEntries step 3)) {
                     data.put(createKey(i), "b")

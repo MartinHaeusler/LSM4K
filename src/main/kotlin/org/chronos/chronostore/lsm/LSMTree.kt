@@ -2,7 +2,7 @@ package org.chronos.chronostore.lsm
 
 import mu.KotlinLogging
 import org.chronos.chronostore.api.ChronoStoreTransaction
-import org.chronos.chronostore.api.exceptions.ChronoStoreFlushException
+import org.chronos.chronostore.api.exceptions.FlushException
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.forEach
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.subTask
@@ -17,13 +17,14 @@ import org.chronos.chronostore.lsm.cache.FileHeaderCache
 import org.chronos.chronostore.lsm.cache.LocalBlockCache
 import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.model.command.KeyAndTSN
+import org.chronos.chronostore.util.FileIndex
 import org.chronos.chronostore.util.StoreId
 import org.chronos.chronostore.util.TSN
 import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.cursor.*
-import org.chronos.chronostore.util.log.LogExtensions.performance
+import org.chronos.chronostore.util.logging.LogExtensions.performance
 import org.chronos.chronostore.util.unit.BinarySize
-import org.chronos.chronostore.util.unit.Bytes
+import org.chronos.chronostore.util.unit.BinarySize.Companion.Bytes
 import org.pcollections.TreePMap
 import java.io.File
 import java.util.concurrent.atomic.AtomicInteger
@@ -354,7 +355,7 @@ class LSMTree(
                     runtimeMillis = timeAfter - timeBefore,
                 )
             } catch (e: Exception) {
-                throw ChronoStoreFlushException("An exception occurred during flush task on '${storeId}': ${e}", e)
+                throw FlushException("An exception occurred during flush task on '${storeId}': ${e}", e)
             }
         }
     }
@@ -380,7 +381,7 @@ class LSMTree(
         taskMonitor.reportDone()
     }
 
-    fun mergeFiles(fileIndices: Set<Int>, monitor: TaskMonitor) {
+    fun mergeFiles(fileIndices: Set<Int>, monitor: TaskMonitor, updateManifest: (FileIndex) -> Unit): FileIndex? {
         log.debug { "TASK: merge files: ${fileIndices.sorted().joinToString(prefix = "[", separator = ", ", postfix = "]")}" }
         this.performAsyncWriteTask(monitor) {
             monitor.reportStarted("Merging ${fileIndices.size} files")
@@ -388,7 +389,7 @@ class LSMTree(
 
             if (filesToMerge.size < 2) {
                 monitor.reportDone()
-                return
+                return null
             }
             // get the file index we're going to use (nobody else will get the same index, because of the AtomicInteger used here)
             val targetFileIndex = this.nextFreeFileIndex.getAndIncrement()
@@ -422,6 +423,7 @@ class LSMTree(
                 val mergedLsmTreeFile = this.createLsmTreeFile(targetFile)
                 this.lock.write {
                     overWriter.commit()
+                    updateManifest(targetFileIndex)
                     this.garbageFileManager.addAll(filesToMerge.map { it.virtualFile.name })
                     this.fileList.removeAll(filesToMerge.toSet())
                     this.fileList.add(mergedLsmTreeFile)
@@ -430,6 +432,8 @@ class LSMTree(
                 // perform garbage collection in an attempt to free disk space
                 this.performGarbageCollection(TaskMonitor.create())
             }
+
+            return targetFileIndex
         }
     }
 

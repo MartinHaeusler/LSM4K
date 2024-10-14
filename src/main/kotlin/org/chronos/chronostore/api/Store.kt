@@ -1,9 +1,9 @@
 package org.chronos.chronostore.api
 
+import org.chronos.chronostore.impl.StoreInfo
 import org.chronos.chronostore.io.vfs.VirtualDirectory
 import org.chronos.chronostore.util.StoreId
 import org.chronos.chronostore.util.TSN
-import org.chronos.chronostore.util.Timestamp
 import org.chronos.chronostore.util.TransactionId
 import org.chronos.chronostore.util.bytes.Bytes
 
@@ -37,5 +37,14 @@ interface Store {
 
     val isTerminated: Boolean
         get() = this.validToTSN != null
+
+    val info: StoreInfo
+        get() = StoreInfo(
+            storeId = this.storeId,
+            validFromTSN = this.validFromTSN,
+            validToTSN = this.validToTSN,
+            createdByTransactionId = this.createdByTransactionId,
+        )
+
 
 }

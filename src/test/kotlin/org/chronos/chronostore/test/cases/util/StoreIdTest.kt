@@ -3,6 +3,7 @@ package org.chronos.chronostore.test.cases.util
 import org.chronos.chronostore.api.SystemStore
 import org.chronos.chronostore.test.util.junit.UnitTest
 import org.chronos.chronostore.util.StoreId
+import org.chronos.chronostore.util.json.JsonUtil
 import org.junit.jupiter.api.Test
 import strikt.api.expect
 import strikt.api.expectThat
@@ -125,6 +126,19 @@ class StoreIdTest {
                 isNotEqualTo(StoreId.of("bar"))
                 get { this.hashCode() }.isNotEqualTo(StoreId.of("bar").hashCode())
             }
+        }
+    }
+
+    @Test
+    fun canSerializeAndDeserializeStoreIdWithJackson() {
+        val foo = StoreId.of("foo")
+        val fooBarBaz = StoreId.of("foo/bar/baz")
+
+        expect {
+            that(JsonUtil.writeJson(foo)).isEqualTo("\"foo\"")
+            that(JsonUtil.writeJson(fooBarBaz)).isEqualTo("\"foo/bar/baz\"")
+            that(JsonUtil.readJsonAsObject<StoreId>("\"foo\"")).isEqualTo(foo)
+            that(JsonUtil.readJsonAsObject<StoreId>("\"foo/bar/baz\"")).isEqualTo(fooBarBaz)
         }
     }
 }

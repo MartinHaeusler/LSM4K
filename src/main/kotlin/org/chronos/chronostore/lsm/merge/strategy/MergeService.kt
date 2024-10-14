@@ -1,13 +1,8 @@
 package org.chronos.chronostore.lsm.merge.strategy
 
-import org.chronos.chronostore.api.StoreManager
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor
-import org.chronos.chronostore.lsm.event.LsmCursorClosedEvent
-import org.chronos.chronostore.wal.WriteAheadLog
 
 interface MergeService {
-
-    fun initialize(storeManager: StoreManager, writeAheadLog: WriteAheadLog)
 
     /**
      * Performs a major compaction of store files.

@@ -8,3 +8,11 @@ typealias TSN = Long
 typealias Timestamp = Long
 
 typealias TransactionId = UUID
+
+typealias FileIndex = Int
+
+typealias LevelOrTierIndex = Int
+
+typealias LevelIndex = Int
+
+typealias TierIndex = Int

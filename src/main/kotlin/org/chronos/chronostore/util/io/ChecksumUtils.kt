@@ -2,10 +2,8 @@ package org.chronos.chronostore.util.io
 
 import com.google.common.io.ByteStreams
 import org.chronos.chronostore.io.vfs.VirtualFile
-import org.chronos.chronostore.util.ByteArrayExtensions.hex
 import org.chronos.chronostore.util.StreamExtensions.checked
 import org.chronos.chronostore.util.StreamExtensions.digest
-import java.math.BigInteger
 import java.security.MessageDigest
 import java.util.zip.CRC32
 import java.util.zip.Checksum

@@ -6,15 +6,15 @@ import org.chronos.chronostore.api.StoreManager
 import org.chronos.chronostore.async.executor.AsyncTaskManager
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.forEachWithMonitor
-import org.chronos.chronostore.lsm.garbagecollector.tasks.GarbageCollectorTask
 import org.chronos.chronostore.lsm.merge.tasks.CompactionTask
 import org.chronos.chronostore.lsm.merge.tasks.FlushInMemoryTreeToDiskTask
-import org.chronos.chronostore.lsm.merge.tasks.CheckpointTask
-import org.chronos.chronostore.wal.WriteAheadLog
+import org.chronos.chronostore.manifest.ManifestFile
 
 class MergeServiceImpl(
     private val taskManager: AsyncTaskManager,
     private val storeConfig: ChronoStoreConfiguration,
+    private val manifestFile: ManifestFile,
+    private val storeManager: StoreManager,
 ) : MergeService {
 
     companion object {
@@ -23,36 +23,26 @@ class MergeServiceImpl(
 
     }
 
-    private var initialized: Boolean = false
-    private lateinit var compactionTask: CompactionTask
-    private lateinit var writeAheadLog: WriteAheadLog
-    private lateinit var storeManager: StoreManager
+    private val compactionTask = CompactionTask(
+        this.storeManager,
+        this.manifestFile,
+    )
 
-    override fun initialize(storeManager: StoreManager, writeAheadLog: WriteAheadLog) {
-        this.writeAheadLog = writeAheadLog
-        this.compactionTask = CompactionTask(storeManager, this.storeConfig.mergeStrategy)
-        val timeBetweenExecutions = this.storeConfig.mergeInterval
+    init {
+        val timeBetweenExecutions = this.storeConfig.compactionInterval
         if (timeBetweenExecutions != null && timeBetweenExecutions.isPositive()) {
             this.taskManager.scheduleRecurringWithTimeBetweenExecutions(compactionTask, timeBetweenExecutions)
         } else {
-            log.warn {
-                "Compaction is disabled, because the merge interval is NULL or negative!" +
-                    " You need to compact the store explicitly to prevent performance degradation."
-            }
+            warnAboutCompactionDisabled()
         }
 
-        this.storeManager = storeManager
-
-        this.initialized = true
     }
 
     override fun performMajorCompaction(taskMonitor: TaskMonitor) {
-        check(this.initialized) { "MergeService has not yet been initialized!" }
         this.compactionTask.runMajor(taskMonitor)
     }
 
     override fun performMinorCompaction(taskMonitor: TaskMonitor) {
-        check(this.initialized) { "MergeService has not yet been initialized!" }
         this.compactionTask.runMinor(taskMonitor)
     }
 
@@ -62,6 +52,13 @@ class MergeServiceImpl(
             task.run(subTaskMonitor)
         }
         taskMonitor.reportDone()
+    }
+
+    private fun warnAboutCompactionDisabled() {
+        log.warn {
+            "Compaction is disabled, because the merge interval is NULL or negative!" +
+                " You need to compact the store explicitly to prevent performance degradation."
+        }
     }
 
 }

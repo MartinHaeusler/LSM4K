@@ -1,4 +1,4 @@
-package org.chronos.chronostore.util.log
+package org.chronos.chronostore.util.logging
 
 import org.slf4j.MarkerFactory
 

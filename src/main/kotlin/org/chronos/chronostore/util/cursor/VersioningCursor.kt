@@ -2,9 +2,9 @@ package org.chronos.chronostore.util.cursor
 
 import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.model.command.KeyAndTSN
-import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.Order
 import org.chronos.chronostore.util.TSN
+import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.statistics.ChronoStoreStatistics
 
 class VersioningCursor(

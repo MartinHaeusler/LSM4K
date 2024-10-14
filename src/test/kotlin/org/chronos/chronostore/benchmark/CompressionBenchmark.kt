@@ -6,7 +6,7 @@ import net.jpountz.lz4.LZ4FastDecompressor
 import org.chronos.chronostore.benchmark.util.Statistics.Companion.statistics
 import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.util.bytes.Bytes
-import org.chronos.chronostore.util.unit.MiB
+import org.chronos.chronostore.util.unit.BinarySize.Companion.MiB
 import org.xerial.snappy.Snappy
 import java.io.File
 import kotlin.system.measureTimeMillis

@@ -6,7 +6,7 @@ import jetbrains.exodus.env.StoreConfig
 import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.util.IOExtensions.size
 import org.chronos.chronostore.util.bytes.Bytes
-import org.chronos.chronostore.util.unit.Bytes
+import org.chronos.chronostore.util.unit.BinarySize.Companion.Bytes
 import java.io.File
 import java.nio.file.Files
 

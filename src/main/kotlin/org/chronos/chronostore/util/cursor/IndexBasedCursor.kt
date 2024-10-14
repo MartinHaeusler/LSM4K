@@ -4,7 +4,7 @@ class IndexBasedCursor<K : Comparable<K>, V>(
     val minIndex: Int,
     val maxIndex: Int,
     val getEntryAtIndex: (Int) -> Pair<K, V>,
-    val getCursorName: () -> String,
+    val name: String,
 ) : Cursor<K, V> {
 
     private var currentIndex = this.minIndex - 1
@@ -148,10 +148,10 @@ class IndexBasedCursor<K : Comparable<K>, V>(
     }
 
     private fun createAlreadyClosedMessage(): String {
-        return "This cursor on ${this.getCursorName()} has already been closed!"
+        return "This cursor on ${this.name} has already been closed!"
     }
 
     override fun toString(): String {
-        return "IndexBasedCursor[${this.getCursorName}]"
+        return "IndexBasedCursor[${this.name}]"
     }
 }

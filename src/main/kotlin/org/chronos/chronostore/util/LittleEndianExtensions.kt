@@ -2,7 +2,6 @@ package org.chronos.chronostore.util
 
 import org.chronos.chronostore.api.exceptions.TruncatedInputException
 import org.chronos.chronostore.util.IOExtensions.readByte
-import java.io.EOFException
 import java.io.InputStream
 import java.io.OutputStream
 

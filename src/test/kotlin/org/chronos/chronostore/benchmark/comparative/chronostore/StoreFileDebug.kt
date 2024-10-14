@@ -1,6 +1,6 @@
 package org.chronos.chronostore.benchmark.comparative.chronostore
 
-import org.chronos.chronostore.api.exceptions.ChronoStoreBlockReadException
+import org.chronos.chronostore.api.exceptions.BlockReadException
 import org.chronos.chronostore.benchmark.util.NumberUtils.format
 import org.chronos.chronostore.io.fileaccess.FileChannelDriver
 import org.chronos.chronostore.io.fileaccess.RandomFileAccessDriver
@@ -13,7 +13,7 @@ import org.chronos.chronostore.io.vfs.VirtualReadWriteFile
 import org.chronos.chronostore.io.vfs.disk.DiskBasedVirtualFileSystem
 import org.chronos.chronostore.io.vfs.disk.DiskBasedVirtualFileSystemSettings
 import org.chronos.chronostore.lsm.cache.LocalBlockCache
-import org.chronos.chronostore.util.unit.Bytes
+import org.chronos.chronostore.util.unit.BinarySize.Companion.Bytes
 import java.io.File
 import java.util.*
 
@@ -23,7 +23,7 @@ object StoreFileDebug {
     fun main(args: Array<String>) {
         val inputDir = File("/home/martin/Documents/chronostore-test/corruptedData")
         // val inputDir = File("/home/martin/Documents/chronostore-test/taxonomyChronoStore/data")
-        val chronoStoreFileNames = inputDir.listFiles().asSequence()
+        val chronoStoreFileNames = inputDir.listFiles().orEmpty().asSequence()
             .filter { it.name.endsWith(".chronostore") }
             .map { it.name }
             .sorted()
@@ -58,8 +58,9 @@ object StoreFileDebug {
             println("  - Merges: ${header.metaData.numberOfMerges}")
             println("  - File Format Version: ${header.fileFormatVersion}")
 
-            if(header.indexOfBlocks.size != header.metaData.numberOfBlocks){
-                val msg = "[ERROR] The number of blocks specified in the header (${header.metaData.numberOfBlocks}) doesn't match the actual number of blocks in the index ${header.indexOfBlocks.size}!"
+            if (header.indexOfBlocks.size != header.metaData.numberOfBlocks) {
+                val msg =
+                    "[ERROR] The number of blocks specified in the header (${header.metaData.numberOfBlocks}) doesn't match the actual number of blocks in the index ${header.indexOfBlocks.size}!"
                 issues += Issue(fileName = chronoStoreFileName, blockIndex = null, message = msg)
                 println(msg)
             }
@@ -145,7 +146,7 @@ object StoreFileDebug {
         try {
             return DataBlock.loadBlock(blockBytes, compressionAlgorithm)
         } catch (e: Exception) {
-            throw ChronoStoreBlockReadException(
+            throw BlockReadException(
                 message = "Failed to read block #${blockIndex} of file '${driver.filePath}'." +
                     " This file is potentially corrupted! Cause: ${e}",
                 cause = e

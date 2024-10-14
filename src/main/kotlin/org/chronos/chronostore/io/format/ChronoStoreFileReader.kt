@@ -1,6 +1,6 @@
 package org.chronos.chronostore.io.format
 
-import org.chronos.chronostore.api.exceptions.ChronoStoreBlockReadException
+import org.chronos.chronostore.api.exceptions.BlockReadException
 import org.chronos.chronostore.io.fileaccess.RandomFileAccessDriver
 import org.chronos.chronostore.io.format.datablock.DataBlock
 import org.chronos.chronostore.lsm.cache.LocalBlockCache
@@ -117,7 +117,7 @@ class ChronoStoreFileReader : AutoCloseable {
         try {
             return this.blockCache.getBlock(this.fileHeader.metaData.fileUUID, blockIndex, ::getBlockForIndexUncached)
         } catch (e: Exception) {
-            throw ChronoStoreBlockReadException("Failed to read block #${blockIndex} from file '${this.driver.filePath}'. \nCause: ${e}", e)
+            throw BlockReadException("Failed to read block #${blockIndex} from file '${this.driver.filePath}'. \nCause: ${e}", e)
         }
     }
 
@@ -136,7 +136,7 @@ class ChronoStoreFileReader : AutoCloseable {
             ChronoStoreStatistics.BLOCK_LOAD_TIME.addAndGet(timeAfter - timeBefore)
             return dataBlock
         } catch (e: Exception) {
-            throw ChronoStoreBlockReadException(
+            throw BlockReadException(
                 message = "Failed to read block #${blockIndex} of file '${this.driver.filePath}'." +
                     " This file is potentially corrupted! Cause: ${e}",
                 cause = e

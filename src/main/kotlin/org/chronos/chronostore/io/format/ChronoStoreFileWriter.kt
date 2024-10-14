@@ -8,7 +8,6 @@ import org.chronos.chronostore.util.LittleEndianExtensions.writeLittleEndianInt
 import org.chronos.chronostore.util.LittleEndianExtensions.writeLittleEndianLong
 import org.chronos.chronostore.util.PositionTrackingStream
 import org.chronos.chronostore.util.TSN
-import org.chronos.chronostore.util.Timestamp
 import org.chronos.chronostore.util.bloom.BytesBloomFilter
 import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.bytes.Bytes.Companion.writeBytesWithoutSize

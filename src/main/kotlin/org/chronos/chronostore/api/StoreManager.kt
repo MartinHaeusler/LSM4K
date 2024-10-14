@@ -1,10 +1,10 @@
 package org.chronos.chronostore.api
 
+import org.chronos.chronostore.api.compaction.CompactionStrategy
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor
 import org.chronos.chronostore.lsm.LSMTree
 import org.chronos.chronostore.util.StoreId
 import org.chronos.chronostore.util.TSN
-import org.chronos.chronostore.util.Timestamp
 
 interface StoreManager {
 
@@ -23,9 +23,9 @@ interface StoreManager {
 
     fun getLowWatermarkTSN(): TSN
 
-    fun createNewStore(transaction: ChronoStoreTransaction, name: StoreId, validFromTSN: TSN): Store
+    fun createNewStore(transaction: ChronoStoreTransaction, storeId: StoreId, validFromTSN: TSN, compactionStrategy: CompactionStrategy?): Store
 
-    fun deleteStore(transaction: ChronoStoreTransaction, name: StoreId): Boolean
+    fun deleteStore(transaction: ChronoStoreTransaction, storeId: StoreId): Boolean
 
     fun getAllStores(transaction: ChronoStoreTransaction): List<Store>
 

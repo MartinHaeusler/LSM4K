@@ -7,10 +7,9 @@ import org.chronos.chronostore.async.taskmonitor.TaskMonitor
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.forEach
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.mainTask
 import org.chronos.chronostore.lsm.merge.tasks.FlushInMemoryTreeToDiskTask
-import org.chronos.chronostore.util.log.LogExtensions.performance
-import org.chronos.chronostore.util.log.LogMarkers
+import org.chronos.chronostore.util.logging.LogExtensions.performance
 import org.chronos.chronostore.util.statistics.ChronoStoreStatistics
-import org.chronos.chronostore.util.unit.Bytes
+import org.chronos.chronostore.util.unit.BinarySize.Companion.Bytes
 import java.util.concurrent.Future
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.concurrent.write
@@ -178,7 +177,7 @@ class LSMForestMemoryManager(
                         val flushTask = FlushInMemoryTreeToDiskTask(tree)
                         this.asyncTaskManager.executeAsync(flushTask)
                     } else {
-                        println("SKIP FLUSH; NO DATA in tree '${tree.path}'")
+                        log.trace { "SKIP FLUSH; NO DATA in tree '${tree.path}'" }
                         null
                     }
                 }

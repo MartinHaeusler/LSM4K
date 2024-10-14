@@ -3,8 +3,6 @@ package org.chronos.chronostore.impl
 import org.chronos.chronostore.util.TSN
 import org.chronos.chronostore.util.Timestamp
 import java.util.concurrent.atomic.AtomicLong
-import java.util.concurrent.locks.ReentrantLock
-import kotlin.concurrent.withLock
 
 class TSNManager(
     startTSN: TSN,

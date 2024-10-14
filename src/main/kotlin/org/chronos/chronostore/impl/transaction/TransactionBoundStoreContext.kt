@@ -2,9 +2,8 @@ package org.chronos.chronostore.impl.transaction
 
 import org.chronos.chronostore.api.Store
 import org.chronos.chronostore.model.command.Command
-import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.Timestamp
-import org.chronos.chronostore.util.cursor.Cursor
+import org.chronos.chronostore.util.bytes.Bytes
 import java.util.*
 
 class TransactionBoundStoreContext(
@@ -26,6 +25,10 @@ class TransactionBoundStoreContext(
 
     fun clearModifications(){
         this.modifications.clear()
+    }
+
+    fun isDirty(): Boolean {
+        return this.modifications.isNotEmpty()
     }
 
     fun convertToCommands(commitTimestamp: Timestamp): List<Command> {

@@ -1,15 +1,29 @@
 package org.chronos.chronostore.util
 
+import com.fasterxml.jackson.core.JsonGenerator
+import com.fasterxml.jackson.core.JsonParseException
+import com.fasterxml.jackson.core.JsonParser
+import com.fasterxml.jackson.core.JsonToken
+import com.fasterxml.jackson.databind.DeserializationContext
+import com.fasterxml.jackson.databind.JsonDeserializer
+import com.fasterxml.jackson.databind.JsonSerializer
+import com.fasterxml.jackson.databind.SerializerProvider
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize
+import com.fasterxml.jackson.databind.annotation.JsonSerialize
 import com.google.common.cache.CacheBuilder
 import com.google.common.cache.CacheLoader
 import com.google.common.cache.LoadingCache
 import com.google.common.util.concurrent.UncheckedExecutionException
+import org.chronos.chronostore.impl.annotations.PersistentClass
 import org.chronos.chronostore.util.bytes.BasicBytes
 import org.chronos.chronostore.util.bytes.Bytes
 import java.io.InputStream
 import java.io.OutputStream
 
-class StoreId: Comparable<StoreId> {
+@PersistentClass(format = PersistentClass.Format.JSON, details = "Stored as string in manifest.")
+@JsonSerialize(using = StoreId.StoreIdJsonSerializer::class)
+@JsonDeserialize(using = StoreId.StoreIdJsonDeserializer::class)
+class StoreId : Comparable<StoreId> {
 
     companion object {
 
@@ -18,9 +32,9 @@ class StoreId: Comparable<StoreId> {
 
         fun of(vararg path: String): StoreId {
             require(path.isNotEmpty()) { "Cannot create StoreName from empty path, at least one element is required!" }
-            try{
+            try {
                 return CACHE.get(path.joinToString(separator = PATH_SEPARATOR))
-            }catch(e: UncheckedExecutionException){
+            } catch (e: UncheckedExecutionException) {
                 // unwrap the unchecked execution exception
                 throw e.cause ?: e
             }
@@ -28,9 +42,9 @@ class StoreId: Comparable<StoreId> {
 
         fun of(elements: List<String>): StoreId {
             require(elements.isNotEmpty()) { "Cannot create StoreName from empty path, at least one element is required!" }
-            try{
+            try {
                 return CACHE.get(elements.joinToString(separator = PATH_SEPARATOR))
-            }catch(e: UncheckedExecutionException){
+            } catch (e: UncheckedExecutionException) {
                 // unwrap the unchecked execution exception
                 throw e.cause ?: e
             }
@@ -170,7 +184,7 @@ class StoreId: Comparable<StoreId> {
      *
      * @param outputStream The output stream to write the data to.
      */
-    fun writeTo(outputStream: OutputStream){
+    fun writeTo(outputStream: OutputStream) {
         return PrefixIO.writeBytes(outputStream, this.toBytes())
     }
 
@@ -184,11 +198,11 @@ class StoreId: Comparable<StoreId> {
 
         other as StoreId
 
-        if(this.hashCode != other.hashCode){
+        if (this.hashCode != other.hashCode) {
             return false
         }
 
-        if(this.path.size != other.path.size){
+        if (this.path.size != other.path.size) {
             return false
         }
 
@@ -203,6 +217,30 @@ class StoreId: Comparable<StoreId> {
         return stringRepresentation
     }
 
+
+    // =================================================================================================================
+    // JSON SERIALIZATION
+    // =================================================================================================================
+
+    class StoreIdJsonSerializer : JsonSerializer<StoreId>() {
+
+        override fun serialize(value: StoreId, gen: JsonGenerator, serializers: SerializerProvider) {
+            gen.writeString(value.stringRepresentation)
+        }
+
+    }
+
+    class StoreIdJsonDeserializer : JsonDeserializer<StoreId>() {
+
+        override fun deserialize(p: JsonParser, ctxt: DeserializationContext): StoreId {
+            if (p.currentToken() != JsonToken.VALUE_STRING) {
+                throw JsonParseException("Cannot deserialize StoreId - required token 'VALUE_STRING' but got '${p.currentToken()}'")
+            }
+            val str = p.valueAsString
+            return StoreId.of(str)
+        }
+
+    }
 
 
 }

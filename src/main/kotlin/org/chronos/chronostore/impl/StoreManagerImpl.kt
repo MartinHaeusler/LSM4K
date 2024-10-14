@@ -1,27 +1,26 @@
 package org.chronos.chronostore.impl
 
 import mu.KotlinLogging
-import org.chronos.chronostore.api.ChronoStoreTransaction
-import org.chronos.chronostore.api.Store
-import org.chronos.chronostore.api.StoreManager
-import org.chronos.chronostore.api.SystemStore
+import org.chronos.chronostore.api.*
+import org.chronos.chronostore.api.compaction.CompactionStrategy
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.forEachWithMonitor
 import org.chronos.chronostore.impl.store.StoreImpl
 import org.chronos.chronostore.io.fileaccess.RandomFileAccessDriverFactory
 import org.chronos.chronostore.io.format.ChronoStoreFileSettings
-import org.chronos.chronostore.io.structure.ChronoStoreStructure.STORE_INFO_FILE_NAME
 import org.chronos.chronostore.io.vfs.VirtualDirectory
 import org.chronos.chronostore.io.vfs.VirtualFileSystem
 import org.chronos.chronostore.lsm.LSMForestMemoryManager
 import org.chronos.chronostore.lsm.LSMTree
 import org.chronos.chronostore.lsm.cache.BlockCacheManager
 import org.chronos.chronostore.lsm.cache.FileHeaderCache
-import org.chronos.chronostore.util.IOExtensions.withInputStream
+import org.chronos.chronostore.manifest.ManifestFile
+import org.chronos.chronostore.manifest.StoreMetadata
+import org.chronos.chronostore.manifest.operations.DeleteStoreOperation
 import org.chronos.chronostore.util.StoreId
 import org.chronos.chronostore.util.TSN
 import org.chronos.chronostore.util.TransactionId
-import org.chronos.chronostore.util.json.JsonUtil
+import org.pcollections.TreePMap
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.concurrent.read
 import kotlin.concurrent.write
@@ -34,6 +33,8 @@ class StoreManagerImpl(
     private val forest: LSMForestMemoryManager,
     private val driverFactory: RandomFileAccessDriverFactory,
     private val newFileSettings: ChronoStoreFileSettings,
+    private val configuration: ChronoStoreConfiguration,
+    private val manifestFile: ManifestFile,
 ) : StoreManager, AutoCloseable {
 
     companion object {
@@ -51,27 +52,21 @@ class StoreManagerImpl(
     private var watermarkQueriesAllowed = false
 
     private var initialized: Boolean = false
-    private val storeInfoFile = vfs.file(STORE_INFO_FILE_NAME)
     private val storesById = mutableMapOf<StoreId, Store>()
-    private val lock = ReentrantReadWriteLock(true)
+    private val storeManagementLock = ReentrantReadWriteLock(true)
 
     fun initialize(isEmptyDatabase: Boolean) {
-        this.lock.write {
+        this.storeManagementLock.write {
             check(!this.initialized) { "This StoreManager has already been initialized!" }
             if (isEmptyDatabase) {
-                check(!this.storeInfoFile.exists()) {
-                    "An empty database is being created, but the store info file exists: ${storeInfoFile.path}"
-                }
                 log.info { "Creating a new, empty database in '${this.vfs.rootPath}'." }
-                this.storeInfoFile.create()
                 // in the beginning, there are no stores.
-                this.overwriteStoreInfoJson(emptyList())
             } else {
                 log.info { "Opening an existing database in '${this.vfs.rootPath}'." }
                 // read the store infos from the JSON file
-                val storeInfos = this.readStoreInfoFromJson()
-                for (storeInfo in storeInfos) {
-                    val storeId = StoreId.of(storeInfo.storeId)
+                val manifest = this.manifestFile.getManifest()
+                for (storeInfo in manifest.storeInfos) {
+                    val storeId = storeInfo.storeId
                     val storeDirectory = getStoreDirectory(storeId)
                     val store = createStore(storeInfo, storeDirectory)
                     this.registerStoreInCaches(store)
@@ -101,7 +96,7 @@ class StoreManagerImpl(
     }
 
     private fun createStore(storeInfo: StoreInfo, directory: VirtualDirectory): StoreImpl {
-        val storeId = StoreId.of(storeInfo.storeId)
+        val storeId = storeInfo.storeId
         return StoreImpl(
             storeId = storeId,
             validFromTSN = storeInfo.validFromTSN,
@@ -121,33 +116,43 @@ class StoreManagerImpl(
     }
 
     override fun <T> withStoreReadLock(action: () -> T): T {
-        return this.lock.read(action)
+        return this.storeManagementLock.read(action)
     }
 
     override fun getStoreByIdOrNull(transaction: ChronoStoreTransaction, name: StoreId): Store? {
         check(this.isOpen) { DB_ALREADY_CLOSED }
-        this.lock.read {
+        this.storeManagementLock.read {
             assertInitialized()
             return this.storesById[name]?.takeIf { it.isVisibleFor(transaction) }
         }
     }
 
-    override fun createNewStore(transaction: ChronoStoreTransaction, name: StoreId, validFromTSN: TSN): Store {
+    override fun createNewStore(
+        transaction: ChronoStoreTransaction,
+        storeId: StoreId,
+        validFromTSN: TSN,
+        compactionStrategy: CompactionStrategy?,
+    ): Store {
         check(this.isOpen) { DB_ALREADY_CLOSED }
         check(transaction.isOpen) { "Argument 'transaction' must refer to an open transaction, but the given transaction has already been closed!" }
         require(validFromTSN >= transaction.lastVisibleSerialNumber) { "Argument 'validFrom' (${validFromTSN}) must not be smaller than the transaction last visible TSN (${transaction.lastVisibleSerialNumber})!" }
-        this.lock.write {
+        this.storeManagementLock.write {
             assertInitialized()
-            require(!name.isSystemInternal) { "Store names must not start with '_' (reserved for internal purposes)!" }
-            require(!this.storesById.containsKey(name)) { "There already exists a store with StoreID '${name}'!" }
+            require(!storeId.isSystemInternal) { "Store names must not start with '_' (reserved for internal purposes)!" }
+            require(!this.storesById.containsKey(storeId)) { "There already exists a store with StoreID '${storeId}'!" }
             // ensure that stores are not becoming nested.
             val allStores = this.getAllStoresInternal()
-            val offendingStore = allStores.firstOrNull { name.collidesWith(it.storeId) }
+            val offendingStore = allStores.firstOrNull { storeId.collidesWith(it.storeId) }
             require(offendingStore == null) {
-                "The given StoreID '${name}' collides with existing StoreID '${offendingStore}' - StoreID paths must not be prefixes of one another (Stores cannot be 'nested')!"
+                "The given StoreID '${storeId}' collides with existing StoreID '${offendingStore}' - StoreID paths must not be prefixes of one another (Stores cannot be 'nested')!"
             }
             val transactionId = transaction.id
-            return createAndRegisterStoreInternal(name, validFromTSN, transactionId)
+            return createAndRegisterStoreInternal(
+                storeId = storeId,
+                validFromTSN = validFromTSN,
+                transactionId = transactionId,
+                compactionStrategy = compactionStrategy
+            )
         }
     }
 
@@ -155,6 +160,7 @@ class StoreManagerImpl(
         storeId: StoreId,
         validFromTSN: TSN,
         transactionId: TransactionId,
+        compactionStrategy: CompactionStrategy?,
     ): StoreImpl {
         // do a small probing by creating the directory, but don't do anything with it just yet.
         // We still have to update the storeInfo.json first before going ahead. Creating the
@@ -162,32 +168,34 @@ class StoreManagerImpl(
         val directory = this.getStoreDirectory(storeId)
         directory.mkdirs()
 
-        val storeInfoList = mutableListOf<StoreInfo>()
-        this.storesById.values.asSequence().map { it.storeInfo }.toCollection(storeInfoList)
         val newStoreInfo = StoreInfo(
-            storeId = storeId.toString(),
+            storeId = storeId,
             validFromTSN = validFromTSN,
             validToTSN = null,
             createdByTransactionId = transactionId
         )
-        storeInfoList.add(newStoreInfo)
 
         // first, write the store info into our JSON file. This will ensure that
         // the store still exists upon the next database restart.
-        this.overwriteStoreInfoJson(storeInfoList)
+        this.manifestFile.appendCreateStoreOperation(
+            StoreMetadata(
+                info = newStoreInfo,
+                lsmFiles = TreePMap.empty(),
+                compactionStrategy = compactionStrategy ?: this.configuration.defaultCompactionStrategy,
+            )
+        )
 
-        // then, create the store itself
-        val store = this.createStore(newStoreInfo, directory)
-
+        // then, create the store object itself
+        val store = createStore(newStoreInfo, directory)
         this.registerStoreInCaches(store)
         return store
     }
 
     override fun getSystemStore(systemStore: SystemStore): Store {
         check(this.isOpen) { DB_ALREADY_CLOSED }
-        this.lock.read {
+        this.storeManagementLock.read {
             assertInitialized()
-
+            this.manifestFile.getManifest().getStoreOrNull(systemStore.storeId)
             return this.storesById[systemStore.storeId]
                 ?: throw IllegalStateException("System Store '${systemStore}' was not initialized!")
         }
@@ -195,7 +203,7 @@ class StoreManagerImpl(
 
     private fun ensureSystemStoreExists(systemStore: SystemStore): Store {
         check(this.isOpen) { DB_ALREADY_CLOSED }
-        this.lock.write {
+        this.storeManagementLock.write {
             val existingStore = this.storesById[systemStore.storeId]
             if (existingStore != null) {
                 return existingStore
@@ -203,23 +211,27 @@ class StoreManagerImpl(
             return this.createAndRegisterStoreInternal(
                 storeId = systemStore.storeId,
                 validFromTSN = 0L,
-                transactionId = TransactionId.fromString("11111111-1111-1111-2222-000000000001")
+                transactionId = TransactionId.fromString("11111111-1111-1111-2222-000000000001"),
+                compactionStrategy = null, // use default
             )
         }
     }
 
-    override fun deleteStore(transaction: ChronoStoreTransaction, name: StoreId): Boolean {
+    override fun deleteStore(transaction: ChronoStoreTransaction, storeId: StoreId): Boolean {
         check(this.isOpen) { DB_ALREADY_CLOSED }
-        this.lock.write {
+        this.storeManagementLock.write {
             assertInitialized()
-            val store = this.getStoreByIdOrNull(transaction, name)
+            val store = this.getStoreByIdOrNull(transaction, storeId)
                 ?: return false
-            val storeInfoList = this.storesById.values.asSequence()
-                .filter { it.storeId != store.storeId }
-                .map { it.storeInfo }
-                .toList()
 
-            this.overwriteStoreInfoJson(storeInfoList)
+            this.manifestFile.appendOperation { sequenceNumber ->
+                DeleteStoreOperation(
+                    sequenceNumber = sequenceNumber,
+                    storeId = storeId,
+                    terminatingTSN = transaction.lastVisibleSerialNumber,
+                )
+            }
+
             this.storesById.remove(store.storeId)
             store.directory.clear()
             store.directory.delete()
@@ -238,7 +250,7 @@ class StoreManagerImpl(
      */
     fun getAllStoresInternal(): List<Store> {
         check(this.isOpen) { DB_ALREADY_CLOSED }
-        this.lock.read {
+        this.storeManagementLock.read {
             this.assertInitialized()
             return this.storesById.values.toList()
         }
@@ -259,7 +271,7 @@ class StoreManagerImpl(
             monitor.reportDone()
             return
         }
-        this.lock.read {
+        this.storeManagementLock.read {
             monitor.forEachWithMonitor(1.0, "Cleaning up old files", this.storesById.values.toList()) { taskMonitor, store ->
                 store as StoreImpl
                 store.tree.performGarbageCollection(taskMonitor)
@@ -269,7 +281,7 @@ class StoreManagerImpl(
     }
 
     override fun getHighWatermarkTSN(): TSN {
-        this.lock.read {
+        this.storeManagementLock.read {
             if (!this.watermarkQueriesAllowed) {
                 throw IllegalStateException(
                     "Cannot perform 'getHighWatermarkTSN()' on this StoreManager" +
@@ -285,7 +297,7 @@ class StoreManagerImpl(
     }
 
     override fun getLowWatermarkTSN(): TSN {
-        this.lock.read {
+        this.storeManagementLock.read {
             if (!this.watermarkQueriesAllowed) {
                 throw IllegalStateException(
                     "Cannot perform 'getLowWatermarkTSN()' on this StoreManager" +
@@ -319,25 +331,8 @@ class StoreManagerImpl(
         this.isOpen = false
     }
 
-    private fun overwriteStoreInfoJson(storeInfos: List<StoreInfo>) {
-        this.lock.write {
-            this.storeInfoFile.createOverWriter().use { overWriter ->
-                JsonUtil.writeJson(storeInfos, overWriter.outputStream)
-                overWriter.commit()
-            }
-        }
-    }
-
-    private fun readStoreInfoFromJson(): List<StoreInfo> {
-        this.lock.read {
-            this.storeInfoFile.withInputStream { input ->
-                return JsonUtil.readJsonAsObject<List<StoreInfo>>(input)
-            }
-        }
-    }
-
     private fun registerStoreInCaches(store: Store) {
-        this.lock.write {
+        this.storeManagementLock.write {
             this.storesById[store.storeId] = store
         }
     }
@@ -345,14 +340,6 @@ class StoreManagerImpl(
     private fun assertInitialized() {
         check(this.initialized) { "The StoreManager has not yet been initialized!" }
     }
-
-    private val Store.storeInfo: StoreInfo
-        get() = StoreInfo(
-            storeId = storeId.toString(),
-            validFromTSN = this.validFromTSN,
-            validToTSN = this.validToTSN,
-            createdByTransactionId = this.createdByTransactionId,
-        )
 
     private fun Store.isVisibleFor(transaction: ChronoStoreTransaction): Boolean {
         val validFrom = this.validFromTSN
@@ -377,30 +364,6 @@ class StoreManagerImpl(
         }
         // one of them is a prefix of the other!
         return true
-    }
-
-    private data class StoreInfo(
-        val storeId: String,
-        val validFromTSN: TSN,
-        val validToTSN: TSN?,
-        val createdByTransactionId: TransactionId,
-    ) {
-
-        val terminated: Boolean
-            get() = validToTSN != null
-
-        override fun equals(other: Any?): Boolean {
-            if (this === other) return true
-            if (javaClass != other?.javaClass) return false
-
-            other as StoreInfo
-
-            return storeId == other.storeId
-        }
-
-        override fun hashCode(): Int {
-            return storeId.hashCode()
-        }
     }
 
 }

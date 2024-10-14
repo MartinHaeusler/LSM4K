@@ -2,7 +2,6 @@ package org.chronos.chronostore.async.executor
 
 import com.cronutils.model.Cron
 import org.chronos.chronostore.async.tasks.AsyncTask
-import java.util.concurrent.CompletableFuture
 import java.util.concurrent.Future
 import kotlin.time.Duration
 

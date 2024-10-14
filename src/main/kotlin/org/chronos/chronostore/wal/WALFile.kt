@@ -5,7 +5,6 @@ import org.chronos.chronostore.io.vfs.VirtualReadWriteFile.Companion.withOverWri
 import org.chronos.chronostore.util.ByteArrayExtensions.hex
 import org.chronos.chronostore.util.IOExtensions.withInputStream
 import org.chronos.chronostore.util.TSN
-import org.chronos.chronostore.util.Timestamp
 import org.chronos.chronostore.util.io.ChecksumUtils.computeMD5
 import java.io.InputStream
 import java.io.OutputStream

@@ -1,6 +1,7 @@
 package org.chronos.chronostore.api
 
 import com.cronutils.model.Cron
+import org.chronos.chronostore.api.compaction.CompactionStrategy
 import org.chronos.chronostore.io.fileaccess.FileChannelDriver
 import org.chronos.chronostore.io.fileaccess.RandomFileAccessDriverFactory
 import org.chronos.chronostore.io.format.CompressionAlgorithm
@@ -9,32 +10,62 @@ import org.chronos.chronostore.io.vfs.disk.FileSyncMode
 import org.chronos.chronostore.util.cron.CronUtils.cron
 import org.chronos.chronostore.util.cron.CronUtils.isValid
 import org.chronos.chronostore.util.unit.BinarySize
-import org.chronos.chronostore.util.unit.Bytes
-import org.chronos.chronostore.util.unit.MiB
+import org.chronos.chronostore.util.unit.BinarySize.Companion.Bytes
+import org.chronos.chronostore.util.unit.BinarySize.Companion.MiB
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
 
-class ChronoStoreConfiguration {
+class ChronoStoreConfiguration(
 
-    var maxWriterThreads: Int = 5
+    val maxWriterThreads: Int = 5,
 
     /** When writing new files: the compression algorithm to use. All old files will remain readable if this setting is changed.*/
-    var compressionAlgorithm: CompressionAlgorithm = CompressionAlgorithm.SNAPPY
+    val compressionAlgorithm: CompressionAlgorithm = CompressionAlgorithm.SNAPPY,
 
-    /** When writing new files: the maximum (uncompressed) size of a single data block.*/
-    var maxBlockSize: BinarySize = 64.MiB
+    /**
+     * The maximum (uncompressed) size of a single data block.
+     *
+     * This setting is only taken into account when new blocks are written; it does not affect the existing persistent data.
+     *
+     * This setting is a **soft limit**. In certain situations, individual blocks may be larger if very large key-value pairs
+     * are being stored.
+     */
+    val maxBlockSize: BinarySize = 8.MiB,
 
-    var randomFileAccessDriverFactory: RandomFileAccessDriverFactory = FileChannelDriver.Factory
+    val randomFileAccessDriverFactory: RandomFileAccessDriverFactory = FileChannelDriver.Factory,
 
-    var mergeStrategy: MergeStrategy = MergeStrategy.DEFAULT
+    /**
+     * The default compaction strategy to employ for all newly created stores.
+     *
+     * Individual stores may override this setting. Existing stores will not be altered if this setting changes.
+     */
+    val defaultCompactionStrategy: CompactionStrategy = CompactionStrategy.DEFAULT,
 
-    var mergeInterval: Duration? = 10.minutes
+    /**
+     * The interval between time-triggered compactions.
+     *
+     * Use `null` to disable time-based compaction.
+     *
+     * Which compaction will be triggered on which store(s) is decided dynamically based on the current situation.
+     */
+    val compactionInterval: Duration? = 10.minutes,
 
-    /** The maximum size of the in-memory trees. If this value is exceeded by an insert, the insert is blocked (stalled) until flush tasks have freed memory. */
-    var maxForestSize: BinarySize = 250.MiB
+    /**
+     * The maximum size of the in-memory trees.
+     *
+     * If this value is exceeded by an insert, the insert is blocked (stalled) until flush tasks have freed memory.
+     *
+     * Please note that this is a **soft** limit. If commits are particularly large, this limit may be exceeded
+     * temporarily to fit the commit data.
+     */
+    val maxForestSize: BinarySize = 250.MiB,
 
-    /** This fraction of [maxForestSize] determines when we start flushing to disk. Must be greater than zero and less than 1.0. */
-    var forestFlushThreshold: Double = 0.33
+    /**
+     * This fraction of [maxForestSize] determines when we start flushing to disk.
+     *
+     * Must be greater than zero and less than 1.0.
+     */
+    val forestFlushThreshold: Double = 0.33,
 
     /**
      * A [Cron] expression which controls when - and how often - checkpoints should be performed.
@@ -53,7 +84,7 @@ class ChronoStoreConfiguration {
      * can lead to very large WAL files, slow ChronoStore restart/recovery and increased
      * disk footprint!
      */
-    var checkpointCron: Cron? = cron("0 */10 * * * *") // every 10 minutes
+    val checkpointCron: Cron? = cron("0 */10 * * * *"), // every 10 minutes
 
     /**
      * The maximum number of checkpoint files to keep.
@@ -61,18 +92,19 @@ class ChronoStoreConfiguration {
      * This value must be greater than or equal to 1. Keeping multiple checkpoint files
      * can help with recovery in case that the newer checkpoint files have been corrupted.
      */
-    var maxCheckpointFiles: Int = 5
+    val maxCheckpointFiles: Int = 5,
 
     /**
-     * The time of day at which old store files should be garbage collected.
+     * The timing at which old store files should be garbage collected.
      *
      * This only affects on-disk files and has no impact on in-memory data structures or caches.
-     * This process happens once per day, at the specified time-of-day.
      *
-     * Use `null` to disable garbage collection. **WARNING:** disabling garbage compaction
+     * It is recommended to run this task at least once per day.
+     *
+     * Use `null` to disable garbage collection. **WARNING:** disabling garbage collection
      * can lead to a lot of unused files and increased disk footprint!
      */
-    var garbageCollectionCron: Cron? = cron("0 */10 * * * *") // every 10 minutes
+    val garbageCollectionCron: Cron? = cron("0 */10 * * * *"), // every 10 minutes
 
     /**
      * The maximum size of the block cache to use.
@@ -93,7 +125,7 @@ class ChronoStoreConfiguration {
      *
      * Use `null` to disable the cache.
      */
-    var blockCacheSize: BinarySize? = (Runtime.getRuntime().maxMemory() / 4).toInt().Bytes
+    val blockCacheSize: BinarySize? = (Runtime.getRuntime().maxMemory() / 4).toInt().Bytes,
 
     /**
      * The maximum size of the file header cache to use.
@@ -111,7 +143,7 @@ class ChronoStoreConfiguration {
      *
      * Use `null` to disable the cache.
      */
-    var fileHeaderCacheSize: BinarySize? = (Runtime.getRuntime().maxMemory() / 100).toInt().Bytes
+    val fileHeaderCacheSize: BinarySize? = (Runtime.getRuntime().maxMemory() / 100).toInt().Bytes,
 
     /**
      * The maximum disk footprint of a single Write-Ahead-Log file.
@@ -127,7 +159,7 @@ class ChronoStoreConfiguration {
      *
      * Defaults to 128 MiB, must be greater than 0.
      */
-    var maxWriteAheadLogFileSize: BinarySize = 128.MiB
+    val maxWriteAheadLogFileSize: BinarySize = 128.MiB,
 
     /**
      * The sync mode for files.
@@ -137,7 +169,7 @@ class ChronoStoreConfiguration {
      *
      * This setting will only take effect if disk-based persistence is used.
      */
-    val fileSyncMode: FileSyncMode = FileSyncMode.CHANNEL_DATASYNC
+    val fileSyncMode: FileSyncMode = FileSyncMode.CHANNEL_DATASYNC,
 
     /**
      * The minimum number of Write-Ahead-Log (WAL) files to keep.
@@ -145,7 +177,7 @@ class ChronoStoreConfiguration {
      * If the number of WAL files is less than or equal to this setting,
      * WAL shortening will be skipped.
      */
-    var minNumberOfWriteAheadLogFiles: Int = 3
+    val minNumberOfWriteAheadLogFiles: Int = 3,
 
     /**
      * Determines if ChronoStore should attempt to create a checkpoint during store shutdown.
@@ -156,7 +188,8 @@ class ChronoStoreConfiguration {
      *
      * Disable this option if the time-to-shutdown is more important than the time-to-restart.
      */
-    var checkpointOnShutdown: Boolean = true
+    val checkpointOnShutdown: Boolean = true,
+) {
 
     init {
         require(this.maxWriteAheadLogFileSize.bytes > 0) { "Cannot use a negative value for 'maxWriteAheadLogFileSize'!" }

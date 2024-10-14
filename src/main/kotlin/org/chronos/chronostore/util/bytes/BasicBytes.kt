@@ -3,7 +3,7 @@ package org.chronos.chronostore.util.bytes
 import com.google.common.collect.Iterators
 import org.chronos.chronostore.util.ByteArrayExtensions.hex
 import org.chronos.chronostore.util.comparator.UnsignedBytesComparator
-import org.chronos.chronostore.util.unit.Bytes
+import org.chronos.chronostore.util.unit.BinarySize.Companion.Bytes
 import java.io.ByteArrayInputStream
 import java.io.InputStream
 import java.io.OutputStream

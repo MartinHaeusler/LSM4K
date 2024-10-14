@@ -1,9 +1,12 @@
 package org.chronos.chronostore.util.json
 
+import com.fasterxml.jackson.annotation.JsonAutoDetect
+import com.fasterxml.jackson.annotation.PropertyAccessor
 import com.fasterxml.jackson.databind.DeserializationFeature
 import com.fasterxml.jackson.databind.JsonNode
-import com.fasterxml.jackson.databind.MapperFeature
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule
+import com.fasterxml.jackson.datatype.pcollections.PCollectionsModule
 import com.fasterxml.jackson.module.kotlin.readValue
 import com.fasterxml.jackson.module.kotlin.registerKotlinModule
 import java.io.InputStream
@@ -11,9 +14,21 @@ import java.io.OutputStream
 
 object JsonUtil {
 
-    val OBJECT_MAPPER = ObjectMapper()
+    val OBJECT_MAPPER: ObjectMapper = ObjectMapper()
         .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
+        // serialize /  deserialize all known fields
+        .setVisibility(PropertyAccessor.FIELD, JsonAutoDetect.Visibility.ANY)
+        // ignore getters and setters
+        .setVisibility(PropertyAccessor.GETTER, JsonAutoDetect.Visibility.NONE)
+        .setVisibility(PropertyAccessor.SETTER, JsonAutoDetect.Visibility.NONE)
+        // enable support for Kotlin classes
         .registerKotlinModule()
+        // enable support for PCollection classes
+        .registerModule(PCollectionsModule())
+        // support for java.time.* classes (notably java.time.Duration)
+        .registerModule(JavaTimeModule())
+        // enable support for some miscellaneous classes
+        .registerModule(ChronoStoreJacksonModule)
 
     fun writeJson(obj: Any): String {
         return OBJECT_MAPPER.writeValueAsString(obj)

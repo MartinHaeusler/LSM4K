@@ -1,7 +1,6 @@
 package org.chronos.chronostore.api.exceptions
 
-class ChronoStoreCommitException: ChronoStoreException {
-
+class CommitException: ChronoStoreException {
 
     constructor() : super()
 

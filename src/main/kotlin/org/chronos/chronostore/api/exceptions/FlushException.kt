@@ -1,6 +1,6 @@
 package org.chronos.chronostore.api.exceptions
 
-class ChronoStoreBlockReadException: ChronoStoreException {
+class FlushException: ChronoStoreException {
 
     constructor() : super()
 

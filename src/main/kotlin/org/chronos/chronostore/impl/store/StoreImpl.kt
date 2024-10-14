@@ -5,13 +5,11 @@ import org.chronos.chronostore.io.fileaccess.RandomFileAccessDriverFactory
 import org.chronos.chronostore.io.format.ChronoStoreFileSettings
 import org.chronos.chronostore.io.vfs.VirtualDirectory
 import org.chronos.chronostore.lsm.LSMForestMemoryManager
-import org.chronos.chronostore.lsm.cache.LocalBlockCache
 import org.chronos.chronostore.lsm.LSMTree
 import org.chronos.chronostore.lsm.cache.FileHeaderCache
-import org.chronos.chronostore.lsm.merge.strategy.MergeService
+import org.chronos.chronostore.lsm.cache.LocalBlockCache
 import org.chronos.chronostore.util.StoreId
 import org.chronos.chronostore.util.TSN
-import org.chronos.chronostore.util.Timestamp
 import org.chronos.chronostore.util.TransactionId
 
 class StoreImpl(

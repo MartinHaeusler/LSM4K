@@ -1,10 +1,10 @@
 package org.chronos.chronostore.util
 
 import org.chronos.chronostore.api.exceptions.TruncatedInputException
-import org.chronos.chronostore.util.bytes.Bytes.Companion.writeBytesWithoutSize
 import org.chronos.chronostore.util.LittleEndianExtensions.readLittleEndianInt
 import org.chronos.chronostore.util.LittleEndianExtensions.writeLittleEndianInt
 import org.chronos.chronostore.util.bytes.Bytes
+import org.chronos.chronostore.util.bytes.Bytes.Companion.writeBytesWithoutSize
 import org.chronos.chronostore.util.bytes.BytesBuffer
 import java.io.InputStream
 import java.io.OutputStream

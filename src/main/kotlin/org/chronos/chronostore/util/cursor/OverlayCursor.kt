@@ -1,9 +1,9 @@
 package org.chronos.chronostore.util.cursor
 
 import org.chronos.chronostore.util.Order
-import org.chronos.chronostore.util.Order.*
+import org.chronos.chronostore.util.Order.ASCENDING
+import org.chronos.chronostore.util.Order.DESCENDING
 import org.chronos.chronostore.util.statistics.ChronoStoreStatistics
-import org.chronos.chronostore.util.statistics.StatisticExtensions
 
 open class OverlayCursor<C1 : Cursor<K, V>, C2 : Cursor<K, V>, K : Comparable<*>, V>(
     base: C1,
