@@ -1,14 +1,34 @@
 package org.chronos.chronostore.util.cursor
 
+import org.chronos.chronostore.api.exceptions.CursorException
 import org.chronos.chronostore.util.Order
 import org.chronos.chronostore.util.Order.ASCENDING
 import org.chronos.chronostore.util.Order.DESCENDING
 import org.chronos.chronostore.util.statistics.ChronoStoreStatistics
 
-open class OverlayCursor<C1 : Cursor<K, V>, C2 : Cursor<K, V>, K : Comparable<*>, V>(
-    base: C1,
-    overlay: C2,
-) : CombiningCursor<C1, C2, K, V>(base, overlay) {
+open class OverlayCursor<K : Comparable<*>, V>(
+    base: Cursor<K, V>,
+    overlay: Cursor<K, V>,
+) : CombiningCursor<Cursor<K, V>, Cursor<K, V>, K, V>(
+    // apply "boundary checking" to the sub-cursors to avoid calling their "next()" and "previous()"
+    // methods too often. This results in efficiency gains if one of the cursors contains much more
+    // entries than the other, causing the smaller one to call "next()" / "previous()" constantly while
+    // returning false all the time.
+    cursorA = BoundaryCheckingCursor(base),
+    cursorB = BoundaryCheckingCursor(overlay)
+) {
+
+    companion object {
+
+        fun <K : Comparable<*>, V> Cursor<K, V>.overlayOnto(base: Cursor<K, V>): Cursor<K, V> {
+            return OverlayCursor(base = base, overlay = this)
+        }
+
+        fun <K : Comparable<*>, V> Cursor<K, V>.overlayUnder(overlay: Cursor<K, V>): Cursor<K, V> {
+            return OverlayCursor(base = this, overlay = overlay)
+        }
+
+    }
 
     override var keyOrNullInternal: K? = null
     override var valueOrNullInternal: V? = null
@@ -23,6 +43,7 @@ open class OverlayCursor<C1 : Cursor<K, V>, C2 : Cursor<K, V>, K : Comparable<*>
         // because both collections may be empty, causing "first()" to fail.
         val baseKey = this.cursorA.firstAndReturnKey()
         this.updateLastModifiedCursorA()
+
         val overlayKey = this.cursorB.firstAndReturnKey()
         this.updateLastModifiedCursorB()
 
@@ -35,6 +56,7 @@ open class OverlayCursor<C1 : Cursor<K, V>, C2 : Cursor<K, V>, K : Comparable<*>
         // both collections may be empty, causing "last()" to fail.
         val baseKey = this.cursorA.lastAndReturnKey()
         this.updateLastModifiedCursorA()
+
         val overlayKey = this.cursorB.lastAndReturnKey()
         this.updateLastModifiedCursorB()
 
@@ -47,12 +69,21 @@ open class OverlayCursor<C1 : Cursor<K, V>, C2 : Cursor<K, V>, K : Comparable<*>
             DESCENDING -> ChronoStoreStatistics.OVERLAY_CURSOR_PREVIOUS_SEEKS.incrementAndGet()
         }
 
-        val baseCursorKey = this.cursorA.moveUntilAfterKeyAndReturnKey(this.keyOrNull!!, direction)
+        val currentKey = this.keyOrNull
+            ?: throw CursorException("Current position of overlay cursor is invalid!")
+
+        val baseCursorKey = this.cursorA.moveUntilAfterKeyAndReturnKey(currentKey, direction)
         this.updateLastModifiedCursorA()
-        val overlayCursorKey = this.cursorB.moveUntilAfterKeyAndReturnKey(this.keyOrNull!!, direction)
+
+        val overlayCursorKey = this.cursorB.moveUntilAfterKeyAndReturnKey(currentKey, direction)
         this.updateLastModifiedCursorB()
 
-        return this.evaluatePosition(baseCursorKey, overlayCursorKey, direction, invalidateIfBothKeysAreNull = false)
+        return this.evaluatePosition(
+            baseKey = baseCursorKey,
+            overlayKey = overlayCursorKey,
+            order = direction,
+            invalidateIfBothKeysAreNull = false,
+        )
     }
 
 

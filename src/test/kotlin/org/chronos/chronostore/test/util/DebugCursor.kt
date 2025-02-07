@@ -25,29 +25,51 @@ class DebugCursor<K : Comparable<K>, V>(
     val callCounts = mutableMapOf<KFunction<*>, Int>()
 
     override fun doFirst(): Boolean {
-        log.info { "${this.name} first()" }
         addCallCount(Cursor<K,V>::first)
-        return this.innerCursor.first()
+        val success = this.innerCursor.first()
+        val details = if(success){
+            "[successfully moved to position before first key.]"
+        }else{
+            "[failed to move to position before first key. Position invalidated.]"
+        }
+        log.info { "'${this.name}' first() ${details}" }
+        return success
     }
 
     override fun doLast(): Boolean {
-        log.info { "${this.name} last()" }
         addCallCount(Cursor<K,V>::last)
-        return this.innerCursor.last()
+        val success = this.innerCursor.last()
+        val details = if(success){
+            "[successfully moved to position after last key.]"
+        }else{
+            "[failed to move to position after last key. Position invalidated.]"
+        }
+        log.info { "'${this.name}' last() ${details}" }
+        return success
     }
 
     override fun doMove(direction: Order): Boolean {
+        val preMoveKey = this.keyOrNull
+        val moveResult = this.innerCursor.move(direction)
+        val postMoveKey = this.keyOrNull
+
+        val details = if(moveResult){
+            "[successfully moved: '${preMoveKey.toString().toSingleLine()}' -> '${postMoveKey.toString().toSingleLine()}']"
+        }else{
+            "[move not possible, cursor is at: '${postMoveKey.toString().toSingleLine()}']"
+        }
+
         when (direction) {
             Order.ASCENDING -> {
-                log.info { "${this.name} next()" }
+                log.info { "'${this.name}' next() ${details}" }
                 addCallCount(Cursor<K,V>::next)
             }
             Order.DESCENDING -> {
-                log.info { "${this.name} previous()" }
+                log.info { "'${this.name}' previous() ${details}" }
                 addCallCount(Cursor<K,V>::previous)
             }
         }
-        return this.innerCursor.move(direction)
+        return moveResult
     }
 
     override fun doSeekExactlyOrNext(key: K): Boolean {
@@ -63,15 +85,27 @@ class DebugCursor<K : Comparable<K>, V>(
     }
 
     override fun peekNext(): Pair<K, V>? {
-        log.info { "${this.name} peekNext()" }
         addCallCount(Cursor<K,V>::peekNext)
-        return this.innerCursor.peekNext()
+        val peeked = this.innerCursor.peekNext()
+        val details = if(peeked == null){
+            "[peek failed: no next element. Current key: '${this.keyOrNull.toString().toSingleLine()}']"
+        }else{
+            "[peek success. Current key: '${this.keyOrNull.toString().toSingleLine()}', peeked at key: ${peeked.first}]"
+        }
+        log.info { "${this.name} peekNext() ${details}" }
+        return peeked
     }
 
     override fun peekPrevious(): Pair<K, V>? {
-        log.info { "${this.name} peekPrevious()" }
         addCallCount(Cursor<K,V>::peekPrevious)
-        return this.innerCursor.peekPrevious()
+        val peeked = this.innerCursor.peekPrevious()
+        val details = if(peeked == null){
+            "[peek failed: no next element. Current key: '${this.keyOrNull.toString().toSingleLine()}']"
+        }else{
+            "[peek success. Current key: '${this.keyOrNull.toString().toSingleLine()}', peeked at key: ${peeked.first}]"
+        }
+        log.info { "${this.name} peekPrevious() ${details}" }
+        return peeked
     }
 
     override val keyOrNullInternal: K?
