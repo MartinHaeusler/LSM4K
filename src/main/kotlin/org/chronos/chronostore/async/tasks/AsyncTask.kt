@@ -1,6 +1,6 @@
 package org.chronos.chronostore.async.tasks
 
-import mu.KotlinLogging
+import io.github.oshai.kotlinlogging.KotlinLogging
 import org.chronos.chronostore.api.exceptions.FlushException
 import org.chronos.chronostore.async.executor.AsyncTaskManager
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor

@@ -1,13 +1,13 @@
 [versions]
 java = "21"
-kotlin = "2.0.21"
-jackson = "2.18.0"
-junit5 = "5.11.1"
+kotlin = "2.1.10"
+jackson = "2.18.2"
+junit5 = "5.11.4"
 xodus = "2.0.1"
 
 [libraries]
 # General Utilities
-guava = { group = "com.google.guava", name = "guava", version = "33.3.1-jre" }
+guava = { group = "com.google.guava", name = "guava", version = "33.4.0-jre" }
 
 # JSON processing
 jackson-core = { group = "com.fasterxml.jackson.core", name = "jackson-core", version.ref = "jackson" }
@@ -18,7 +18,7 @@ jackson-datatype-duration = { group = "com.fasterxml.jackson.datatype", name = "
 
 # Compression
 snappy = { group = "org.xerial.snappy", name = "snappy-java", version = "1.1.10.7" }
-zstdJni = { group = "com.github.luben", name = "zstd-jni", version = "1.5.6-6" }
+zstdJni = { group = "com.github.luben", name = "zstd-jni", version = "1.5.6-9" }
 lz4J = { group = "org.lz4", name = "lz4-java", version = "1.8.0" }
 
 pcollections = { group = "org.pcollections", name = "pcollections", version = "4.0.2" }
@@ -33,8 +33,8 @@ strikt = { group = "io.strikt", name = "strikt-core", version = "0.35.1" }
 
 # Logging
 slf4j = { group = "org.slf4j", name = "slf4j-api", version = "2.0.16" }
-kotlinLogging = { group = "io.github.microutils", name = "kotlin-logging", version = "2.1.23" }
-logback = { group = "ch.qos.logback", name = "logback-classic", version = "1.5.8" }
+kotlinLogging = { group = "io.github.oshai", name = "kotlin-logging", version = "7.0.4" }
+logback = { group = "ch.qos.logback", name = "logback-classic", version = "1.5.16" }
 
 # Key-Value-Stores for benchmarking
 xodus-openAPI = { group = "org.jetbrains.xodus", name = "xodus-openAPI", version.ref = "xodus" }
@@ -47,4 +47,4 @@ jUnit5 = ["junit-jupiter", "junit-engine"]
 xodus = ["xodus-openAPI", "xodus-environment"]
 
 [plugins]
-versions = { id = "com.github.ben-manes.versions", version = "0.51.0" }
+versions = { id = "com.github.ben-manes.versions", version = "0.52.0" }

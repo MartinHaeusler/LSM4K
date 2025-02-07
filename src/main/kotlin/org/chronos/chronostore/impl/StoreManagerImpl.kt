@@ -1,6 +1,6 @@
 package org.chronos.chronostore.impl
 
-import mu.KotlinLogging
+import io.github.oshai.kotlinlogging.KotlinLogging
 import org.chronos.chronostore.api.*
 import org.chronos.chronostore.api.compaction.CompactionStrategy
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor

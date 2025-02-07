@@ -1,7 +1,7 @@
 package org.chronos.chronostore.impl
 
 import com.google.common.collect.MapMaker
-import mu.KotlinLogging
+import io.github.oshai.kotlinlogging.KotlinLogging
 import org.chronos.chronostore.api.ChronoStoreTransaction
 import org.chronos.chronostore.api.Store
 import org.chronos.chronostore.api.StoreManager
@@ -17,7 +17,6 @@ import org.chronos.chronostore.wal.WriteAheadLogTransaction
 import java.util.concurrent.ConcurrentMap
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
-import kotlin.concurrent.write
 
 class TransactionManager(
     val storeManager: StoreManager,

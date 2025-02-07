@@ -1,7 +1,7 @@
 package org.chronos.chronostore.wal
 
 import com.google.common.io.CountingInputStream
-import mu.KotlinLogging
+import io.github.oshai.kotlinlogging.KotlinLogging
 import org.chronos.chronostore.api.exceptions.TruncatedInputException
 import org.chronos.chronostore.api.exceptions.WriteAheadLogEntryCorruptedException
 import org.chronos.chronostore.io.format.CompressionAlgorithm

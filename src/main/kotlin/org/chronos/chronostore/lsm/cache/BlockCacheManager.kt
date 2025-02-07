@@ -1,6 +1,6 @@
 package org.chronos.chronostore.lsm.cache
 
-import mu.KotlinLogging
+import io.github.oshai.kotlinlogging.KotlinLogging
 import org.chronos.chronostore.util.StoreId
 import org.chronos.chronostore.util.unit.BinarySize
 

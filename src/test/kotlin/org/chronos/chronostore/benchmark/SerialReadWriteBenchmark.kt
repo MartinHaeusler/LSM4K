@@ -1,6 +1,6 @@
 package org.chronos.chronostore.benchmark
 
-import mu.KotlinLogging
+import io.github.oshai.kotlinlogging.KotlinLogging
 import org.chronos.chronostore.api.ChronoStoreConfiguration
 import org.chronos.chronostore.api.TransactionalStore.Companion.withCursor
 import org.chronos.chronostore.test.util.ChronoStoreMode

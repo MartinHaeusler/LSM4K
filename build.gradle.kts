@@ -36,8 +36,6 @@ dependencies {
 
     // for benchmarking purposes, include some other key-value stores
     testImplementation(libs.bundles.xodus)
-
-    testImplementation(kotlin("reflect"))
 }
 
 tasks.test {

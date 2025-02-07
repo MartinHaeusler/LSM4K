@@ -1,6 +1,6 @@
 package org.chronos.chronostore.test.util
 
-import mu.KotlinLogging
+import io.github.oshai.kotlinlogging.KotlinLogging
 import org.chronos.chronostore.util.Order
 import org.chronos.chronostore.util.StringExtensions.toSingleLine
 import org.chronos.chronostore.util.cursor.Cursor

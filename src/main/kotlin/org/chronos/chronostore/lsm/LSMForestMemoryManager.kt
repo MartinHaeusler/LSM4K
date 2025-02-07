@@ -1,13 +1,13 @@
 package org.chronos.chronostore.lsm
 
-import mu.KotlinLogging
+import io.github.oshai.kotlinlogging.KotlinLogging
 import org.chronos.chronostore.async.executor.AsyncTaskManager
 import org.chronos.chronostore.async.executor.TaskExecutionResult
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.forEach
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.mainTask
 import org.chronos.chronostore.lsm.merge.tasks.FlushInMemoryTreeToDiskTask
-import org.chronos.chronostore.util.logging.LogExtensions.performance
+import org.chronos.chronostore.util.logging.LogExtensions.perfTrace
 import org.chronos.chronostore.util.statistics.ChronoStoreStatistics
 import org.chronos.chronostore.util.unit.BinarySize.Companion.Bytes
 import java.util.concurrent.Future
@@ -90,7 +90,7 @@ class LSMForestMemoryManager(
                 if (stallBegin < 0) {
                     stallBegin = System.currentTimeMillis()
                 }
-                log.performance {
+                log.perfTrace {
                     "Stalling write to '${tree.path}' because the in-memory buffer is full." +
                         " Write will continue after the flush task has been completed."
                 }
@@ -110,7 +110,7 @@ class LSMForestMemoryManager(
                 val writeStallTime = stallEnd - stallBegin
                 ChronoStoreStatistics.TOTAL_WRITE_STALL_TIME_MILLIS.addAndGet(writeStallTime)
                 ChronoStoreStatistics.WRITE_STALL_EVENTS.incrementAndGet()
-                log.performance {
+                log.perfTrace {
                     "Write to '${tree.path}' will no longer be stalled and may continue." +
                         " Stall time: ${writeStallTime}ms."
                 }

@@ -1,7 +1,7 @@
 package org.chronos.chronostore.async.executor
 
 import com.cronutils.model.Cron
-import mu.KotlinLogging
+import io.github.oshai.kotlinlogging.KotlinLogging
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor
 import org.chronos.chronostore.async.tasks.AsyncTask
 import org.chronos.chronostore.impl.ChronoStoreState

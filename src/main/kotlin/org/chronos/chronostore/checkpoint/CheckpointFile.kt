@@ -1,6 +1,6 @@
 package org.chronos.chronostore.checkpoint
 
-import mu.KotlinLogging
+import io.github.oshai.kotlinlogging.KotlinLogging
 import org.chronos.chronostore.io.structure.ChronoStoreStructure
 import org.chronos.chronostore.io.vfs.VirtualFile
 import org.chronos.chronostore.io.vfs.VirtualReadWriteFile

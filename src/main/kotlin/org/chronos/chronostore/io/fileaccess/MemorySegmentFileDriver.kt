@@ -1,6 +1,6 @@
 package org.chronos.chronostore.io.fileaccess
 
-import mu.KotlinLogging
+import io.github.oshai.kotlinlogging.KotlinLogging
 import org.chronos.chronostore.io.vfs.VirtualFile
 import org.chronos.chronostore.io.vfs.disk.DiskBasedVirtualFile
 import org.chronos.chronostore.io.vfs.inmemory.InMemoryVirtualFile

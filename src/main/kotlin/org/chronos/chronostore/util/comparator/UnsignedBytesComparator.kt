@@ -1,3 +1,7 @@
+// we have to deal with the java.security.AccessController class here.
+// Until it gets removed from the JDK for good, we have to keep it in here.
+@file:Suppress("DEPRECATION")
+
 package org.chronos.chronostore.util.comparator
 
 import com.google.common.annotations.VisibleForTesting

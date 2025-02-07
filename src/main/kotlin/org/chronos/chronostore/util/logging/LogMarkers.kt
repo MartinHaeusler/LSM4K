@@ -1,12 +1,12 @@
 package org.chronos.chronostore.util.logging
 
-import org.slf4j.MarkerFactory
+import io.github.oshai.kotlinlogging.KMarkerFactory
 
 object LogMarkers {
 
-    val IO = MarkerFactory.getMarker("io")
+    val IO = KMarkerFactory.getMarker("io")
 
-    val PERFORMANCE = MarkerFactory.getMarker("performance")
+    val PERFORMANCE = KMarkerFactory.getMarker("performance")
 
 
 }

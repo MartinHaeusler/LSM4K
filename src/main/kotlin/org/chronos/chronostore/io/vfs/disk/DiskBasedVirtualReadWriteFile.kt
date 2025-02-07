@@ -1,6 +1,6 @@
 package org.chronos.chronostore.io.vfs.disk
 
-import mu.KotlinLogging
+import io.github.oshai.kotlinlogging.KotlinLogging
 import org.chronos.chronostore.io.vfs.VirtualReadWriteFile
 import org.chronos.chronostore.util.stream.UnclosableOutputStream.Companion.unclosable
 import java.io.File

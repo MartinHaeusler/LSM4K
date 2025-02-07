@@ -1,6 +1,6 @@
 package org.chronos.chronostore.lsm
 
-import mu.KotlinLogging
+import io.github.oshai.kotlinlogging.KotlinLogging
 import org.chronos.chronostore.api.ChronoStoreTransaction
 import org.chronos.chronostore.api.exceptions.FlushException
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor
@@ -22,7 +22,7 @@ import org.chronos.chronostore.util.StoreId
 import org.chronos.chronostore.util.TSN
 import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.cursor.*
-import org.chronos.chronostore.util.logging.LogExtensions.performance
+import org.chronos.chronostore.util.logging.LogExtensions.perfTrace
 import org.chronos.chronostore.util.unit.BinarySize
 import org.chronos.chronostore.util.unit.BinarySize.Companion.Bytes
 import org.pcollections.TreePMap
@@ -289,7 +289,7 @@ class LSMTree(
     }
 
     fun flushInMemoryDataToDisk(minFlushSize: BinarySize, monitor: TaskMonitor): FlushResult {
-        log.performance { "TASK: Flush in-memory data to disk" }
+        log.perfTrace { "TASK: Flush in-memory data to disk" }
         this.performAsyncWriteTask(monitor) {
             try {
                 val timeBefore = System.currentTimeMillis()
@@ -299,14 +299,14 @@ class LSMTree(
                     monitor.reportDone()
                     return FlushResult.EMPTY
                 }
-                log.performance { "Flushing LSM Tree '${this.directory}'!" }
+                log.perfTrace { "Flushing LSM Tree '${this.directory}'!" }
                 val commands = monitor.subTask(0.1, "Collecting Entries to flush") {
                     // [C0001]: We *must* take *all* of the commits in the in-memory tree
                     // and flush them to avoid writing SST files with partial transactions in them.
                     this.inMemoryTree
                 }
                 val newFileIndex = this.nextFreeFileIndex.getAndIncrement()
-                log.performance { "Target file index ${newFileIndex} will be used for flush of tree ${this.path}" }
+                log.perfTrace { "Target file index ${newFileIndex} will be used for flush of tree ${this.path}" }
                 val file = this.directory.file(this.createFileNameForIndex(newFileIndex))
                 val flushTime = measureTimeMillis {
                     monitor.subTask(0.8, "Writing File") {
@@ -316,7 +316,7 @@ class LSMTree(
                                 outputStream = overWriter.outputStream,
                                 settings = this.newFileSettings,
                             ).use { writer ->
-                                log.performance { "Flushing ${commands.size} commands from in-memory segment into '${file.path}'." }
+                                log.perfTrace { "Flushing ${commands.size} commands from in-memory segment into '${file.path}'." }
                                 writer.writeFile(
                                     // we're flushing this file from in-memory,
                                     // so the resulting file has never been merged.
@@ -329,15 +329,15 @@ class LSMTree(
                         }
                     }
                 }
-                log.performance { "Flush into index file ${newFileIndex} completed in ${flushTime}ms. Redirecting traffic to new data file for LSM tree ${this.path}" }
+                log.perfTrace { "Flush into index file ${newFileIndex} completed in ${flushTime}ms. Redirecting traffic to new data file for LSM tree ${this.path}" }
                 monitor.subTask(0.1, "Redirecting traffic to file") {
                     this.lock.write {
                         this.fileList += this.createLsmTreeFile(file)
                         // ensure that the merged file is at the correct position in the list
                         this.fileList.sortBy { it.header.metaData.minTSN }
-                        log.performance { "Removing ${commands.keys.size} keys from the in-memory tree (which has ${this.inMemoryTree.size} keys)..." }
+                        log.perfTrace { "Removing ${commands.keys.size} keys from the in-memory tree (which has ${this.inMemoryTree.size} keys)..." }
                         this.inMemoryTree = this.inMemoryTree.minusAll(commands.keys)
-                        log.performance { "${inMemoryTree.size} entries remaining in-memory after flush of tree ${this.path}" }
+                        log.perfTrace { "${inMemoryTree.size} entries remaining in-memory after flush of tree ${this.path}" }
                         this.inMemoryTreeSizeInBytes.addAndGet(commands.values.sumOf { it.byteSize } * -1L)
 
                         // the in-memory tree size has changed, notify listeners

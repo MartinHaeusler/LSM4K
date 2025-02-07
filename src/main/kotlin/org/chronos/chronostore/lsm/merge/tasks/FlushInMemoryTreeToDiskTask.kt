@@ -1,10 +1,11 @@
 package org.chronos.chronostore.lsm.merge.tasks
 
-import mu.KotlinLogging
+import io.github.oshai.kotlinlogging.KotlinLogging
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.subTaskWithMonitor
 import org.chronos.chronostore.async.tasks.AsyncTask
 import org.chronos.chronostore.lsm.LSMTree
+import org.chronos.chronostore.util.logging.LogExtensions.ioDebug
 import org.chronos.chronostore.util.logging.LogMarkers
 import org.chronos.chronostore.util.statistics.ChronoStoreStatistics
 import org.chronos.chronostore.util.unit.BinarySize.Companion.Bytes
@@ -29,7 +30,7 @@ class FlushInMemoryTreeToDiskTask(
 
     override fun run(monitor: TaskMonitor) {
         monitor.reportStarted(this.name)
-        log.debug(LogMarkers.IO) { "FLUSH TASK [${this.index}] START on ${this.lsmTree}" }
+        log.ioDebug { "FLUSH TASK [${this.index}] START on ${this.lsmTree}" }
         val flushResult = monitor.subTaskWithMonitor(1.0) { subMonitor ->
             lsmTree.flushInMemoryDataToDisk(
                 minFlushSize = 0.Bytes,
@@ -37,9 +38,9 @@ class FlushInMemoryTreeToDiskTask(
             )
         }
         if (flushResult.bytesWritten <= 0) {
-            log.debug(LogMarkers.IO) { "FLUSH TASK [${this.index}] DONE on ${this.lsmTree.storeId} - no data needed to be written." }
+            log.ioDebug { "FLUSH TASK [${this.index}] DONE on ${this.lsmTree.storeId} - no data needed to be written." }
         } else {
-            log.debug(LogMarkers.IO) {
+            log.ioDebug {
                 val writtenBytes = flushResult.bytesWritten
                 val bytesPerSecond = flushResult.throughputPerSecond
                 val entries = flushResult.entriesWritten

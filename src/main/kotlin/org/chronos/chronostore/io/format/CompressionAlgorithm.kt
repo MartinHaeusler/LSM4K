@@ -128,6 +128,7 @@ enum class CompressionAlgorithm(
             return compressed
         }
 
+        @Suppress("DEPRECATION") // API has no replacement for "decompressedSize()"...
         override fun decompress(bytes: ByteArray): ByteArray {
             require(bytes.isNotEmpty()) { "An empty byte array cannot be decompressed!" }
             ChronoStoreStatistics.DECOMPRESSION_INVOCATIONS.incrementAndGet()

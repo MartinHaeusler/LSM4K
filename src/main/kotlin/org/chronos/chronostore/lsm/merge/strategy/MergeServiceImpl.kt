@@ -1,6 +1,6 @@
 package org.chronos.chronostore.lsm.merge.strategy
 
-import mu.KotlinLogging
+import io.github.oshai.kotlinlogging.KotlinLogging
 import org.chronos.chronostore.api.ChronoStoreConfiguration
 import org.chronos.chronostore.api.StoreManager
 import org.chronos.chronostore.async.executor.AsyncTaskManager
