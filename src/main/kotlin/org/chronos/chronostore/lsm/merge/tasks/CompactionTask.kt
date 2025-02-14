@@ -8,6 +8,7 @@ import org.chronos.chronostore.async.taskmonitor.TaskMonitor
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.forEachWithMonitor
 import org.chronos.chronostore.async.tasks.AsyncTask
 import org.chronos.chronostore.impl.StoreManagerImpl
+import org.chronos.chronostore.impl.store.StoreImpl
 import org.chronos.chronostore.lsm.merge.algorithms.LeveledCompaction
 import org.chronos.chronostore.lsm.merge.algorithms.TieredCompaction
 import org.chronos.chronostore.manifest.ManifestFile
@@ -45,12 +46,12 @@ class CompactionTask(
             monitor.reportStarted("Compacting ChronoStore")
             val allStores = (this.storeManager as StoreManagerImpl).getAllStoresInternal()
             monitor.forEachWithMonitor(1.0, "Compacting Store", allStores) { taskMonitor, store ->
-                mergeFilesIn(store, major, taskMonitor)
+                mergeFilesIn(store as StoreImpl, major, taskMonitor)
             }
         }
     }
 
-    private fun mergeFilesIn(store: Store, major: Boolean, monitor: TaskMonitor) {
+    private fun mergeFilesIn(store: StoreImpl, major: Boolean, monitor: TaskMonitor) {
         val compactionNote = if (major) {
             "(Major Compaction)"
         } else {
@@ -62,26 +63,14 @@ class CompactionTask(
         } else {
             this.performMinorCompaction(store, monitor)
         }
-//        val lsmTree = (store as StoreImpl).tree
-//        val files = lsmTree.allFiles
-//        val filesToMerge = selectFiles(major, files)
-//        if(filesToMerge.size <= 1){
-//            return // no files need merging in this store
-//        }
-//
-//        monitor.reportProgress(0.2)
-//        val fileIndices = filesToMerge.asSequence().map { files.indexOf(it) }.toSet()
-//        monitor.subTaskWithMonitor(0.8) { mergeMonitor ->
-//            lsmTree.mergeFiles(fileIndices, mergeMonitor)
-//        }
     }
 
     private fun performMajorCompaction(store: Store, monitor: TaskMonitor) {
-
+        TODO("Major compaction is not yet implemented!")
     }
 
-    private fun performMinorCompaction(store: Store, monitor: TaskMonitor) {
-        val storeMetadata = manifestFile.getManifest().getStore(store.storeId)
+    private fun performMinorCompaction(store: StoreImpl, monitor: TaskMonitor) {
+        val storeMetadata = this.manifestFile.getManifest().getStore(store.storeId)
         when (val compactionStrategy = storeMetadata.compactionStrategy) {
             is LeveledCompactionStrategy -> this.performMinorLeveledCompaction(
                 store = store,
@@ -100,7 +89,7 @@ class CompactionTask(
     }
 
     private fun performMinorTieredCompaction(
-        store: Store,
+        store: StoreImpl,
         storeMetadata: StoreMetadata,
         compactionStrategy: TieredCompactionStrategy,
         monitor: TaskMonitor,
@@ -116,7 +105,7 @@ class CompactionTask(
     }
 
     private fun performMinorLeveledCompaction(
-        store: Store,
+        store: StoreImpl,
         storeMetadata: StoreMetadata,
         compactionStrategy: LeveledCompactionStrategy,
         monitor: TaskMonitor,

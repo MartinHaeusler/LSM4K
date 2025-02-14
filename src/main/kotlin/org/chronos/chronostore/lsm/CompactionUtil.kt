@@ -12,11 +12,29 @@ import org.chronos.chronostore.util.iterator.IteratorExtensions.orderedDistinct
 
 object CompactionUtil {
 
+    /**
+     * Compacts the given [cursors] into the given [writer].
+     *
+     * The current position of the cursors will be ignored. This method reads all of their values from first to last
+     * and merges the results.
+     *
+     * @param cursors The cursors to use as input for the compaction
+     * @param writer The writer which receives the output data.
+     * @param keepTombstones Decides what to do if the final merged operation for any key is a deletion (a.k.a. a tombstone).
+     *                       Use `true` if the deletion should be kept and written into the [writer], or `false` if the deletion
+     *                       should be dropped. Typically, when compacting intermediate levels/tiers, you'll want to keep the
+     *                       deletions to allow them to propagate to the highest level/tier. When compacting into the highest
+     *                       level/tier, you'll typically want to drop the tombstones.
+     * @param resultingCommandCountEstimate An estimate on how many commands will be in the final resulting file. Will be used for sizing the bloom filter.
+     * @param maxMerge The highest number of received merges across all input files. The output file will have a "numberOfMerges"
+     *                 equal to [maxMerge] + 1. For statistical purposes only.
+     */
     fun compact(
         cursors: List<Cursor<KeyAndTSN, Command>>,
         writer: ChronoStoreFileWriter,
+        keepTombstones: Boolean,
+        resultingCommandCountEstimate: Long,
         maxMerge: Long,
-        totalEntries: Long,
     ) {
         val iterators = cursors.mapNotNull {
             if (it.first()) {
@@ -29,14 +47,19 @@ object CompactionUtil {
         // ensure ordering and remove duplicates (which is cheap and lazy for ordered iterators)
         val basicIterator = commands.checkOrdered(strict = false).orderedDistinct()
 
-        // we have to drop old versions...
-        val finalIterator = basicIterator.latestVersionOnly()
-            // ...and if the latest version happens to be a DELETE, we ignore the key.
-            .filter { it.opCode != Command.OpCode.DEL }
+        // we have to drop old versions of keys
+        val latestVersionIterator = basicIterator.latestVersionOnly()
+
+        val finalIterator = if (keepTombstones) {
+            latestVersionIterator
+        } else {
+            latestVersionIterator.filter(Command::isDeletion)
+        }
+
         writer.writeFile(
             numberOfMerges = maxMerge + 1,
             orderedCommands = finalIterator,
-            commandCountEstimate = totalEntries,
+            commandCountEstimate = resultingCommandCountEstimate,
         )
     }
 

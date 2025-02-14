@@ -1,5 +1,6 @@
 package org.chronos.chronostore.lsm.merge.algorithms
 
+import com.google.common.annotations.VisibleForTesting
 import org.chronos.chronostore.api.Store
 import org.chronos.chronostore.api.compaction.TieredCompactionStrategy
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor
@@ -17,7 +18,7 @@ import org.chronos.chronostore.util.Timestamp
 
 class TieredCompaction(
     val manifestFile: ManifestFile,
-    val store: Store,
+    val store: StoreImpl,
     val storeMetadata: StoreMetadata,
     val configuration: TieredCompactionStrategy,
     val monitor: TaskMonitor,
@@ -38,10 +39,10 @@ class TieredCompaction(
     }
 
     private val tierSizes: Map<TierIndex, Long> by lazy(LazyThreadSafetyMode.NONE) {
-        val allFiles = (this.store as StoreImpl).tree.allFiles
+        val allFiles = this.store.tree.allFiles
         val indexToFile = allFiles.associateBy { it.index }
 
-        storeMetadata.getAllFileInfos()
+        this.storeMetadata.getAllFileInfos()
             .groupingBy { it.levelOrTier }
             .aggregate { _, sum, fileInfo, _ ->
                 val file = indexToFile[fileInfo.fileIndex]
@@ -55,12 +56,15 @@ class TieredCompaction(
         // first, verify that we have enough files on disk to make the
         // operation worth the effort. If that's not the case, we exit
         // out immediately.
-        if (!enoughTiersOnDisk()) {
+        if (!areEnoughTiersOnDisk()) {
             return
         }
+
+        val now = System.currentTimeMillis()
+
         // choose the files we want to compact
         val filesToCompact = this.monitor.subTask(0.3, "Selecting Files to Compact") {
-            this.selectFilesBasedOnCompactionTriggers()
+            this.selectFilesBasedOnCompactionTriggers(now)
         }
         if (filesToCompact.size <= 1) {
             // nothing to do!
@@ -69,13 +73,14 @@ class TieredCompaction(
 
         // squash the files together and write a new file to disk at the highest input tier
         this.monitor.subTaskWithMonitor(0.6) { mergeMonitor: TaskMonitor ->
-            (this.store as StoreImpl).tree.mergeFiles(
+            this.store.tree.mergeFiles(
                 fileIndices = filesToCompact.map { it.fileIndex }.toSet(),
+                keepTombstones = shouldKeepTombstonesInMerge(filesToCompact),
                 monitor = mergeMonitor,
                 // TODO [LOGIC] This is quite dirty. Can we find a nicer solution instead of the lambda?
                 updateManifest = { outputFileIndex ->
                     val tierToFileIndices = mutableMapOf<TierIndex, MutableSet<FileIndex>>()
-                    for(fileToCompact in filesToCompact){
+                    for (fileToCompact in filesToCompact) {
                         tierToFileIndices.getOrPut(fileToCompact.levelOrTier, ::mutableSetOf) += fileToCompact.fileIndex
                     }
                     this.manifestFile.appendOperation { sequenceNumber ->
@@ -91,31 +96,50 @@ class TieredCompaction(
         }
     }
 
-    private fun selectFilesBasedOnCompactionTriggers(): List<LSMFileInfo> {
+    @VisibleForTesting
+    fun shouldKeepTombstonesInMerge(filesToCompact: List<LSMFileInfo>): Boolean {
+        // determine if we're merging to the highest tier (i.e. will there be LSM files "above" us after the merge?)
+        val highestTierWithFiles = this.storeMetadata.getHighestNonEmptyLevelOrTier() ?: 0
+        val highestTierInCompaction = filesToCompact.maxOfOrNull { it.levelOrTier } ?: 0
+        // we always merge "upwards", so the target tier is our current highest one +1
+        // (there is one exception to the rule, that is if we reach the maximum allowed tiers according to
+        // the store config. But in that case, we're guaranteed to merge into the highest tier)
+        val outputTier = highestTierInCompaction + 1
+
+        // to we merge into the highest tier as the target?
+        val mergesToHighestTier = outputTier >= highestTierWithFiles
+
+        // if we merge into the highest tier, we DON'T want to keep the tombstones (they'll be useless).
+        // if we DON'T merge into the highest tier, we WANT to keep the tombstones (they need to be propagated to higher tiers).
+        return !mergesToHighestTier
+    }
+
+
+    @VisibleForTesting
+    fun selectFilesBasedOnCompactionTriggers(now: Timestamp): List<LSMFileInfo> {
         // we have three triggers which we need to check in the given order:
         // - age-based compaction
         // - space-amplification-based compaction
         // - size-ratio-based compaction
         // So let's run them one by one, and see if any of them produce
         // a meaningful set of files to compact.
-        return selectFilesForDataAgeTrigger().takeIf { it.size > 1 }
+        return selectFilesForDataAgeTrigger(now).takeIf { it.size > 1 }
             ?: selectFilesForSizeAmplificationTrigger().takeIf { it.size > 1 }
             ?: selectFilesForSizeRatioTrigger().takeIf { it.size > 1 }
             // none of the triggers produced any outcome
             ?: emptyList()
     }
 
-    private fun enoughTiersOnDisk(): Boolean {
+    private fun areEnoughTiersOnDisk(): Boolean {
         // check how many tiers we have in the store
         val nonEmptyTiers = storeMetadata.getNumberOfNonEmptyTiers()
         // we don't have enough files on disk yet to make compaction worth the effort.
-        return nonEmptyTiers >= configuration.numberOfTiers
+        return nonEmptyTiers >= this.configuration.numberOfTiers
     }
 
-    private fun selectFilesForDataAgeTrigger(): List<LSMFileInfo> {
+    private fun selectFilesForDataAgeTrigger(now: Timestamp): List<LSMFileInfo> {
         val ageTolerance = this.configuration.ageTolerance.inWholeMilliseconds
-        val now = System.currentTimeMillis()
-        val tooOldFiles = (this.store as StoreImpl).tree.allFiles
+        val tooOldFiles = this.store.tree.allFiles
             .filter { it.age(now) > ageTolerance }
             .sortedByDescending { it.age(now) }
         if (tooOldFiles.isEmpty()) {
@@ -168,19 +192,19 @@ class TieredCompaction(
         val highestTier = this.storeMetadata.getHighestNonEmptyLevelOrTier()
             ?: return emptyList() // there are no tiers? Weird.
 
-        val minMergeTiers = configuration.minMergeTiers
+        val minMergeTiers = this.configuration.minMergeTiers
         if (highestTier < minMergeTiers) {
             // we don't have enough tiers yet
             return emptyList()
         }
 
         for (tier in (minMergeTiers..<highestTier).reversed()) {
-            val sizeOfThisTier = tierSizes[tier]
+            val sizeOfThisTier = this.tierSizes[tier]
                 ?: continue // we don't know the size of this tier... it's probably empty, ignore it.
 
-            val sizeOfLowerTiers = (0..<tier).sumOf { tierSizes[it] ?: 0 }
+            val sizeOfLowerTiers = (0..<tier).sumOf { this.tierSizes[it] ?: 0 }
             val ratio = (sizeOfLowerTiers / sizeOfThisTier.toDouble())
-            if (ratio >= 1.0 + configuration.sizeRatio) {
+            if (ratio >= 1.0 + this.configuration.sizeRatio) {
                 // compact all files below this tier into this tier
                 return (0..tier).flatMap { this.storeMetadata.getFileInfosAtTierOrLevel(it) }
             }

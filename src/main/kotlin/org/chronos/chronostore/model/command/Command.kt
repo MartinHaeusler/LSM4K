@@ -134,6 +134,12 @@ class Command(
 
     }
 
+    val isDeletion: Boolean
+        get() = this.opCode == OpCode.DEL
+
+    val isInsertOrUpdate: Boolean
+        get() = this.opCode == OpCode.PUT
+
     fun writeToStream(outputStream: OutputStream) {
         outputStream.write(this.opCode.byte.toInt())
         PrefixIO.writeBytes(outputStream, this.key)

@@ -126,7 +126,7 @@ class StoreManagementTest {
             }
         }
 
-        mode.withChronoStore { chronoStore, vfs ->
+        mode.withChronoStoreAndVFS { chronoStore, vfs ->
             chronoStore.transaction { tx ->
                 val test = tx.createNewStore("test")
                 test.put("foo", "bar")

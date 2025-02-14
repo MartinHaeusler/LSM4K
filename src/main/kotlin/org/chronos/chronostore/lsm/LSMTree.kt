@@ -381,7 +381,7 @@ class LSMTree(
         taskMonitor.reportDone()
     }
 
-    fun mergeFiles(fileIndices: Set<Int>, monitor: TaskMonitor, updateManifest: (FileIndex) -> Unit): FileIndex? {
+    fun mergeFiles(fileIndices: Set<Int>, keepTombstones: Boolean, monitor: TaskMonitor, updateManifest: (FileIndex) -> Unit): FileIndex? {
         log.debug { "TASK: merge files: ${fileIndices.sorted().joinToString(prefix = "[", separator = ", ", postfix = "]")}" }
         this.performAsyncWriteTask(monitor) {
             monitor.reportStarted("Merging ${fileIndices.size} files")
@@ -411,7 +411,8 @@ class LSMTree(
                             cursors = cursors,
                             writer = writer,
                             maxMerge = maxMerge,
-                            totalEntries = totalEntries
+                            resultingCommandCountEstimate = totalEntries,
+                            keepTombstones = keepTombstones,
                         )
                     }
                 } finally {
