@@ -1,69 +1,51 @@
 package org.chronos.chronostore.lsm.merge.algorithms
 
-import com.google.common.annotations.VisibleForTesting
-import org.chronos.chronostore.api.Store
 import org.chronos.chronostore.api.compaction.TieredCompactionStrategy
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.subTask
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.subTaskWithMonitor
-import org.chronos.chronostore.impl.store.StoreImpl
-import org.chronos.chronostore.lsm.LSMTreeFile
+import org.chronos.chronostore.lsm.merge.model.CompactableStore
 import org.chronos.chronostore.manifest.LSMFileInfo
 import org.chronos.chronostore.manifest.ManifestFile
-import org.chronos.chronostore.manifest.StoreMetadata
 import org.chronos.chronostore.manifest.operations.TieredCompactionOperation
 import org.chronos.chronostore.util.FileIndex
+import org.chronos.chronostore.util.GroupingExtensions.toSets
 import org.chronos.chronostore.util.TierIndex
 import org.chronos.chronostore.util.Timestamp
+import java.io.File
 
 class TieredCompaction(
     val manifestFile: ManifestFile,
-    val store: StoreImpl,
-    val storeMetadata: StoreMetadata,
     val configuration: TieredCompactionStrategy,
-    val monitor: TaskMonitor,
+    val store: CompactableStore,
 ) {
 
-    companion object {
-
-        fun validateStoreIdsMatch(store: Store, storeMetadata: StoreMetadata) {
-            require(store.storeId == storeMetadata.storeId) {
-                "Store IDs of given parameters do not match: store.storeId = '${store.storeId}', storeMetadata.storeId = '${storeMetadata.storeId}'"
-            }
-        }
-
-    }
-
-    init {
-        validateStoreIdsMatch(this.store, this.storeMetadata)
-    }
+    private var executed: Boolean = false
 
     private val tierSizes: Map<TierIndex, Long> by lazy(LazyThreadSafetyMode.NONE) {
-        val allFiles = this.store.tree.allFiles
+        val allFiles = this.store.allFiles
         val indexToFile = allFiles.associateBy { it.index }
 
-        this.storeMetadata.getAllFileInfos()
+        this.store.metadata.getAllFileInfos()
             .groupingBy { it.levelOrTier }
             .aggregate { _, sum, fileInfo, _ ->
                 val file = indexToFile[fileInfo.fileIndex]
-                val fileSize = file?.header?.sizeBytes ?: 0L
+                val fileSize = file?.metadata?.sizeBytes ?: 0L
                 (sum ?: 0L) + fileSize
             }
     }
 
 
-    fun runCompaction() {
-        // first, verify that we have enough files on disk to make the
-        // operation worth the effort. If that's not the case, we exit
-        // out immediately.
+    fun runCompaction(monitor: TaskMonitor, now: Timestamp = System.currentTimeMillis()) {
+        ensureExecutableOnlyOnce()
+        // verify that we have enough files on disk to make the operation worth the effort.
+        // If that's not the case, we exit out immediately.
         if (!areEnoughTiersOnDisk()) {
             return
         }
 
-        val now = System.currentTimeMillis()
-
         // choose the files we want to compact
-        val filesToCompact = this.monitor.subTask(0.3, "Selecting Files to Compact") {
+        val filesToCompact = monitor.subTask(0.3, "Selecting Files to Compact") {
             this.selectFilesBasedOnCompactionTriggers(now)
         }
         if (filesToCompact.size <= 1) {
@@ -72,17 +54,17 @@ class TieredCompaction(
         }
 
         // squash the files together and write a new file to disk at the highest input tier
-        this.monitor.subTaskWithMonitor(0.6) { mergeMonitor: TaskMonitor ->
-            this.store.tree.mergeFiles(
+        monitor.subTaskWithMonitor(0.6) { mergeMonitor: TaskMonitor ->
+            this.store.mergeFiles(
                 fileIndices = filesToCompact.map { it.fileIndex }.toSet(),
                 keepTombstones = shouldKeepTombstonesInMerge(filesToCompact),
                 monitor = mergeMonitor,
                 // TODO [LOGIC] This is quite dirty. Can we find a nicer solution instead of the lambda?
                 updateManifest = { outputFileIndex ->
-                    val tierToFileIndices = mutableMapOf<TierIndex, MutableSet<FileIndex>>()
-                    for (fileToCompact in filesToCompact) {
-                        tierToFileIndices.getOrPut(fileToCompact.levelOrTier, ::mutableSetOf) += fileToCompact.fileIndex
-                    }
+                    val tierToFileIndices = filesToCompact
+                        .groupingBy { it.levelOrTier }
+                        .toSets { it.fileIndex }
+
                     this.manifestFile.appendOperation { sequenceNumber ->
                         TieredCompactionOperation(
                             sequenceNumber = sequenceNumber,
@@ -96,10 +78,16 @@ class TieredCompaction(
         }
     }
 
-    @VisibleForTesting
-    fun shouldKeepTombstonesInMerge(filesToCompact: List<LSMFileInfo>): Boolean {
+    private fun ensureExecutableOnlyOnce() {
+        check(!this.executed) {
+            "This compaction task has already been executed; please do not reuse task objects. Create a new one instead."
+        }
+        this.executed = true
+    }
+
+    private fun shouldKeepTombstonesInMerge(filesToCompact: List<LSMFileInfo>): Boolean {
         // determine if we're merging to the highest tier (i.e. will there be LSM files "above" us after the merge?)
-        val highestTierWithFiles = this.storeMetadata.getHighestNonEmptyLevelOrTier() ?: 0
+        val highestTierWithFiles = this.store.metadata.getHighestNonEmptyLevelOrTier() ?: 0
         val highestTierInCompaction = filesToCompact.maxOfOrNull { it.levelOrTier } ?: 0
         // we always merge "upwards", so the target tier is our current highest one +1
         // (there is one exception to the rule, that is if we reach the maximum allowed tiers according to
@@ -115,8 +103,7 @@ class TieredCompaction(
     }
 
 
-    @VisibleForTesting
-    fun selectFilesBasedOnCompactionTriggers(now: Timestamp): List<LSMFileInfo> {
+    private fun selectFilesBasedOnCompactionTriggers(now: Timestamp): List<LSMFileInfo> {
         // we have three triggers which we need to check in the given order:
         // - age-based compaction
         // - space-amplification-based compaction
@@ -132,14 +119,14 @@ class TieredCompaction(
 
     private fun areEnoughTiersOnDisk(): Boolean {
         // check how many tiers we have in the store
-        val nonEmptyTiers = storeMetadata.getNumberOfNonEmptyTiers()
+        val nonEmptyTiers = this.store.metadata.getNumberOfNonEmptyTiers()
         // we don't have enough files on disk yet to make compaction worth the effort.
         return nonEmptyTiers >= this.configuration.numberOfTiers
     }
 
     private fun selectFilesForDataAgeTrigger(now: Timestamp): List<LSMFileInfo> {
         val ageTolerance = this.configuration.ageTolerance.inWholeMilliseconds
-        val tooOldFiles = this.store.tree.allFiles
+        val tooOldFiles = this.store.allFiles
             .filter { it.age(now) > ageTolerance }
             .sortedByDescending { it.age(now) }
         if (tooOldFiles.isEmpty()) {
@@ -147,15 +134,17 @@ class TieredCompaction(
             return emptyList()
         }
 
+        val storeMetadata = this.store.metadata
+
         for (fileToCompact in tooOldFiles) {
             // determine in which tier this file is located
-            val tier = this.storeMetadata.getTierForFile(fileToCompact.index)
-            val nextHigherTier = this.storeMetadata.getNextHigherNonEmptyTier(tier)
+            val tier = storeMetadata.getTierForFile(fileToCompact.index)
+            val nextHigherTier = storeMetadata.getNextHigherNonEmptyTier(tier)
                 ?: continue // there are no files to merge with. Most likely, this file resides at the maximum tier.
 
             val filesToCompact = mutableListOf<LSMFileInfo>()
-            filesToCompact += this.storeMetadata.getFileInfosAtTierOrLevel(tier)
-            filesToCompact += this.storeMetadata.getFileInfosAtTierOrLevel(nextHigherTier)
+            filesToCompact += storeMetadata.getFileInfosAtTierOrLevel(tier)
+            filesToCompact += storeMetadata.getFileInfosAtTierOrLevel(nextHigherTier)
 
             if (filesToCompact.size > 1) {
                 return filesToCompact
@@ -169,13 +158,15 @@ class TieredCompaction(
 
     private fun selectFilesForSizeAmplificationTrigger(): List<LSMFileInfo> {
         val maxSizeAmplificationPercent = this.configuration.maxSizeAmplificationPercent
-        val highestTier = this.storeMetadata.getHighestNonEmptyLevelOrTier()
+        val highestTier = this.store.metadata.getHighestNonEmptyLevelOrTier()
             ?: return emptyList() // there are no tiers? Weird.
 
         val sizeOfLastTier = tierSizes[highestTier]
             ?: return emptyList() // we were unable to determine the size of the highest tier? Weird.
 
-        val sizeOfAllTiersExceptLast = tierSizes.asSequence().filter { it.key != highestTier }.sumOf { it.value }
+        val sizeOfAllTiersExceptLast = tierSizes.asSequence()
+            .filter { it.key != highestTier }
+            .sumOf { it.value }
 
         val ratio = sizeOfAllTiersExceptLast / sizeOfLastTier
         if (ratio < maxSizeAmplificationPercent) {
@@ -185,11 +176,11 @@ class TieredCompaction(
         }
 
         // compact ALL the tiers (this is actually a major compaction)
-        return storeMetadata.getAllFileInfos()
+        return store.metadata.getAllFileInfos()
     }
 
     private fun selectFilesForSizeRatioTrigger(): List<LSMFileInfo> {
-        val highestTier = this.storeMetadata.getHighestNonEmptyLevelOrTier()
+        val highestTier = this.store.metadata.getHighestNonEmptyLevelOrTier()
             ?: return emptyList() // there are no tiers? Weird.
 
         val minMergeTiers = this.configuration.minMergeTiers
@@ -206,7 +197,7 @@ class TieredCompaction(
             val ratio = (sizeOfLowerTiers / sizeOfThisTier.toDouble())
             if (ratio >= 1.0 + this.configuration.sizeRatio) {
                 // compact all files below this tier into this tier
-                return (0..tier).flatMap { this.storeMetadata.getFileInfosAtTierOrLevel(it) }
+                return (0..tier).flatMap { this.store.metadata.getFileInfosAtTierOrLevel(it) }
             }
         }
 
@@ -214,8 +205,4 @@ class TieredCompaction(
         return emptyList()
     }
 
-    private fun LSMTreeFile.age(now: Timestamp): Long {
-        val createdAt = this.header.metaData.createdAt
-        return (now - createdAt).coerceAtLeast(0)
-    }
 }

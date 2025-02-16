@@ -11,6 +11,7 @@ import org.chronos.chronostore.impl.StoreManagerImpl
 import org.chronos.chronostore.impl.store.StoreImpl
 import org.chronos.chronostore.lsm.merge.algorithms.LeveledCompaction
 import org.chronos.chronostore.lsm.merge.algorithms.TieredCompaction
+import org.chronos.chronostore.lsm.merge.model.StandardCompactableStore
 import org.chronos.chronostore.manifest.ManifestFile
 import org.chronos.chronostore.manifest.StoreMetadata
 import java.util.concurrent.locks.ReentrantLock
@@ -94,14 +95,14 @@ class CompactionTask(
         compactionStrategy: TieredCompactionStrategy,
         monitor: TaskMonitor,
     ) {
+        val compactableStore = StandardCompactableStore(store, storeMetadata)
+
         val compaction = TieredCompaction(
             manifestFile = this.manifestFile,
-            store = store,
-            storeMetadata = storeMetadata,
+            store = compactableStore,
             configuration = compactionStrategy,
-            monitor = monitor
         )
-        compaction.runCompaction()
+        compaction.runCompaction(monitor)
     }
 
     private fun performMinorLeveledCompaction(

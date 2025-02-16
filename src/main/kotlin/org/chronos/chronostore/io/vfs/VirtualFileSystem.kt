@@ -10,4 +10,13 @@ interface VirtualFileSystem {
 
     fun listRootLevelElements(): List<VirtualFileSystemElement>
 
+    fun mkdirs(path: List<String>): VirtualDirectory {
+        require(path.isNotEmpty()) { "Cannot create directory for empty path!" }
+        val first = path.first()
+        val root = this.directory(first)
+        val finalDirectory = path.asSequence().drop(1).fold(root) { acc, pathSegment -> acc.directory(pathSegment) }
+        finalDirectory.mkdirs()
+        return finalDirectory
+    }
+
 }
