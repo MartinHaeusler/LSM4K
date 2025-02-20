@@ -7,6 +7,7 @@ import org.chronos.chronostore.util.Timestamp
 import org.chronos.chronostore.util.bloom.BytesBloomFilter
 import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.unit.BinarySize
+import org.chronos.chronostore.util.unit.BinarySize.Companion.Bytes
 import org.chronos.chronostore.util.unit.SizeUnit
 import java.util.*
 
@@ -68,7 +69,9 @@ class LsmFileConfiguratorImpl(
 
     override var numberOfBlocks: Int = 0
 
-    override var bloomFilter: BytesBloomFilter = BytesBloomFilter(100, 0.0)
+    override var bloomFilter: BytesBloomFilter = BytesBloomFilter(100, 0.01)
+
+    override var sizeOnDisk: BinarySize = 0.Bytes
 
     override var compression: CompressionAlgorithm = CompressionAlgorithm.SNAPPY
 

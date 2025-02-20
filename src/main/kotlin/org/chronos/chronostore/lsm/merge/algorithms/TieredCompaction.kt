@@ -8,11 +8,9 @@ import org.chronos.chronostore.lsm.merge.model.CompactableStore
 import org.chronos.chronostore.manifest.LSMFileInfo
 import org.chronos.chronostore.manifest.ManifestFile
 import org.chronos.chronostore.manifest.operations.TieredCompactionOperation
-import org.chronos.chronostore.util.FileIndex
 import org.chronos.chronostore.util.GroupingExtensions.toSets
 import org.chronos.chronostore.util.TierIndex
 import org.chronos.chronostore.util.Timestamp
-import java.io.File
 
 class TieredCompaction(
     val manifestFile: ManifestFile,
@@ -30,17 +28,19 @@ class TieredCompaction(
             .groupingBy { it.levelOrTier }
             .aggregate { _, sum, fileInfo, _ ->
                 val file = indexToFile[fileInfo.fileIndex]
-                val fileSize = file?.metadata?.sizeBytes ?: 0L
+                val fileSize = file?.sizeOnDisk?.bytes ?: 0L
                 (sum ?: 0L) + fileSize
             }
     }
 
 
     fun runCompaction(monitor: TaskMonitor, now: Timestamp = System.currentTimeMillis()) {
+        monitor.reportStarted("Executing Tiered Compaction")
         ensureExecutableOnlyOnce()
         // verify that we have enough files on disk to make the operation worth the effort.
         // If that's not the case, we exit out immediately.
         if (!areEnoughTiersOnDisk()) {
+            monitor.reportDone()
             return
         }
 
@@ -76,6 +76,7 @@ class TieredCompaction(
                 }
             )
         }
+        monitor.reportDone()
     }
 
     private fun ensureExecutableOnlyOnce() {
@@ -161,7 +162,7 @@ class TieredCompaction(
         val highestTier = this.store.metadata.getHighestNonEmptyLevelOrTier()
             ?: return emptyList() // there are no tiers? Weird.
 
-        val sizeOfLastTier = tierSizes[highestTier]
+        val sizeOfLastTier = tierSizes[highestTier]?.takeIf { it != 0L }
             ?: return emptyList() // we were unable to determine the size of the highest tier? Weird.
 
         val sizeOfAllTiersExceptLast = tierSizes.asSequence()

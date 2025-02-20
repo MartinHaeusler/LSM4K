@@ -11,6 +11,8 @@ import java.util.*
 @FakeStoreDSL
 interface LsmFileConfigurator {
 
+    var sizeOnDisk: BinarySize
+
     var compression: CompressionAlgorithm
 
     var maxBlockSize: BinarySize

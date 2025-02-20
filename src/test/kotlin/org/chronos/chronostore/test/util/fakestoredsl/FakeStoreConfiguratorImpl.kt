@@ -77,6 +77,7 @@ class FakeStoreConfiguratorImpl(
                 val fileInfo = LSMFileInfo(fileIndex, effectiveLevel)
                 fileIndexToInfo[fileIndex] = fileInfo
             }
+            allFiles += files
         }
 
         return FakeCompactableStore(

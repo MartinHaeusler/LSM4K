@@ -21,10 +21,15 @@ class LevelOrTierConfiguratorImpl(
 
     fun build(autoFileIndex: AutoIndex, directory: VirtualDirectory): List<CompactableFile> {
         return this.fileBuilders.map { fileBuilder ->
+            // get the intended index for this file
             val fileIndex = autoFileIndex.getExplicitOrNextFree(fileBuilder.index)
+
+            // create the file in the directory (it will remain empty)
             directory.file("${fileIndex}.${LSMTreeFile.FILE_EXTENSION}").create()
+
             FakeCompactableFile(
-                fileIndex, FileMetaData(
+                index = fileIndex,
+                metadata = FileMetaData(
                     settings = ChronoStoreFileSettings(
                         compression = fileBuilder.compression,
                         maxBlockSize = fileBuilder.maxBlockSize,
@@ -40,7 +45,8 @@ class LevelOrTierConfiguratorImpl(
                     numberOfMerges = fileBuilder.numberOfMerges,
                     createdAt = fileBuilder.createdAt,
                     bloomFilter = fileBuilder.bloomFilter,
-                )
+                ),
+                sizeOnDisk = fileBuilder.sizeOnDisk,
             )
         }
     }
