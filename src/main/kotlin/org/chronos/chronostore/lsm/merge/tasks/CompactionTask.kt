@@ -9,8 +9,8 @@ import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.forEachWi
 import org.chronos.chronostore.async.tasks.AsyncTask
 import org.chronos.chronostore.impl.StoreManagerImpl
 import org.chronos.chronostore.impl.store.StoreImpl
-import org.chronos.chronostore.lsm.merge.algorithms.LeveledCompaction
-import org.chronos.chronostore.lsm.merge.algorithms.TieredCompaction
+import org.chronos.chronostore.lsm.merge.algorithms.LeveledCompactionTask
+import org.chronos.chronostore.lsm.merge.algorithms.TieredCompactionTask
 import org.chronos.chronostore.lsm.merge.model.StandardCompactableStore
 import org.chronos.chronostore.manifest.ManifestFile
 import org.chronos.chronostore.manifest.StoreMetadata
@@ -97,7 +97,7 @@ class CompactionTask(
     ) {
         val compactableStore = StandardCompactableStore(store, storeMetadata)
 
-        val compaction = TieredCompaction(
+        val compaction = TieredCompactionTask(
             manifestFile = this.manifestFile,
             store = compactableStore,
             configuration = compactionStrategy,
@@ -111,14 +111,15 @@ class CompactionTask(
         compactionStrategy: LeveledCompactionStrategy,
         monitor: TaskMonitor,
     ) {
-        val compaction = LeveledCompaction(
+        val compactableStore = StandardCompactableStore(store, storeMetadata)
+
+
+        val compaction = LeveledCompactionTask(
             manifestFile = this.manifestFile,
-            store = store,
-            storeMetadata = storeMetadata,
+            store = compactableStore,
             configuration = compactionStrategy,
-            monitor = monitor
         )
-        compaction.runCompaction()
+        compaction.runCompaction(monitor)
     }
 
 

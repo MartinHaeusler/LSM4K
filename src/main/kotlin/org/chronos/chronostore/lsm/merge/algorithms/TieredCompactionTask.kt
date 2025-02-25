@@ -12,7 +12,7 @@ import org.chronos.chronostore.util.GroupingExtensions.toSets
 import org.chronos.chronostore.util.TierIndex
 import org.chronos.chronostore.util.Timestamp
 
-class TieredCompaction(
+class TieredCompactionTask(
     val manifestFile: ManifestFile,
     val configuration: TieredCompactionStrategy,
     val store: CompactableStore,
@@ -45,10 +45,10 @@ class TieredCompaction(
         }
 
         // choose the files we want to compact
-        val filesToCompact = monitor.subTask(0.3, "Selecting Files to Compact") {
+        val (filesToCompact, compactionTrigger) = monitor.subTask(0.3, "Selecting Files to Compact") {
             this.selectFilesBasedOnCompactionTriggers(now)
         }
-        if (filesToCompact.size <= 1) {
+        if (filesToCompact.size <= 1 || compactionTrigger == null) {
             // nothing to do!
             return
         }
@@ -59,6 +59,7 @@ class TieredCompaction(
                 fileIndices = filesToCompact.map { it.fileIndex }.toSet(),
                 keepTombstones = shouldKeepTombstonesInMerge(filesToCompact),
                 monitor = mergeMonitor,
+                trigger = compactionTrigger,
                 // TODO [LOGIC] This is quite dirty. Can we find a nicer solution instead of the lambda?
                 updateManifest = { outputFileIndex ->
                     val tierToFileIndices = filesToCompact
@@ -104,18 +105,30 @@ class TieredCompaction(
     }
 
 
-    private fun selectFilesBasedOnCompactionTriggers(now: Timestamp): List<LSMFileInfo> {
+    private fun selectFilesBasedOnCompactionTriggers(now: Timestamp): Pair<List<LSMFileInfo>, CompactionTrigger?> {
         // we have three triggers which we need to check in the given order:
         // - age-based compaction
         // - space-amplification-based compaction
         // - size-ratio-based compaction
         // So let's run them one by one, and see if any of them produce
         // a meaningful set of files to compact.
-        return selectFilesForDataAgeTrigger(now).takeIf { it.size > 1 }
-            ?: selectFilesForSizeAmplificationTrigger().takeIf { it.size > 1 }
-            ?: selectFilesForSizeRatioTrigger().takeIf { it.size > 1 }
-            // none of the triggers produced any outcome
-            ?: emptyList()
+        val ageTriggerFiles = selectFilesForDataAgeTrigger(now)
+        if(ageTriggerFiles.size > 1){
+            return Pair(ageTriggerFiles, CompactionTrigger.DATA_AGE)
+        }
+
+        val sizeAmplificationTriggerFiles = selectFilesForSpaceAmplificationTrigger()
+        if(sizeAmplificationTriggerFiles.size > 1){
+            return Pair(sizeAmplificationTriggerFiles, CompactionTrigger.SPACE_AMPLIFICATION)
+        }
+
+        val sizeRatioTriggerFiles = selectFilesForSizeRatioTrigger()
+        if(sizeRatioTriggerFiles.size > 1){
+            return Pair(sizeRatioTriggerFiles, CompactionTrigger.SIZE_RATIO)
+        }
+
+        // none of the triggers produced any outcome
+        return Pair(emptyList(), null)
     }
 
     private fun areEnoughTiersOnDisk(): Boolean {
@@ -157,8 +170,8 @@ class TieredCompaction(
         return emptyList()
     }
 
-    private fun selectFilesForSizeAmplificationTrigger(): List<LSMFileInfo> {
-        val maxSizeAmplificationPercent = this.configuration.maxSizeAmplificationPercent
+    private fun selectFilesForSpaceAmplificationTrigger(): List<LSMFileInfo> {
+        val maxSizeAmplificationPercent = this.configuration.maxSpaceAmplificationPercent
         val highestTier = this.store.metadata.getHighestNonEmptyLevelOrTier()
             ?: return emptyList() // there are no tiers? Weird.
 
@@ -190,12 +203,12 @@ class TieredCompaction(
             return emptyList()
         }
 
-        for (tier in (minMergeTiers..<highestTier).reversed()) {
+        for (tier in (minMergeTiers..highestTier)) {
             val sizeOfThisTier = this.tierSizes[tier]
                 ?: continue // we don't know the size of this tier... it's probably empty, ignore it.
 
             val sizeOfLowerTiers = (0..<tier).sumOf { this.tierSizes[it] ?: 0 }
-            val ratio = (sizeOfLowerTiers / sizeOfThisTier.toDouble())
+            val ratio = (sizeOfThisTier / sizeOfLowerTiers.toDouble())
             if (ratio >= 1.0 + this.configuration.sizeRatio) {
                 // compact all files below this tier into this tier
                 return (0..tier).flatMap { this.store.metadata.getFileInfosAtTierOrLevel(it) }

@@ -98,11 +98,11 @@ class TieredCompactionStrategy(
      * ratio = sum(size(all tiers except last)) / size(last tier)
      * ```
      *
-     * A compaction will be triggered if `ratio` >= [maxSizeAmplificationPercent].
+     * A compaction will be triggered if `ratio` >= [maxSpaceAmplificationPercent].
      *
      * Lower ratios mean that the stores will be compacted more eagerly.
      */
-    val maxSizeAmplificationPercent: Double = 2.0,
+    val maxSpaceAmplificationPercent: Double = 2.0,
 
     /**
      * Configures the "Size Ratio Trigger" for compaction.
@@ -133,7 +133,7 @@ class TieredCompactionStrategy(
 ) : CompactionStrategy {
 
     override fun toString(): String {
-        return "TieredCompactionStrategy[tiers=${this.numberOfTiers}, sizeAmp=${String.format("%.2f", this.maxSizeAmplificationPercent)}, sizeRatio=${String.format("%.2f", this.sizeRatio)}]"
+        return "TieredCompactionStrategy[tiers=${this.numberOfTiers}, sizeAmp=${String.format("%.2f", this.maxSpaceAmplificationPercent)}, sizeRatio=${String.format("%.2f", this.sizeRatio)}]"
     }
 
 }

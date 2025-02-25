@@ -1,6 +1,7 @@
 package org.chronos.chronostore.test.util.fakestoredsl
 
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor
+import org.chronos.chronostore.lsm.merge.algorithms.CompactionTrigger
 import org.chronos.chronostore.lsm.merge.model.CompactableFile
 import org.chronos.chronostore.lsm.merge.model.CompactableStore
 import org.chronos.chronostore.manifest.StoreMetadata
@@ -13,12 +14,17 @@ class FakeCompactableStore(
 
     val executedMerges = mutableListOf<ExecutedMerge>()
 
-    override fun mergeFiles(fileIndices: Set<FileIndex>, keepTombstones: Boolean, monitor: TaskMonitor, updateManifest: (FileIndex) -> Unit) {
-        this.executedMerges += ExecutedMerge(fileIndices.toSet(), keepTombstones)
+    override fun mergeFiles(fileIndices: Set<FileIndex>, keepTombstones: Boolean, trigger: CompactionTrigger, monitor: TaskMonitor, updateManifest: (FileIndex) -> Unit) {
+        this.executedMerges += ExecutedMerge(
+            fileIndices = fileIndices.toSet(),
+            keepTombstones = keepTombstones,
+            trigger = trigger,
+        )
     }
 
     class ExecutedMerge(
         val fileIndices: Set<FileIndex>,
         val keepTombstones: Boolean,
+        val trigger: CompactionTrigger,
     )
 }

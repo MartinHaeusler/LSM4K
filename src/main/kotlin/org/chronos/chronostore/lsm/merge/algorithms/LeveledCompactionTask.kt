@@ -2,19 +2,17 @@ package org.chronos.chronostore.lsm.merge.algorithms
 
 import org.chronos.chronostore.api.compaction.LeveledCompactionStrategy
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor
-import org.chronos.chronostore.impl.store.StoreImpl
+import org.chronos.chronostore.lsm.merge.model.CompactableStore
 import org.chronos.chronostore.manifest.ManifestFile
-import org.chronos.chronostore.manifest.StoreMetadata
+import org.chronos.chronostore.util.Timestamp
 
-class LeveledCompaction(
+class LeveledCompactionTask(
     val manifestFile: ManifestFile,
-    val store: StoreImpl,
-    val storeMetadata: StoreMetadata,
     val configuration: LeveledCompactionStrategy,
-    val monitor: TaskMonitor,
+    val store: CompactableStore,
 ) {
 
-    fun runCompaction(){
+    fun runCompaction(monitor: TaskMonitor, now: Timestamp = System.currentTimeMillis()) {
 
     }
 

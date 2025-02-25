@@ -2,6 +2,7 @@ package org.chronos.chronostore.lsm.merge.model
 
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor
 import org.chronos.chronostore.impl.store.StoreImpl
+import org.chronos.chronostore.lsm.merge.algorithms.CompactionTrigger
 import org.chronos.chronostore.manifest.StoreMetadata
 import org.chronos.chronostore.util.FileIndex
 import org.chronos.chronostore.util.StoreId
@@ -25,10 +26,17 @@ class StandardCompactableStore(
         validateStoreIdMatchesMetadata(this.store.storeId, this.metadata.storeId)
     }
 
-    override fun mergeFiles(fileIndices: Set<FileIndex>, keepTombstones: Boolean, monitor: TaskMonitor, updateManifest: (FileIndex) -> Unit) {
+    override fun mergeFiles(
+        fileIndices: Set<FileIndex>,
+        keepTombstones: Boolean,
+        trigger: CompactionTrigger,
+        monitor: TaskMonitor,
+        updateManifest: (FileIndex) -> Unit,
+    ) {
         this.store.tree.mergeFiles(
             fileIndices = fileIndices,
             keepTombstones = keepTombstones,
+            trigger = trigger,
             monitor = monitor,
             updateManifest = updateManifest,
         )

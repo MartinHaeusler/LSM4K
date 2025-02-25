@@ -5,6 +5,7 @@ import org.chronos.chronostore.api.exceptions.FlushException
 import org.chronos.chronostore.async.executor.AsyncTaskManager
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor
 import org.chronos.chronostore.impl.ChronoStoreState
+import org.chronos.chronostore.util.ExceptionUtils
 import java.io.InterruptedIOException
 import java.nio.channels.ClosedByInterruptException
 
@@ -46,11 +47,11 @@ interface AsyncTask {
      *
      * - If the [chronoStoreState] is [ChronoStoreState.SHUTTING_DOWN] then the [exception]
      *   is very likely caused by an interrupt which was triggered by the shutdown of the
-     *   scheduler. Any exception listed in [isExceptionIgnoredDuringShutdown] will be ignored.
+     *   scheduler. Some exceptions according to [ExceptionUtils.isIgnoredDuringShutdown] will be ignored.
      *   All other exceptions will be listed as warnings.
      *
      * - If the [chronoStoreState] is **not** [ChronoStoreState.SHUTTING_DOWN], any exception
-     *   will be re-thrown.
+     *   will be logged and re-thrown.
      *
      * Individual implementations may override this behavior.
      *
@@ -61,12 +62,12 @@ interface AsyncTask {
         if (chronoStoreState != ChronoStoreState.SHUTTING_DOWN) {
             log.error(exception) {
                 "A fatal exception has occurred during the execution of the asynchronous task '${this.name}'" +
-                    " of type '${this.javaClass.name}' on thread '${Thread.currentThread().name}'." +
+                    " of type '${this::class.qualifiedName}' on thread '${Thread.currentThread().name}'." +
                     " This may cause deadlocks and/or starvation. The exception was: ${exception}"
             }
-            return
+            throw exception
         }
-        if (isExceptionIgnoredDuringShutdown(exception)) {
+        if (ExceptionUtils.isIgnoredDuringShutdown(exception)) {
             // these exceptions are normal behavior during shutdown and don't need to be logged.
             return
         } else {
@@ -74,31 +75,6 @@ interface AsyncTask {
             log.warn(exception) {
                 "An unexpected exception occurred in task '${name}' during ChronoStore shutdown: ${exception}"
             }
-        }
-    }
-
-    /**
-     * Checks if the exception should be ignored during ChronoStore shutdown.
-     *
-     * @param exception The exception to check
-     *
-     * @return `true` if the exception should be ignored, otherwise `false`.
-     */
-    private fun isExceptionIgnoredDuringShutdown(exception: Throwable): Boolean {
-        return when (exception) {
-            is FlushException -> {
-                val cause = exception.cause
-                return if (cause != null && cause !== exception) {
-                    isExceptionIgnoredDuringShutdown(cause)
-                } else {
-                    false
-                }
-            }
-
-            is InterruptedException -> true
-            is InterruptedIOException -> true
-            is ClosedByInterruptException -> true
-            else -> false
         }
     }
 

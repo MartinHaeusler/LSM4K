@@ -15,6 +15,7 @@ import org.chronos.chronostore.io.vfs.VirtualReadWriteFile.Companion.withOverWri
 import org.chronos.chronostore.lsm.LSMTreeFile.Companion.FILE_EXTENSION
 import org.chronos.chronostore.lsm.cache.FileHeaderCache
 import org.chronos.chronostore.lsm.cache.LocalBlockCache
+import org.chronos.chronostore.lsm.merge.algorithms.CompactionTrigger
 import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.model.command.KeyAndTSN
 import org.chronos.chronostore.util.FileIndex
@@ -381,8 +382,8 @@ class LSMTree(
         taskMonitor.reportDone()
     }
 
-    fun mergeFiles(fileIndices: Set<Int>, keepTombstones: Boolean, monitor: TaskMonitor, updateManifest: (FileIndex) -> Unit): FileIndex? {
-        log.debug { "TASK: merge files: ${fileIndices.sorted().joinToString(prefix = "[", separator = ", ", postfix = "]")}" }
+    fun mergeFiles(fileIndices: Set<Int>, keepTombstones: Boolean, trigger: CompactionTrigger, monitor: TaskMonitor, updateManifest: (FileIndex) -> Unit): FileIndex? {
+        log.debug { "TASK: merge files due to trigger ${trigger}: ${fileIndices.sorted().joinToString(prefix = "[", separator = ", ", postfix = "]")}" }
         this.performAsyncWriteTask(monitor) {
             monitor.reportStarted("Merging ${fileIndices.size} files")
             val filesToMerge = this.getFilesToMerge(fileIndices)
