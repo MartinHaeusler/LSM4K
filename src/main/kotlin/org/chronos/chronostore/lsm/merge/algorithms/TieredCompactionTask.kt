@@ -34,7 +34,7 @@ class TieredCompactionTask(
     }
 
 
-    fun runCompaction(monitor: TaskMonitor, now: Timestamp = System.currentTimeMillis()) {
+    fun runCompaction(monitor: TaskMonitor) {
         monitor.reportStarted("Executing Tiered Compaction")
         ensureExecutableOnlyOnce()
         // verify that we have enough files on disk to make the operation worth the effort.
@@ -46,7 +46,7 @@ class TieredCompactionTask(
 
         // choose the files we want to compact
         val (filesToCompact, compactionTrigger) = monitor.subTask(0.3, "Selecting Files to Compact") {
-            this.selectFilesBasedOnCompactionTriggers(now)
+            this.selectFilesBasedOnCompactionTriggers()
         }
         if (filesToCompact.size <= 1 || compactionTrigger == null) {
             // nothing to do!
@@ -105,26 +105,27 @@ class TieredCompactionTask(
     }
 
 
-    private fun selectFilesBasedOnCompactionTriggers(now: Timestamp): Pair<List<LSMFileInfo>, CompactionTrigger?> {
+    private fun selectFilesBasedOnCompactionTriggers(): Pair<List<LSMFileInfo>, CompactionTrigger?> {
         // we have three triggers which we need to check in the given order:
-        // - age-based compaction
         // - space-amplification-based compaction
         // - size-ratio-based compaction
+        // - height-based compaction
         // So let's run them one by one, and see if any of them produce
         // a meaningful set of files to compact.
-        val ageTriggerFiles = selectFilesForDataAgeTrigger(now)
-        if (ageTriggerFiles.size > 1) {
-            return Pair(ageTriggerFiles, CompactionTrigger.DATA_AGE)
-        }
 
         val sizeAmplificationTriggerFiles = selectFilesForSpaceAmplificationTrigger()
         if (sizeAmplificationTriggerFiles.size > 1) {
-            return Pair(sizeAmplificationTriggerFiles, CompactionTrigger.SPACE_AMPLIFICATION)
+            return Pair(sizeAmplificationTriggerFiles, CompactionTrigger.TIER_SPACE_AMPLIFICATION)
         }
 
         val sizeRatioTriggerFiles = selectFilesForSizeRatioTrigger()
         if (sizeRatioTriggerFiles.size > 1) {
-            return Pair(sizeRatioTriggerFiles, CompactionTrigger.SIZE_RATIO)
+            return Pair(sizeRatioTriggerFiles, CompactionTrigger.TIER_SIZE_RATIO)
+        }
+
+        val heightReductionTriggerFiles = selectFilesForHeightReductionTrigger()
+        if (heightReductionTriggerFiles.size > 1) {
+            return Pair(heightReductionTriggerFiles, CompactionTrigger.TIER_HEIGHT_REDUCTION)
         }
 
         // none of the triggers produced any outcome
@@ -136,38 +137,6 @@ class TieredCompactionTask(
         val nonEmptyTiers = this.store.metadata.getNumberOfNonEmptyTiers()
         // we don't have enough files on disk yet to make compaction worth the effort.
         return nonEmptyTiers >= this.configuration.numberOfTiers
-    }
-
-    private fun selectFilesForDataAgeTrigger(now: Timestamp): List<LSMFileInfo> {
-        val ageTolerance = this.configuration.ageTolerance.inWholeMilliseconds
-        val tooOldFiles = this.store.allFiles
-            .filter { it.age(now) > ageTolerance }
-            .sortedByDescending { it.age(now) }
-        if (tooOldFiles.isEmpty()) {
-            // no files are too old.
-            return emptyList()
-        }
-
-        val storeMetadata = this.store.metadata
-
-        for (fileToCompact in tooOldFiles) {
-            // determine in which tier this file is located
-            val tier = storeMetadata.getTierForFile(fileToCompact.index)
-            val nextHigherTier = storeMetadata.getNextHigherNonEmptyTier(tier)
-                ?: continue // there are no files to merge with. Most likely, this file resides at the maximum tier.
-
-            val filesToCompact = mutableListOf<LSMFileInfo>()
-            filesToCompact += storeMetadata.getFileInfosAtTierOrLevel(tier)
-            filesToCompact += storeMetadata.getFileInfosAtTierOrLevel(nextHigherTier)
-
-            if (filesToCompact.size > 1) {
-                return filesToCompact
-            }
-        }
-
-        // the only files that are too old reside in the highest
-        // tier, so there's nowhere for them to go.
-        return emptyList()
     }
 
     private fun selectFilesForSpaceAmplificationTrigger(): List<LSMFileInfo> {
@@ -205,7 +174,6 @@ class TieredCompactionTask(
 
         val tierSizes = this.tierSizes
         val sizeRatio = this.configuration.sizeRatio
-        val storeMetadata = this.store.metadata
 
         var sizeOfUpperTiers = tierSizes[highestTier]?.toDouble()
             ?: return emptyList() // highest tier has no size? Abort mission.
@@ -218,7 +186,10 @@ class TieredCompactionTask(
             val enoughTiersSelected = tiersInCompaction >= minMergeTiers
             if (sizeRatioExceeded && enoughTiersSelected) {
                 // compact all tiers above this one
-                return (tier..highestTier).flatMap { storeMetadata.getFileInfosAtTierOrLevel(it) }
+                return this.getFilesInTiers(
+                    minTier = tier,
+                    maxTier = highestTier,
+                )
             }
             // check the next-lower tier
             sizeOfUpperTiers += currentTierSize
@@ -226,6 +197,49 @@ class TieredCompactionTask(
 
         // no tier meets the criteria.
         return emptyList()
+    }
+
+
+    private fun selectFilesForHeightReductionTrigger(): List<LSMFileInfo> {
+        val numberOfTiersInTree = this.store.metadata.getNumberOfNonEmptyTiers()
+
+        val minMergeTiers = this.configuration.minMergeTiers
+        if (numberOfTiersInTree < minMergeTiers) {
+            // we don't have enough tiers yet
+            return emptyList()
+        }
+
+        if (numberOfTiersInTree < this.configuration.numberOfTiers) {
+            // the tree isn't "high" enough yet to warrant this operation.
+            return emptyList()
+        }
+
+        // attempt to shrink the tree down to "number of tiers - 2". We use -2 as
+        // a heuristic here to prevent having to do this operation again right away
+        // on the next flush.
+        val numberOfTiersToMerge = numberOfTiersInTree - this.configuration.numberOfTiers + 2
+        if (numberOfTiersToMerge < this.configuration.minMergeTiers) {
+            return emptyList()
+        }
+
+        // the index of the highest tier is guaranteed to be non-NULL if the tree
+        // has one or more tiers, so the "!!" operator below is safe.
+        val highestTierIndex = this.store.metadata.getHighestNonEmptyLevelOrTier()!!
+        return this.getFilesInTiers(
+            minTier = highestTierIndex - numberOfTiersToMerge + 1,
+            maxTier = highestTierIndex
+        )
+    }
+
+
+    private fun getFilesInTiers(
+        minTier: TierIndex,
+        maxTier: TierIndex,
+    ): List<LSMFileInfo> {
+        val metadata = this.store.metadata
+        return (minTier..maxTier).flatMap {
+            metadata.getFileInfosAtTierOrLevel(it)
+        }
     }
 
 }

@@ -65,8 +65,8 @@ class TieredCompactionTaskTest {
             // inspect the merges which have been executed by the compaction
             expectThat(store.executedMerges).single().and {
                 get { this.keepTombstones }.isFalse() // no files in higher tiers
-                get { this.fileIndices }.containsExactly(0, 1, 2)
-                get { this.trigger }.isEqualTo(CompactionTrigger.SPACE_AMPLIFICATION)
+                get { this.fileIndices }.containsExactlyInAnyOrder(0, 1, 2)
+                get { this.trigger }.isEqualTo(CompactionTrigger.TIER_SPACE_AMPLIFICATION)
             }
         }
     }
@@ -108,8 +108,8 @@ class TieredCompactionTaskTest {
             // inspect the merges which have been executed by the compaction
             expectThat(store.executedMerges).single().and {
                 get { this.keepTombstones }.isFalse() // no files in higher tiers
-                get { this.fileIndices }.containsExactly(0, 1, 2)
-                get { this.trigger }.isEqualTo(CompactionTrigger.SIZE_RATIO)
+                get { this.fileIndices }.containsExactlyInAnyOrder(0, 1, 2)
+                get { this.trigger }.isEqualTo(CompactionTrigger.TIER_SIZE_RATIO)
             }
         }
     }
@@ -151,8 +151,58 @@ class TieredCompactionTaskTest {
             // inspect the merges which have been executed by the compaction
             expectThat(store.executedMerges).single().and {
                 get { this.keepTombstones }.isFalse() // size ratio trigger always starts with the oldest data
-                get { this.fileIndices }.containsExactly(1,2)
-                get { this.trigger }.isEqualTo(CompactionTrigger.SIZE_RATIO)
+                get { this.fileIndices }.containsExactlyInAnyOrder(1, 2)
+                get { this.trigger }.isEqualTo(CompactionTrigger.TIER_SIZE_RATIO)
+            }
+        }
+    }
+
+    @VirtualFileSystemTest
+    fun heightReductionTriggerWorks(mode: VFSMode) {
+        mode.withVFS { vfs ->
+            // set up a fake store with some files
+            val manifestFile = vfs.createManifestFile()
+            val store = vfs.createFakeTieredStore {
+                tier(0) {
+                    file(0) {
+                        sizeOnDisk = 100.MiB
+                    }
+                }
+                tier(1) {
+                    file(1) {
+                        sizeOnDisk = 100.MiB
+                    }
+                }
+                tier(2) {
+                    file(2) {
+                        sizeOnDisk = 100.MiB
+                    }
+                }
+                tier(3) {
+                    file(3) {
+                        sizeOnDisk = 100.MiB
+                    }
+                }
+            }
+
+            // run the compaction
+            store.executeTieredCompactionSynchronously(
+                manifestFile = manifestFile,
+                strategy = TieredCompactionStrategy(
+                    numberOfTiers = 3,
+                    minMergeTiers = 1,
+                    // disable size ratio trigger
+                    sizeRatio = 10.0,
+                    // disable space amplification trigger
+                    maxSpaceAmplificationPercent = 10.0
+                )
+            )
+
+            // inspect the merges which have been executed by the compaction
+            expectThat(store.executedMerges).single().and {
+                get { this.keepTombstones }.isFalse() // tree height trigger always starts with the oldest data
+                get { this.fileIndices }.containsExactlyInAnyOrder(3, 2, 1)
+                get { this.trigger }.isEqualTo(CompactionTrigger.TIER_HEIGHT_REDUCTION)
             }
         }
     }

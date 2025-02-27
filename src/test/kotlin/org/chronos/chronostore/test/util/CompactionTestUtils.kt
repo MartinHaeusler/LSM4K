@@ -14,7 +14,6 @@ object CompactionTestUtils {
     fun CompactableStore.executeTieredCompactionSynchronously(
         manifestFile: ManifestFile,
         strategy: TieredCompactionStrategy = TieredCompactionStrategy(),
-        now: Timestamp = System.currentTimeMillis(),
     ) {
         val compaction = TieredCompactionTask(
             manifestFile = manifestFile,
@@ -22,13 +21,12 @@ object CompactionTestUtils {
             store = this,
         )
 
-        compaction.runCompaction(TaskMonitor.create(), now)
+        compaction.runCompaction(TaskMonitor.create())
     }
 
     fun CompactableStore.executeLeveledCompactionSynchronously(
         manifestFile: ManifestFile,
         strategy: LeveledCompactionStrategy = LeveledCompactionStrategy(),
-        now: Timestamp = System.currentTimeMillis(),
     ) {
         val compaction = LeveledCompactionTask(
             manifestFile = manifestFile,
@@ -36,7 +34,7 @@ object CompactionTestUtils {
             store = this,
         )
 
-        compaction.runCompaction(TaskMonitor.create(), now)
+        compaction.runCompaction(TaskMonitor.create())
     }
 
 }
