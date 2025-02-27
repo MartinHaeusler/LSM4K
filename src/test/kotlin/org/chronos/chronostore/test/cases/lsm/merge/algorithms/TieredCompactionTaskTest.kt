@@ -122,7 +122,7 @@ class TieredCompactionTaskTest {
             val store = vfs.createFakeTieredStore {
                 tier(0) {
                     file(0) {
-                        sizeOnDisk = 100.MiB
+                        sizeOnDisk = 400.MiB
                     }
                 }
                 tier(1) {
@@ -132,7 +132,7 @@ class TieredCompactionTaskTest {
                 }
                 tier(2) {
                     file(2) {
-                        sizeOnDisk = 400.MiB
+                        sizeOnDisk = 100.MiB
                     }
                 }
             }
@@ -150,8 +150,8 @@ class TieredCompactionTaskTest {
 
             // inspect the merges which have been executed by the compaction
             expectThat(store.executedMerges).single().and {
-                get { this.keepTombstones }.isTrue() // we have files in higher tiers
-                get { this.fileIndices }.containsExactly(0,1)
+                get { this.keepTombstones }.isFalse() // size ratio trigger always starts with the oldest data
+                get { this.fileIndices }.containsExactly(1,2)
                 get { this.trigger }.isEqualTo(CompactionTrigger.SIZE_RATIO)
             }
         }

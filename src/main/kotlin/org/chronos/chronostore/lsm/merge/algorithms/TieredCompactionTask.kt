@@ -113,17 +113,17 @@ class TieredCompactionTask(
         // So let's run them one by one, and see if any of them produce
         // a meaningful set of files to compact.
         val ageTriggerFiles = selectFilesForDataAgeTrigger(now)
-        if(ageTriggerFiles.size > 1){
+        if (ageTriggerFiles.size > 1) {
             return Pair(ageTriggerFiles, CompactionTrigger.DATA_AGE)
         }
 
         val sizeAmplificationTriggerFiles = selectFilesForSpaceAmplificationTrigger()
-        if(sizeAmplificationTriggerFiles.size > 1){
+        if (sizeAmplificationTriggerFiles.size > 1) {
             return Pair(sizeAmplificationTriggerFiles, CompactionTrigger.SPACE_AMPLIFICATION)
         }
 
         val sizeRatioTriggerFiles = selectFilesForSizeRatioTrigger()
-        if(sizeRatioTriggerFiles.size > 1){
+        if (sizeRatioTriggerFiles.size > 1) {
             return Pair(sizeRatioTriggerFiles, CompactionTrigger.SIZE_RATIO)
         }
 
@@ -203,16 +203,25 @@ class TieredCompactionTask(
             return emptyList()
         }
 
-        for (tier in (minMergeTiers..highestTier)) {
-            val sizeOfThisTier = this.tierSizes[tier]
-                ?: continue // we don't know the size of this tier... it's probably empty, ignore it.
+        val tierSizes = this.tierSizes
+        val sizeRatio = this.configuration.sizeRatio
+        val storeMetadata = this.store.metadata
 
-            val sizeOfLowerTiers = (0..<tier).sumOf { this.tierSizes[it] ?: 0 }
-            val ratio = (sizeOfThisTier / sizeOfLowerTiers.toDouble())
-            if (ratio >= 1.0 + this.configuration.sizeRatio) {
-                // compact all files below this tier into this tier
-                return (0..tier).flatMap { this.store.metadata.getFileInfosAtTierOrLevel(it) }
+        var sizeOfUpperTiers = tierSizes[highestTier]?.toDouble()
+            ?: return emptyList() // highest tier has no size? Abort mission.
+
+        var tiersInCompaction = 0
+        for (tier in (0..<highestTier).reversed()) {
+            tiersInCompaction++
+            val currentTierSize = tierSizes[tier]?.toDouble() ?: 0.0
+            val sizeRatioExceeded = currentTierSize / sizeOfUpperTiers > sizeRatio
+            val enoughTiersSelected = tiersInCompaction >= minMergeTiers
+            if (sizeRatioExceeded && enoughTiersSelected) {
+                // compact all tiers above this one
+                return (tier..highestTier).flatMap { storeMetadata.getFileInfosAtTierOrLevel(it) }
             }
+            // check the next-lower tier
+            sizeOfUpperTiers += currentTierSize
         }
 
         // no tier meets the criteria.
