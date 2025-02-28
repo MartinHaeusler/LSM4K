@@ -56,7 +56,8 @@ class ChronoStoreImpl(
     val forest: LSMForestMemoryManager = LSMForestMemoryManager(
         asyncTaskManager = this.taskManager,
         maxForestSize = this.configuration.maxForestSize.bytes,
-        flushThresholdSize = (this.configuration.maxForestSize.bytes * this.configuration.forestFlushThreshold).toLong()
+        flushThresholdSize = (this.configuration.maxForestSize.bytes * this.configuration.forestFlushThreshold).toLong(),
+        manifestFile = this.manifestFile,
     )
 
     private val storeManager = StoreManagerImpl(

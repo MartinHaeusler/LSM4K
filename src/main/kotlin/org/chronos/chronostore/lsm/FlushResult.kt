@@ -1,19 +1,15 @@
 package org.chronos.chronostore.lsm
 
 import org.chronos.chronostore.io.vfs.VirtualFile
+import org.chronos.chronostore.util.FileIndex
 
 class FlushResult(
-    val targetFile: VirtualFile?,
+    val targetFile: VirtualFile,
+    val targetFileIndex: FileIndex,
     val bytesWritten: Long,
     val entriesWritten: Int,
     val runtimeMillis: Long,
 ) {
-
-    companion object {
-
-        val EMPTY = FlushResult(null, 0, 0, 0)
-
-    }
 
     val throughputPerSecond: Long
         get() {

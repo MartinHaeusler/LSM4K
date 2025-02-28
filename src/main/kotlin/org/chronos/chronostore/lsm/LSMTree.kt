@@ -289,7 +289,7 @@ class LSMTree(
             .maxOrNull() ?: -1
     }
 
-    fun flushInMemoryDataToDisk(minFlushSize: BinarySize, monitor: TaskMonitor): FlushResult {
+    fun flushInMemoryDataToDisk(minFlushSize: BinarySize, monitor: TaskMonitor): FlushResult? {
         log.perfTrace { "TASK: Flush in-memory data to disk" }
         this.performAsyncWriteTask(monitor) {
             try {
@@ -298,7 +298,7 @@ class LSMTree(
                 if (this.inMemoryTree.isEmpty() || this.inMemorySize < minFlushSize) {
                     // flush not necessary
                     monitor.reportDone()
-                    return FlushResult.EMPTY
+                    return null
                 }
                 log.perfTrace { "Flushing LSM Tree '${this.directory}'!" }
                 val commands = monitor.subTask(0.1, "Collecting Entries to flush") {
@@ -351,6 +351,7 @@ class LSMTree(
                 monitor.reportDone()
                 return FlushResult(
                     targetFile = file,
+                    targetFileIndex = newFileIndex,
                     bytesWritten = file.length,
                     entriesWritten = commands.size,
                     runtimeMillis = timeAfter - timeBefore,

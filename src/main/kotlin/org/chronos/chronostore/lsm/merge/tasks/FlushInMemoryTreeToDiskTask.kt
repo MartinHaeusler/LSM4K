@@ -1,10 +1,15 @@
 package org.chronos.chronostore.lsm.merge.tasks
 
 import io.github.oshai.kotlinlogging.KotlinLogging
+import org.chronos.chronostore.api.compaction.TieredCompactionStrategy
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor
+import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.subTask
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.subTaskWithMonitor
 import org.chronos.chronostore.async.tasks.AsyncTask
+import org.chronos.chronostore.lsm.FlushResult
 import org.chronos.chronostore.lsm.LSMTree
+import org.chronos.chronostore.lsm.merge.model.CompactableStore
+import org.chronos.chronostore.manifest.ManifestFile
 import org.chronos.chronostore.util.logging.LogExtensions.ioDebug
 import org.chronos.chronostore.util.logging.LogMarkers
 import org.chronos.chronostore.util.statistics.ChronoStoreStatistics
@@ -13,6 +18,7 @@ import java.util.concurrent.atomic.AtomicLong
 
 class FlushInMemoryTreeToDiskTask(
     private val lsmTree: LSMTree,
+    val manifestFile: ManifestFile,
 ) : AsyncTask {
 
     companion object {
@@ -31,13 +37,25 @@ class FlushInMemoryTreeToDiskTask(
     override fun run(monitor: TaskMonitor) {
         monitor.reportStarted(this.name)
         log.ioDebug { "FLUSH TASK [${this.index}] START on ${this.lsmTree}" }
-        val flushResult = monitor.subTaskWithMonitor(1.0) { subMonitor ->
+        val flushResult = monitor.subTaskWithMonitor(0.95) { subMonitor ->
             lsmTree.flushInMemoryDataToDisk(
                 minFlushSize = 0.Bytes,
                 monitor = subMonitor,
             )
         }
-        if (flushResult.bytesWritten <= 0) {
+        monitor.subTask(0.05, "Updating Manifest") {
+            if (flushResult != null) {
+                this.manifestFile.appendFlushOperation(lsmTree.storeId, flushResult.targetFileIndex)
+            }
+        }
+        logTaskResult(flushResult)
+        updateStatistics(flushResult)
+        monitor.reportDone()
+    }
+
+
+    private fun logTaskResult(flushResult: FlushResult?) {
+        if (flushResult == null || flushResult.bytesWritten <= 0) {
             log.ioDebug { "FLUSH TASK [${this.index}] DONE on ${this.lsmTree.storeId} - no data needed to be written." }
         } else {
             log.ioDebug {
@@ -49,11 +67,16 @@ class FlushInMemoryTreeToDiskTask(
                     " with ${bytesPerSecond.Bytes.toHumanReadableString()}/s. Target file: ${flushResult.targetFile?.path}"
             }
         }
+    }
+
+    private fun updateStatistics(flushResult: FlushResult?) {
+        if (flushResult == null) {
+            return
+        }
         ChronoStoreStatistics.FLUSH_TASK_EXECUTIONS.incrementAndGet()
         ChronoStoreStatistics.FLUSH_TASK_WRITTEN_BYTES.getAndAdd(flushResult.bytesWritten)
         ChronoStoreStatistics.FLUSH_TASK_WRITTEN_ENTRIES.getAndAdd(flushResult.entriesWritten.toLong())
         ChronoStoreStatistics.FLUSH_TASK_TOTAL_TIME.getAndAdd(flushResult.runtimeMillis)
-        monitor.reportDone()
     }
 
 }

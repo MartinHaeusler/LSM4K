@@ -15,11 +15,7 @@ enum class ChronoStoreMode {
         override fun <T> withChronoStore(config: ChronoStoreConfiguration, action: (ChronoStoreImpl, VirtualFileSystem) -> T): T {
             val vfs = InMemoryVirtualFileSystem()
             val chronoStore = ChronoStore.openOnVirtualFileSystem(vfs, config) as ChronoStoreImpl
-            try {
-                return action(chronoStore, vfs)
-            } finally {
-                chronoStore.close()
-            }
+            return chronoStore.use { action(it, vfs) }
         }
 
     },

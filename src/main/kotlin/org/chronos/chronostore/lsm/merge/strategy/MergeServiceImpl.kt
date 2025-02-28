@@ -48,7 +48,7 @@ class MergeServiceImpl(
 
     override fun flushAllInMemoryStoresToDisk(taskMonitor: TaskMonitor) {
         taskMonitor.forEachWithMonitor(1.0, "Flushing In-Memory segments of LSM Trees", this.storeManager.getAllLsmTrees()) { subTaskMonitor, lsmTree ->
-            val task = FlushInMemoryTreeToDiskTask(lsmTree)
+            val task = FlushInMemoryTreeToDiskTask(lsmTree, this.manifestFile)
             task.run(subTaskMonitor)
         }
         taskMonitor.reportDone()

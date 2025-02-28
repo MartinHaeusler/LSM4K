@@ -79,7 +79,7 @@ class TieredCompactionTaskTest {
             val store = vfs.createFakeTieredStore {
                 tier(0) {
                     file {
-                        sizeOnDisk = 300.MiB
+                        sizeOnDisk = 100.MiB
                     }
                 }
                 tier(1) {
@@ -89,7 +89,7 @@ class TieredCompactionTaskTest {
                 }
                 tier(2) {
                     file {
-                        sizeOnDisk = 100.MiB
+                        sizeOnDisk = 300.MiB
                     }
                 }
             }
@@ -122,7 +122,7 @@ class TieredCompactionTaskTest {
             val store = vfs.createFakeTieredStore {
                 tier(0) {
                     file(0) {
-                        sizeOnDisk = 400.MiB
+                        sizeOnDisk = 100.MiB
                     }
                 }
                 tier(1) {
@@ -132,7 +132,7 @@ class TieredCompactionTaskTest {
                 }
                 tier(2) {
                     file(2) {
-                        sizeOnDisk = 100.MiB
+                        sizeOnDisk = 400.MiB
                     }
                 }
             }
@@ -151,7 +151,7 @@ class TieredCompactionTaskTest {
             // inspect the merges which have been executed by the compaction
             expectThat(store.executedMerges).single().and {
                 get { this.keepTombstones }.isFalse() // size ratio trigger always starts with the oldest data
-                get { this.fileIndices }.containsExactlyInAnyOrder(1, 2)
+                get { this.fileIndices }.containsExactlyInAnyOrder(0, 1)
                 get { this.trigger }.isEqualTo(CompactionTrigger.TIER_SIZE_RATIO)
             }
         }
@@ -201,7 +201,7 @@ class TieredCompactionTaskTest {
             // inspect the merges which have been executed by the compaction
             expectThat(store.executedMerges).single().and {
                 get { this.keepTombstones }.isFalse() // tree height trigger always starts with the oldest data
-                get { this.fileIndices }.containsExactlyInAnyOrder(3, 2, 1)
+                get { this.fileIndices }.containsExactlyInAnyOrder(0, 1, 2)
                 get { this.trigger }.isEqualTo(CompactionTrigger.TIER_HEIGHT_REDUCTION)
             }
         }

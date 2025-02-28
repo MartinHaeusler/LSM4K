@@ -10,7 +10,6 @@ import org.chronos.chronostore.manifest.ManifestFile
 import org.chronos.chronostore.manifest.operations.TieredCompactionOperation
 import org.chronos.chronostore.util.GroupingExtensions.toSets
 import org.chronos.chronostore.util.TierIndex
-import org.chronos.chronostore.util.Timestamp
 
 class TieredCompactionTask(
     val manifestFile: ManifestFile,
@@ -173,26 +172,35 @@ class TieredCompactionTask(
         }
 
         val tierSizes = this.tierSizes
-        val sizeRatio = this.configuration.sizeRatio
+        val acceptableSizeRatio = this.configuration.sizeRatio
 
-        var sizeOfUpperTiers = tierSizes[highestTier]?.toDouble()
-            ?: return emptyList() // highest tier has no size? Abort mission.
+        var sizeOfLowerTiers = 0.0
 
         var tiersInCompaction = 0
-        for (tier in (0..<highestTier).reversed()) {
+        for (tier in (0..highestTier)) {
             tiersInCompaction++
             val currentTierSize = tierSizes[tier]?.toDouble() ?: 0.0
-            val sizeRatioExceeded = currentTierSize / sizeOfUpperTiers > sizeRatio
+            // compute our actual size ratio and check if it exceeds the configured limit
+            val sizeRatioExceeded = if (sizeOfLowerTiers > 0.0) {
+                val actualSizeRatio = currentTierSize / sizeOfLowerTiers
+                actualSizeRatio > acceptableSizeRatio
+            } else {
+                // we're still on the first tier, avoid division by zero.
+                // A single tier has no size ratio and therefore cannot exceed the limit.
+                false
+            }
             val enoughTiersSelected = tiersInCompaction >= minMergeTiers
             if (sizeRatioExceeded && enoughTiersSelected) {
                 // compact all tiers above this one
                 return this.getFilesInTiers(
-                    minTier = tier,
-                    maxTier = highestTier,
+                    minTier = 0,
+                    maxTier = tier,
                 )
             }
-            // check the next-lower tier
-            sizeOfUpperTiers += currentTierSize
+            // check the next-higher tier. To do that, we need
+            // to accumulate the size of all lower ones, so add
+            // our current tier size to the sum.
+            sizeOfLowerTiers += currentTierSize
         }
 
         // no tier meets the criteria.
@@ -222,12 +230,10 @@ class TieredCompactionTask(
             return emptyList()
         }
 
-        // the index of the highest tier is guaranteed to be non-NULL if the tree
-        // has one or more tiers, so the "!!" operator below is safe.
-        val highestTierIndex = this.store.metadata.getHighestNonEmptyLevelOrTier()!!
         return this.getFilesInTiers(
-            minTier = highestTierIndex - numberOfTiersToMerge + 1,
-            maxTier = highestTierIndex
+            minTier = 0,
+            // maxTier is inclusive, so we need the -1 in the end
+            maxTier = numberOfTiersToMerge - 1
         )
     }
 

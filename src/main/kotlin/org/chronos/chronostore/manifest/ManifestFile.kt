@@ -4,13 +4,18 @@ import com.google.common.hash.Hashing
 import org.chronos.chronostore.api.ChronoStore
 import org.chronos.chronostore.api.exceptions.ManifestException
 import org.chronos.chronostore.api.exceptions.StoreAlreadyExistsException
+import org.chronos.chronostore.api.exceptions.StoreNotFoundException
 import org.chronos.chronostore.io.vfs.VirtualReadWriteFile
 import org.chronos.chronostore.io.vfs.VirtualReadWriteFile.Companion.withOverWriter
+import org.chronos.chronostore.lsm.FlushResult
 import org.chronos.chronostore.manifest.ManifestUtils.validateManifestSequenceNumber
 import org.chronos.chronostore.manifest.operations.CheckpointOperation
 import org.chronos.chronostore.manifest.operations.CreateStoreOperation
+import org.chronos.chronostore.manifest.operations.FlushOperation
 import org.chronos.chronostore.manifest.operations.ManifestOperation
+import org.chronos.chronostore.util.FileIndex
 import org.chronos.chronostore.util.IOExtensions.withInputStream
+import org.chronos.chronostore.util.StoreId
 import org.chronos.chronostore.util.StringExtensions.toSingleLine
 import org.chronos.chronostore.util.json.JsonUtil
 import java.io.InputStream
@@ -52,7 +57,7 @@ class ManifestFile(
     private var readWriteLock = ReentrantReadWriteLock(true)
 
     private fun readManifestFromFile(): Manifest {
-       val timedValue = measureTimedValue {
+        val timedValue = measureTimedValue {
             this.replayLock.withLock {
                 val (replayedManifest, operationCount) = this.file.withInputStream(this::parseManifestFromInputStream)
                 this.operationCount = operationCount
@@ -177,6 +182,32 @@ class ManifestFile(
         }
     }
 
+    /**
+     * Appends a [FlushOperation] to the manifest.
+     *
+     * @param storeId The store which got flushed.
+     * @param flushTargetFileIndex The index of the file which has received the data from the flush operation. Must not be negative.
+     *
+     * @return the new manifest
+     *
+     * @throws StoreNotFoundException if there's no store with the given [storeId].
+     */
+    fun appendFlushOperation(storeId: StoreId, flushTargetFileIndex: FileIndex): Manifest {
+        require(flushTargetFileIndex >= 0) {
+            "Argument 'flushTargetFileIndex' (${flushTargetFileIndex}) must not be negative!"
+        }
+        this.readWriteLock.write {
+            this.getManifest().getStoreOrNull(storeId)
+                ?: throw StoreNotFoundException("Cannot flush store '${storeId}' because it doesn't exist!")
+            return this.appendOperation { sequenceNumber ->
+                FlushOperation(
+                    sequenceNumber = sequenceNumber,
+                    storeId = storeId,
+                    fileIndex = flushTargetFileIndex,
+                )
+            }
+        }
+    }
 
     /**
      *  Creates a new checkpoint on the manifest if the current [operation count][getOperationCount] is greater than the given [minOperations].
