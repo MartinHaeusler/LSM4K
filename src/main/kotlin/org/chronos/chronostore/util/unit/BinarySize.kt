@@ -1,6 +1,7 @@
 package org.chronos.chronostore.util.unit
 
 import com.fasterxml.jackson.annotation.JsonIgnore
+import jdk.incubator.vector.VectorOperators.Binary
 import org.chronos.chronostore.impl.annotations.PersistentClass
 import org.chronos.chronostore.util.bits.ByteSizeUtil
 
@@ -42,6 +43,29 @@ class BinarySize(
         val Long.TiB: BinarySize
             get() = BinarySize(this, SizeUnit.TEBIBYTE)
 
+
+        @OptIn(kotlin.experimental.ExperimentalTypeInference::class)
+        @OverloadResolutionByLambdaReturnType
+        @JvmName("sumOfBinarySize")
+        fun <T> Sequence<T>.sumOf(extract: (T) -> BinarySize): BinarySize {
+            return this.map(extract).sum()
+        }
+
+        @OptIn(kotlin.experimental.ExperimentalTypeInference::class)
+        @OverloadResolutionByLambdaReturnType
+        @JvmName("sumOfBinarySize")
+        fun <T> Collection<T>.sumOf(extract: (T) -> BinarySize): BinarySize {
+            return this.asSequence().sumOf(extract)
+        }
+
+        fun Sequence<BinarySize>.sum(): BinarySize {
+            return this.fold(0.Bytes){ acc, binarySize -> acc + binarySize }
+        }
+
+        fun Collection<BinarySize>.sum(): BinarySize {
+            return this.fold(0.Bytes){ acc, binarySize -> acc + binarySize }
+        }
+
     }
 
     init {
@@ -52,6 +76,14 @@ class BinarySize(
 
     @JsonIgnore
     val bytes: Long = this.unit.toBytes(this.value)
+
+    operator fun plus(other: BinarySize): BinarySize {
+        return BinarySize(this.bytes + other.bytes, SizeUnit.BYTE)
+    }
+
+    operator fun minus(other: BinarySize): BinarySize {
+        return BinarySize(this.bytes - other.bytes, SizeUnit.BYTE)
+    }
 
     override fun compareTo(other: BinarySize): Int {
         return this.bytes.compareTo(other.bytes)
