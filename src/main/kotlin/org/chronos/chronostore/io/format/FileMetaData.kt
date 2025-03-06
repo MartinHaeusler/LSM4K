@@ -113,6 +113,21 @@ class FileMetaData(
         return this.bloomFilter.mightContain(key)
     }
 
+    fun overlaps(minKey: Bytes, maxKey: Bytes): Boolean {
+        if(this.minKey == null || this.maxKey == null){
+            return false
+        }
+        if(maxKey < this.minKey){
+            // sst range starts after the search range
+            return false
+        }
+        if(minKey > this.maxKey){
+            // sst range ends before the search range
+            return false
+        }
+        return true
+    }
+
     fun mayContainDataRelevantForTSN(tsn: TSN): Boolean {
         if (this.minTSN == null) {
             // the file is empty
