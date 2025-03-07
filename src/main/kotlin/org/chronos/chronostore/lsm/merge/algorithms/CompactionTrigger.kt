@@ -10,6 +10,8 @@ enum class CompactionTrigger {
 
     LEVELED_LEVEL0,
 
+    LEVELED_TARGET_SIZE_RATIO,
+
     FULL_COMPACTION,
 
 

@@ -48,6 +48,7 @@ object CompactionUtil {
         val basicIterator = commands.checkOrdered(strict = false).orderedDistinct()
 
         // we have to drop old versions of keys
+        // TODO [CORRECTNESS]: we cannot always drop older versions of keys, it depends on the oldest still-open transaction.
         val latestVersionIterator = basicIterator.latestVersionOnly()
 
         val finalIterator = if (keepTombstones) {

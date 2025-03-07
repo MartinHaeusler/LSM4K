@@ -1,6 +1,7 @@
 package org.chronos.chronostore.api.compaction
 
 import org.chronos.chronostore.impl.annotations.PersistentClass
+import org.chronos.chronostore.lsm.merge.model.CompactableFile
 import org.chronos.chronostore.util.TSN
 import org.chronos.chronostore.util.unit.BinarySize
 import org.chronos.chronostore.util.unit.BinarySize.Companion.MiB
@@ -106,7 +107,20 @@ class LeveledCompactionStrategy(
          *
          * This is the default strategy.
          */
-        BY_MOST_DELETIONS,
+        BY_MOST_DELETIONS {
+
+            override val comparator: Comparator<CompactableFile> = compareBy(
+                // first compare by head-history-ratio.
+                // Files with a lot of history have a lower value here. Since we're sorting
+                // ascending, these files will be higher in priority.
+                { it.metadata.headHistoryRatio },
+                // as a tie-breaker, compare by the oldest data.
+                { it.metadata.minTSN },
+                // as a tie-breaker, compare by the index.
+                { it.index }
+            )
+
+        },
 
         /**
          * Picks the file that covers the oldest updates in the level.
@@ -118,7 +132,15 @@ class LeveledCompactionStrategy(
          * Compacting these files first reduces write amplification, provided that the overall
          * keys in the store are approximately uniformly distributed.
          */
-        OLDEST_SMALLEST_SEQUENCE_FIRST,
+        OLDEST_SMALLEST_SEQUENCE_FIRST {
+
+            override val comparator: Comparator<CompactableFile> = compareBy(
+                { it.metadata.minTSN },
+                // as a tie-breaker, compare by the index.
+                { it.index }
+            )
+
+        },
 
         /**
          * Picks the file whose latest update is the oldest.
@@ -134,7 +156,13 @@ class LeveledCompactionStrategy(
          * This strategy is best suited when there is a small range of keys which is overwritten
          * very often, while the rest of the keys is updated rarely.
          */
-        OLDEST_LARGEST_SEQUENCE_FIRST,
+        OLDEST_LARGEST_SEQUENCE_FIRST {
+            override val comparator: Comparator<CompactableFile> =
+                // first, prioritize the newest files (highest max TSN)
+                compareByDescending<CompactableFile> { it.metadata.maxTSN }
+                    // break ties by comparing the index.
+                    .thenComparingInt { it.index }
+        },
 
         ;
 
@@ -144,6 +172,8 @@ class LeveledCompactionStrategy(
             val DEFAULT = BY_MOST_DELETIONS
 
         }
+
+        abstract val comparator: Comparator<CompactableFile>
 
     }
 

@@ -409,6 +409,7 @@ class LSMTree(
                         outputStream = overWriter.outputStream,
                         settings = this.newFileSettings,
                     ).use { writer ->
+                        // TODO [CORRECTNESS]: We have to specify here which TSNs we can discard, i.e. we have to know the TSN of the "oldest" still active transaction.
                         CompactionUtil.compact(
                             cursors = cursors,
                             writer = writer,
