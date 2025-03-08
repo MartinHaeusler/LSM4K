@@ -35,6 +35,7 @@ class StoreManagerImpl(
     private val newFileSettings: ChronoStoreFileSettings,
     private val configuration: ChronoStoreConfiguration,
     private val manifestFile: ManifestFile,
+    private val getSmallestOpenReadTSN: () -> TSN?
 ) : StoreManager, AutoCloseable {
 
     companion object {
@@ -108,6 +109,7 @@ class StoreManagerImpl(
             fileHeaderCache = this.fileHeaderCache,
             driverFactory = this.driverFactory,
             newFileSettings = this.newFileSettings,
+            getSmallestOpenReadTSN = this.getSmallestOpenReadTSN,
         )
     }
 

@@ -3,7 +3,9 @@ package org.chronos.chronostore.util.iterator
 import com.google.common.collect.Iterators
 import com.google.common.collect.PeekingIterator
 import org.chronos.chronostore.model.command.Command
+import org.chronos.chronostore.util.TSN
 import org.chronos.chronostore.util.sequence.DeduplicatingOrderedIterator
+import org.chronos.chronostore.util.sequence.DropHistoryOlderThanIterator
 import org.chronos.chronostore.util.sequence.LatestVersionOnlyIterator
 import org.chronos.chronostore.util.sequence.OrderCheckingIterator
 
@@ -23,6 +25,10 @@ object IteratorExtensions {
 
     fun Iterator<Command>.latestVersionOnly(): Iterator<Command> {
         return LatestVersionOnlyIterator(this)
+    }
+
+    fun Iterator<Command>.dropHistoryOlderThan(tsn: TSN): Iterator<Command> {
+        return DropHistoryOlderThanIterator(this, tsn)
     }
 
     fun <T> Iterator<T>.filter(predicate: (T) -> Boolean): Iterator<T> {

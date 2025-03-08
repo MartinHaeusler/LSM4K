@@ -43,6 +43,7 @@ class LSMTree(
     private val fileHeaderCache: FileHeaderCache,
     private val driverFactory: RandomFileAccessDriverFactory,
     private val newFileSettings: ChronoStoreFileSettings,
+    private val getSmallestOpenReadTSN: () -> TSN?,
 ) {
 
     companion object {
@@ -398,7 +399,9 @@ class LSMTree(
 
             // this is the file we're going to write to
             val targetFile = this.directory.file(this.createFileNameForIndex(targetFileIndex))
-            val maxMerge = filesToMerge.maxOfOrNull { it.header.metaData.numberOfMerges } ?: 0
+            val maxNumberOfMergesInInputFiles = filesToMerge.maxOfOrNull {
+                it.header.metaData.numberOfMerges
+            } ?: 0
 
             targetFile.deleteOverWriterFileIfExists()
             targetFile.createOverWriter().use { overWriter ->
@@ -409,13 +412,13 @@ class LSMTree(
                         outputStream = overWriter.outputStream,
                         settings = this.newFileSettings,
                     ).use { writer ->
-                        // TODO [CORRECTNESS]: We have to specify here which TSNs we can discard, i.e. we have to know the TSN of the "oldest" still active transaction.
                         CompactionUtil.compact(
                             cursors = cursors,
                             writer = writer,
-                            maxMerge = maxMerge,
+                            maxNumberOfMergesInInputFiles = maxNumberOfMergesInInputFiles,
                             resultingCommandCountEstimate = totalEntries,
                             keepTombstones = keepTombstones,
+                            smallestReadTSN = this.getSmallestOpenReadTSN(),
                         )
                     }
                 } finally {

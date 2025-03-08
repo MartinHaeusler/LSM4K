@@ -23,6 +23,7 @@ class StoreImpl(
     fileHeaderCache: FileHeaderCache,
     driverFactory: RandomFileAccessDriverFactory,
     newFileSettings: ChronoStoreFileSettings,
+    getSmallestOpenReadTSN: () -> TSN?
 ) : Store {
 
     val tree = LSMTree(
@@ -33,6 +34,7 @@ class StoreImpl(
         driverFactory = driverFactory,
         newFileSettings = newFileSettings,
         fileHeaderCache = fileHeaderCache,
+        getSmallestOpenReadTSN = getSmallestOpenReadTSN,
     )
 
     override val highWatermarkTSN: TSN?

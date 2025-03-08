@@ -69,6 +69,7 @@ class ChronoStoreImpl(
         newFileSettings = ChronoStoreFileSettings(configuration.compressionAlgorithm, configuration.maxBlockSize),
         manifestFile = this.manifestFile,
         configuration = this.configuration,
+        getSmallestOpenReadTSN = { this.transactionManager.getSmallestOpenReadTSN() }
     )
 
     private val writeAheadLog: WriteAheadLog

@@ -4,8 +4,10 @@ import com.google.common.collect.Iterators
 import org.chronos.chronostore.io.format.ChronoStoreFileWriter
 import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.model.command.KeyAndTSN
+import org.chronos.chronostore.util.TSN
 import org.chronos.chronostore.util.cursor.Cursor
 import org.chronos.chronostore.util.iterator.IteratorExtensions.checkOrdered
+import org.chronos.chronostore.util.iterator.IteratorExtensions.dropHistoryOlderThan
 import org.chronos.chronostore.util.iterator.IteratorExtensions.filter
 import org.chronos.chronostore.util.iterator.IteratorExtensions.latestVersionOnly
 import org.chronos.chronostore.util.iterator.IteratorExtensions.orderedDistinct
@@ -26,15 +28,19 @@ object CompactionUtil {
      *                       deletions to allow them to propagate to the highest level/tier. When compacting into the highest
      *                       level/tier, you'll typically want to drop the tombstones.
      * @param resultingCommandCountEstimate An estimate on how many commands will be in the final resulting file. Will be used for sizing the bloom filter.
-     * @param maxMerge The highest number of received merges across all input files. The output file will have a "numberOfMerges"
+     * @param maxNumberOfMergesInInputFiles The highest number of received merges across all input files. The output file will have a "numberOfMerges"
      *                 equal to [maxMerge] + 1. For statistical purposes only.
+     * @param smallestReadTSN Among all currently open transactions, returns the smallest [TSN] used for reading. In other words, this is the oldest
+     *                        TSN which still needs to be accessible after the merge. All older historic data will be discarded during the compaction.
+     *                        If this value is `null`, all historic entries will be discarded during the transaction.
      */
     fun compact(
         cursors: List<Cursor<KeyAndTSN, Command>>,
         writer: ChronoStoreFileWriter,
         keepTombstones: Boolean,
         resultingCommandCountEstimate: Long,
-        maxMerge: Long,
+        maxNumberOfMergesInInputFiles: Long,
+        smallestReadTSN: TSN?,
     ) {
         val iterators = cursors.mapNotNull {
             if (it.first()) {
@@ -48,8 +54,13 @@ object CompactionUtil {
         val basicIterator = commands.checkOrdered(strict = false).orderedDistinct()
 
         // we have to drop old versions of keys
-        // TODO [CORRECTNESS]: we cannot always drop older versions of keys, it depends on the oldest still-open transaction.
-        val latestVersionIterator = basicIterator.latestVersionOnly()
+        val latestVersionIterator = if (smallestReadTSN == null) {
+            // there are no open transactions, we can drop ALL historic entries.
+            basicIterator.latestVersionOnly()
+        } else {
+            // drop all historic entries which are smaller than the read TSN.
+            basicIterator.dropHistoryOlderThan(smallestReadTSN)
+        }
 
         val finalIterator = if (keepTombstones) {
             latestVersionIterator
@@ -58,7 +69,7 @@ object CompactionUtil {
         }
 
         writer.writeFile(
-            numberOfMerges = maxMerge + 1,
+            numberOfMerges = maxNumberOfMergesInInputFiles + 1,
             orderedCommands = finalIterator,
             commandCountEstimate = resultingCommandCountEstimate,
         )

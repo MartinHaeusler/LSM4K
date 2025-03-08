@@ -62,6 +62,10 @@ class TransactionManager(
         return newTx
     }
 
+    fun getSmallestOpenReadTSN(): TSN? {
+        check(this.isOpen) { DB_ALREADY_CLOSED }
+        return this.openTransactions.values.minOfOrNull { it.lastVisibleSerialNumber }
+    }
 
     fun getOpenTransactionIdsAndTSNs(): Map<TransactionId, TSN> {
         check(this.isOpen) { DB_ALREADY_CLOSED }
