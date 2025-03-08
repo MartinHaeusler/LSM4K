@@ -1,4 +1,4 @@
-package org.chronos.chronostore.lsm.merge.algorithms
+package org.chronos.chronostore.lsm.compaction.algorithms
 
 enum class CompactionTrigger {
 

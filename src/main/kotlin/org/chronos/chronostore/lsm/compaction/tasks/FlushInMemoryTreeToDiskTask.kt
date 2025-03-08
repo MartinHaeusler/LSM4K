@@ -1,17 +1,14 @@
-package org.chronos.chronostore.lsm.merge.tasks
+package org.chronos.chronostore.lsm.compaction.tasks
 
 import io.github.oshai.kotlinlogging.KotlinLogging
-import org.chronos.chronostore.api.compaction.TieredCompactionStrategy
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.subTask
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.subTaskWithMonitor
 import org.chronos.chronostore.async.tasks.AsyncTask
 import org.chronos.chronostore.lsm.FlushResult
 import org.chronos.chronostore.lsm.LSMTree
-import org.chronos.chronostore.lsm.merge.model.CompactableStore
 import org.chronos.chronostore.manifest.ManifestFile
 import org.chronos.chronostore.util.logging.LogExtensions.ioDebug
-import org.chronos.chronostore.util.logging.LogMarkers
 import org.chronos.chronostore.util.statistics.ChronoStoreStatistics
 import org.chronos.chronostore.util.unit.BinarySize.Companion.Bytes
 import java.util.concurrent.atomic.AtomicLong

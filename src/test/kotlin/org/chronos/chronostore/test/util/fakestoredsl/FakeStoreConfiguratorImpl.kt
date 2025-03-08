@@ -4,7 +4,7 @@ import org.chronos.chronostore.api.compaction.CompactionStrategy
 import org.chronos.chronostore.api.compaction.LeveledCompactionStrategy
 import org.chronos.chronostore.impl.StoreInfo
 import org.chronos.chronostore.io.vfs.VirtualDirectory
-import org.chronos.chronostore.lsm.merge.model.CompactableFile
+import org.chronos.chronostore.lsm.compaction.model.CompactableFile
 import org.chronos.chronostore.manifest.LSMFileInfo
 import org.chronos.chronostore.manifest.StoreMetadata
 import org.chronos.chronostore.util.FileIndex

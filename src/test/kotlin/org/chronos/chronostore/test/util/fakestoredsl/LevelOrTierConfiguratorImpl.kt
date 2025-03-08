@@ -4,7 +4,7 @@ import org.chronos.chronostore.io.format.ChronoStoreFileSettings
 import org.chronos.chronostore.io.format.FileMetaData
 import org.chronos.chronostore.io.vfs.VirtualDirectory
 import org.chronos.chronostore.lsm.LSMTreeFile
-import org.chronos.chronostore.lsm.merge.model.CompactableFile
+import org.chronos.chronostore.lsm.compaction.model.CompactableFile
 import org.chronos.chronostore.util.FileIndex
 
 class LevelOrTierConfiguratorImpl(

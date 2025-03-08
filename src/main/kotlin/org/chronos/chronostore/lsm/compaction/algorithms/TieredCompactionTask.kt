@@ -1,10 +1,10 @@
-package org.chronos.chronostore.lsm.merge.algorithms
+package org.chronos.chronostore.lsm.compaction.algorithms
 
 import org.chronos.chronostore.api.compaction.TieredCompactionStrategy
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.subTask
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.subTaskWithMonitor
-import org.chronos.chronostore.lsm.merge.model.CompactableStore
+import org.chronos.chronostore.lsm.compaction.model.CompactableStore
 import org.chronos.chronostore.manifest.LSMFileInfo
 import org.chronos.chronostore.manifest.ManifestFile
 import org.chronos.chronostore.manifest.operations.TieredCompactionOperation

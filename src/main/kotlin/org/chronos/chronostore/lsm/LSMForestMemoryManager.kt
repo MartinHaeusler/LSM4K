@@ -6,7 +6,7 @@ import org.chronos.chronostore.async.executor.TaskExecutionResult
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.forEach
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.mainTask
-import org.chronos.chronostore.lsm.merge.tasks.FlushInMemoryTreeToDiskTask
+import org.chronos.chronostore.lsm.compaction.tasks.FlushInMemoryTreeToDiskTask
 import org.chronos.chronostore.manifest.ManifestFile
 import org.chronos.chronostore.util.logging.LogExtensions.perfTrace
 import org.chronos.chronostore.util.statistics.ChronoStoreStatistics

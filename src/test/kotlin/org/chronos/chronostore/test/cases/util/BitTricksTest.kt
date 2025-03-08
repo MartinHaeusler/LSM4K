@@ -19,7 +19,6 @@ class BitTricksTest {
         longs.sort()
 
         for ((lower, upper) in longs.windowed(size = 2)) {
-            println("Lower: ${lower}, Upper: ${upper}")
             expectThat(lower).isLessThan(upper)
 
             val lowerBytes = BasicBytes(lower.toStableBytes())

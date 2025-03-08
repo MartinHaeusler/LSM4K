@@ -7,7 +7,6 @@ import org.chronos.chronostore.api.exceptions.StoreAlreadyExistsException
 import org.chronos.chronostore.api.exceptions.StoreNotFoundException
 import org.chronos.chronostore.io.vfs.VirtualReadWriteFile
 import org.chronos.chronostore.io.vfs.VirtualReadWriteFile.Companion.withOverWriter
-import org.chronos.chronostore.lsm.FlushResult
 import org.chronos.chronostore.manifest.ManifestUtils.validateManifestSequenceNumber
 import org.chronos.chronostore.manifest.operations.CheckpointOperation
 import org.chronos.chronostore.manifest.operations.CreateStoreOperation

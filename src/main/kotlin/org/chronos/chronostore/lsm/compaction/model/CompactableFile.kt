@@ -1,4 +1,4 @@
-package org.chronos.chronostore.lsm.merge.model
+package org.chronos.chronostore.lsm.compaction.model
 
 import org.chronos.chronostore.io.format.FileMetaData
 import org.chronos.chronostore.util.FileIndex

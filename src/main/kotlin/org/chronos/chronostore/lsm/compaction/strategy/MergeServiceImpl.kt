@@ -1,4 +1,4 @@
-package org.chronos.chronostore.lsm.merge.strategy
+package org.chronos.chronostore.lsm.compaction.strategy
 
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.chronos.chronostore.api.ChronoStoreConfiguration
@@ -6,8 +6,8 @@ import org.chronos.chronostore.api.StoreManager
 import org.chronos.chronostore.async.executor.AsyncTaskManager
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.forEachWithMonitor
-import org.chronos.chronostore.lsm.merge.tasks.CompactionTask
-import org.chronos.chronostore.lsm.merge.tasks.FlushInMemoryTreeToDiskTask
+import org.chronos.chronostore.lsm.compaction.tasks.CompactionTask
+import org.chronos.chronostore.lsm.compaction.tasks.FlushInMemoryTreeToDiskTask
 import org.chronos.chronostore.manifest.ManifestFile
 
 class MergeServiceImpl(

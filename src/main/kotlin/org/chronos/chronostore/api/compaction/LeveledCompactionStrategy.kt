@@ -1,7 +1,7 @@
 package org.chronos.chronostore.api.compaction
 
 import org.chronos.chronostore.impl.annotations.PersistentClass
-import org.chronos.chronostore.lsm.merge.model.CompactableFile
+import org.chronos.chronostore.lsm.compaction.model.CompactableFile
 import org.chronos.chronostore.util.TSN
 import org.chronos.chronostore.util.unit.BinarySize
 import org.chronos.chronostore.util.unit.BinarySize.Companion.MiB

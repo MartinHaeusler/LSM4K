@@ -1,7 +1,6 @@
 package org.chronos.chronostore.util.unit
 
 import com.fasterxml.jackson.annotation.JsonIgnore
-import jdk.incubator.vector.VectorOperators.Binary
 import org.chronos.chronostore.impl.annotations.PersistentClass
 import org.chronos.chronostore.util.bits.ByteSizeUtil
 

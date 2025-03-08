@@ -15,7 +15,7 @@ import org.chronos.chronostore.io.vfs.VirtualReadWriteFile.Companion.withOverWri
 import org.chronos.chronostore.lsm.LSMTreeFile.Companion.FILE_EXTENSION
 import org.chronos.chronostore.lsm.cache.FileHeaderCache
 import org.chronos.chronostore.lsm.cache.LocalBlockCache
-import org.chronos.chronostore.lsm.merge.algorithms.CompactionTrigger
+import org.chronos.chronostore.lsm.compaction.algorithms.CompactionTrigger
 import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.model.command.KeyAndTSN
 import org.chronos.chronostore.util.FileIndex

@@ -1,4 +1,4 @@
-package org.chronos.chronostore.lsm.merge.tasks
+package org.chronos.chronostore.lsm.compaction.tasks
 
 import org.chronos.chronostore.api.StoreManager
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor

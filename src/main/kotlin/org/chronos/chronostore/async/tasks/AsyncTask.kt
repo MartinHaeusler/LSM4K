@@ -1,13 +1,10 @@
 package org.chronos.chronostore.async.tasks
 
 import io.github.oshai.kotlinlogging.KotlinLogging
-import org.chronos.chronostore.api.exceptions.FlushException
 import org.chronos.chronostore.async.executor.AsyncTaskManager
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor
 import org.chronos.chronostore.impl.ChronoStoreState
 import org.chronos.chronostore.util.ExceptionUtils
-import java.io.InterruptedIOException
-import java.nio.channels.ClosedByInterruptException
 
 /**
  * A common interface for all asynchronous tasks.

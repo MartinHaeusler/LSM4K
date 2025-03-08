@@ -1,4 +1,4 @@
-package org.chronos.chronostore.lsm.merge.strategy
+package org.chronos.chronostore.lsm.compaction.strategy
 
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor
 

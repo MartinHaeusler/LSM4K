@@ -1,23 +1,20 @@
-package org.chronos.chronostore.lsm.merge.tasks
+package org.chronos.chronostore.lsm.compaction.tasks
 
-import org.chronos.chronostore.api.Store
 import org.chronos.chronostore.api.StoreManager
 import org.chronos.chronostore.api.compaction.LeveledCompactionStrategy
 import org.chronos.chronostore.api.compaction.TieredCompactionStrategy
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.forEachWithMonitor
-import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.subTask
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.subTaskWithMonitor
 import org.chronos.chronostore.async.tasks.AsyncTask
 import org.chronos.chronostore.impl.StoreManagerImpl
 import org.chronos.chronostore.impl.store.StoreImpl
-import org.chronos.chronostore.lsm.merge.algorithms.FullCompactionTask
-import org.chronos.chronostore.lsm.merge.algorithms.LeveledCompactionTask
-import org.chronos.chronostore.lsm.merge.algorithms.TieredCompactionTask
-import org.chronos.chronostore.lsm.merge.model.StandardCompactableStore
+import org.chronos.chronostore.lsm.compaction.algorithms.FullCompactionTask
+import org.chronos.chronostore.lsm.compaction.algorithms.LeveledCompactionTask
+import org.chronos.chronostore.lsm.compaction.algorithms.TieredCompactionTask
+import org.chronos.chronostore.lsm.compaction.model.StandardCompactableStore
 import org.chronos.chronostore.manifest.ManifestFile
 import org.chronos.chronostore.manifest.StoreMetadata
-import org.chronos.chronostore.manifest.operations.FullCompactionOperation
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 

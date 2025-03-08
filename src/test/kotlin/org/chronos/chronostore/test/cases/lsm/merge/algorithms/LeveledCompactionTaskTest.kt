@@ -3,8 +3,8 @@ package org.chronos.chronostore.test.cases.lsm.merge.algorithms
 import org.chronos.chronostore.api.compaction.LeveledCompactionStrategy
 import org.chronos.chronostore.api.compaction.LeveledCompactionStrategy.FileSelectionStrategy.BY_MOST_DELETIONS
 import org.chronos.chronostore.io.vfs.VirtualFileSystem
-import org.chronos.chronostore.lsm.merge.algorithms.CompactionTrigger
-import org.chronos.chronostore.lsm.merge.algorithms.LeveledCompactionTask
+import org.chronos.chronostore.lsm.compaction.algorithms.CompactionTrigger
+import org.chronos.chronostore.lsm.compaction.algorithms.LeveledCompactionTask
 import org.chronos.chronostore.manifest.ManifestFile
 import org.chronos.chronostore.test.util.CompactionTestUtils.executeLeveledCompactionSynchronously
 import org.chronos.chronostore.test.util.VFSMode

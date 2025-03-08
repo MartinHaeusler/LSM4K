@@ -1,9 +1,9 @@
 package org.chronos.chronostore.test.util.fakestoredsl
 
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor
-import org.chronos.chronostore.lsm.merge.algorithms.CompactionTrigger
-import org.chronos.chronostore.lsm.merge.model.CompactableFile
-import org.chronos.chronostore.lsm.merge.model.CompactableStore
+import org.chronos.chronostore.lsm.compaction.algorithms.CompactionTrigger
+import org.chronos.chronostore.lsm.compaction.model.CompactableFile
+import org.chronos.chronostore.lsm.compaction.model.CompactableStore
 import org.chronos.chronostore.manifest.StoreMetadata
 import org.chronos.chronostore.util.FileIndex
 

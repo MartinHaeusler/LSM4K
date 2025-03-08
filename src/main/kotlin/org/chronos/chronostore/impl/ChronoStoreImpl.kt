@@ -12,10 +12,10 @@ import org.chronos.chronostore.io.vfs.VirtualFileSystem
 import org.chronos.chronostore.lsm.LSMForestMemoryManager
 import org.chronos.chronostore.lsm.cache.BlockCacheManager
 import org.chronos.chronostore.lsm.cache.FileHeaderCache
+import org.chronos.chronostore.lsm.compaction.strategy.MergeService
+import org.chronos.chronostore.lsm.compaction.strategy.MergeServiceImpl
+import org.chronos.chronostore.lsm.compaction.tasks.CheckpointTask
 import org.chronos.chronostore.lsm.garbagecollector.tasks.GarbageCollectorTask
-import org.chronos.chronostore.lsm.merge.strategy.MergeService
-import org.chronos.chronostore.lsm.merge.strategy.MergeServiceImpl
-import org.chronos.chronostore.lsm.merge.tasks.CheckpointTask
 import org.chronos.chronostore.manifest.ManifestFile
 import org.chronos.chronostore.util.TSN
 import org.chronos.chronostore.wal.WriteAheadLog
