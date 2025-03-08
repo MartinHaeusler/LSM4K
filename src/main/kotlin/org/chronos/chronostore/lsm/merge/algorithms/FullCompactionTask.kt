@@ -1,0 +1,56 @@
+package org.chronos.chronostore.lsm.merge.algorithms
+
+import org.chronos.chronostore.api.compaction.LeveledCompactionStrategy
+import org.chronos.chronostore.api.compaction.TieredCompactionStrategy
+import org.chronos.chronostore.async.taskmonitor.TaskMonitor
+import org.chronos.chronostore.lsm.merge.model.CompactableStore
+import org.chronos.chronostore.manifest.ManifestFile
+import org.chronos.chronostore.manifest.operations.FullCompactionOperation
+
+class FullCompactionTask(
+    val manifestFile: ManifestFile,
+    val store: CompactableStore,
+) {
+
+    fun runCompaction(monitor: TaskMonitor) {
+        if (store.allFiles.isEmpty()) {
+            // store is empty, nothing to compact
+            return
+        }
+
+        val maxLevelOrTierIndex = when (val compactionStrategy = store.metadata.compactionStrategy) {
+            is LeveledCompactionStrategy -> compactionStrategy.maxLevels - 1
+            is TieredCompactionStrategy -> compactionStrategy.numberOfTiers - 1
+        }
+
+        val firstNonEmptyLevelOrTier = (0..maxLevelOrTierIndex).asSequence()
+            .map { it to store.metadata.getFileIndicesAtTierOrLevel(it) }
+            .first { it.second.isNotEmpty() }
+            .first
+
+        if (firstNonEmptyLevelOrTier >= maxLevelOrTierIndex) {
+            // all data is already in the highest level or tier
+            // -> nothing to do
+            return
+        }
+        val fileIndices = store.metadata.getAllFileIndices()
+        this.store.mergeFiles(
+            fileIndices = fileIndices,
+            keepTombstones = false,
+            trigger = CompactionTrigger.FULL_COMPACTION,
+            monitor = monitor
+        ) { newFileIndex ->
+            this.manifestFile.appendOperation { operationSequenceNumber ->
+                FullCompactionOperation(
+                    sequenceNumber = operationSequenceNumber,
+                    storeId = this.store.storeId,
+                    inputFileIndices = fileIndices,
+                    outputFileIndices = setOf(newFileIndex),
+                    outputLevelOrTier = maxLevelOrTierIndex,
+                )
+            }
+        }
+
+    }
+
+}

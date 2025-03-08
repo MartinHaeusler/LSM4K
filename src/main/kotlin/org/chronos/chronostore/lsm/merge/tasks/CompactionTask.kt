@@ -6,14 +6,18 @@ import org.chronos.chronostore.api.compaction.LeveledCompactionStrategy
 import org.chronos.chronostore.api.compaction.TieredCompactionStrategy
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.forEachWithMonitor
+import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.subTask
+import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.subTaskWithMonitor
 import org.chronos.chronostore.async.tasks.AsyncTask
 import org.chronos.chronostore.impl.StoreManagerImpl
 import org.chronos.chronostore.impl.store.StoreImpl
+import org.chronos.chronostore.lsm.merge.algorithms.FullCompactionTask
 import org.chronos.chronostore.lsm.merge.algorithms.LeveledCompactionTask
 import org.chronos.chronostore.lsm.merge.algorithms.TieredCompactionTask
 import org.chronos.chronostore.lsm.merge.model.StandardCompactableStore
 import org.chronos.chronostore.manifest.ManifestFile
 import org.chronos.chronostore.manifest.StoreMetadata
+import org.chronos.chronostore.manifest.operations.FullCompactionOperation
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 
@@ -59,15 +63,25 @@ class CompactionTask(
             "(Minor Compaction)"
         }
         monitor.reportStarted("Compacting Store '${store.storeId}' ${compactionNote}")
-        if (major) {
-            this.performMajorCompaction(store, monitor)
-        } else {
-            this.performMinorCompaction(store, monitor)
+        monitor.subTaskWithMonitor(1.0) { subMonitor ->
+            if (major) {
+                this.performMajorCompaction(store, subMonitor)
+            } else {
+                this.performMinorCompaction(store, subMonitor)
+            }
         }
     }
 
-    private fun performMajorCompaction(store: Store, monitor: TaskMonitor) {
-        TODO("Major compaction is not yet implemented!")
+    private fun performMajorCompaction(store: StoreImpl, monitor: TaskMonitor) {
+        val storeMetadata = this.manifestFile.getManifest().getStore(store.storeId)
+
+        val compactableStore = StandardCompactableStore(store, storeMetadata)
+
+        val compaction = FullCompactionTask(
+            manifestFile = this.manifestFile,
+            store = compactableStore,
+        )
+        compaction.runCompaction(monitor)
     }
 
     private fun performMinorCompaction(store: StoreImpl, monitor: TaskMonitor) {
