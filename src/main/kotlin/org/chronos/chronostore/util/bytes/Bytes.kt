@@ -41,6 +41,10 @@ sealed interface Bytes :
             return BasicBytes(byteArrayOf(*bytes))
         }
 
+        fun of(text: String): Bytes {
+            return BasicBytes(text.toByteArray())
+        }
+
         /**
          * Creates a new [Bytes] object that wraps the given [ByteArray].
          *

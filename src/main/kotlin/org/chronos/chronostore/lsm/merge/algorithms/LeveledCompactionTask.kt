@@ -47,7 +47,8 @@ class LeveledCompactionTask(
                 return targetLevelSizes
             } else {
                 // the target size of each level is a fraction of the higher level, given by target size multiplier.
-                for (i in (0..<targetLevelSizes.lastIndex).reversed()) {
+                // exclude level 0, it has no target size (this is where new SST files are flushed into)
+                for (i in (1..<targetLevelSizes.lastIndex).reversed()) {
                     val thisLevelSize = (targetLevelSizes[i + 1] / levelSizeMultiplier).toLong()
                     targetLevelSizes[i] = thisLevelSize
                     if (thisLevelSize < baseLevelSize) {
@@ -145,7 +146,8 @@ class LeveledCompactionTask(
 
         if (levelWithHighestSizeToTargetRatio != null) {
             monitor.subTaskWithMonitor(0.6) { subMonitor ->
-                compactBasedOnTargetSizeRatio(levelWithHighestSizeToTargetRatio, subMonitor)
+                val highestNonEmptyLevel = realLevelSizes.indexOfLast { it > 0 }
+                compactBasedOnTargetSizeRatio(levelWithHighestSizeToTargetRatio, highestNonEmptyLevel, subMonitor)
             }
             return
         }
@@ -153,7 +155,11 @@ class LeveledCompactionTask(
         monitor.reportDone()
     }
 
-    private fun compactBasedOnTargetSizeRatio(levelWithHighestSizeToTargetRatio: LevelIndex, monitor: TaskMonitor) {
+    private fun compactBasedOnTargetSizeRatio(
+        levelWithHighestSizeToTargetRatio: LevelIndex,
+        highestNonEmptyLevel: LevelIndex,
+        monitor: TaskMonitor,
+    ) {
         val fileIndicesInLevel = this.store.metadata.getFileIndicesAtTierOrLevel(levelWithHighestSizeToTargetRatio)
         val fileIndexToFile = this.store.allFiles.associateBy { it.index }
         val comparator = this.configuration.fileSelectionStrategy.comparator
@@ -167,8 +173,8 @@ class LeveledCompactionTask(
         val overlappingSSTFilesInTargetLevel = findOverlappingSSTFiles(setOf(chosenSSTFile.index), targetLevelIndex)
         this.store.mergeFiles(
             fileIndices = setOf(chosenSSTFile.index) + overlappingSSTFilesInTargetLevel,
-            // if we do not merge to the highest level, we have to keep the tombstones during the merge.
-            keepTombstones = targetLevelIndex != configuration.maxLevels,
+            // if we do not merge to the highest non-empty level, we have to keep the tombstones during the merge.
+            keepTombstones = targetLevelIndex != highestNonEmptyLevel,
             trigger = CompactionTrigger.LEVELED_TARGET_SIZE_RATIO,
             monitor = monitor
         ) { newFileIndex ->
