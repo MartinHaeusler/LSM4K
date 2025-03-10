@@ -33,11 +33,11 @@ class GarbageFileManager(
 
     private val lock = ReentrantReadWriteLock(true)
 
-    private val _garbageFiles = mutableListOf<String>()
+    private var _garbageFiles = listOf<String>()
 
     init {
         // read garbage files
-        this._garbageFiles += readGarbageFiles()
+        this._garbageFiles = readGarbageFiles()
     }
 
     private fun readGarbageFiles(): List<String> {
@@ -47,7 +47,7 @@ class GarbageFileManager(
         }
         this.file.withInputStream { inputStream ->
             inputStream.bufferedReader().use { reader ->
-                val lines = reader.readLines()
+                val lines = reader.readLines().filter { it.isNotBlank() }
                 if (lines.lastOrNull() != END_OF_FILE) {
                     throw IllegalStateException("Expected file '${this.file.path}' to end with the garbage file tombstone, but it didn't! File is likely corrupted.")
                 }
@@ -100,8 +100,7 @@ class GarbageFileManager(
                     overWriter.commit()
                 }
                 // make a safety copy to prevent modification from outside this class
-                _garbageFiles.clear()
-                _garbageFiles.addAll(garbageFileNames)
+                _garbageFiles = garbageFileNames.toList()
             }
         }
 
