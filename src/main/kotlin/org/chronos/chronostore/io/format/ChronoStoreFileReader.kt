@@ -10,6 +10,7 @@ import org.chronos.chronostore.util.cursor.CloseHandler
 import org.chronos.chronostore.util.cursor.Cursor
 import org.chronos.chronostore.util.cursor.CursorUtils
 import org.chronos.chronostore.util.statistics.ChronoStoreStatistics
+import java.util.concurrent.atomic.AtomicLong
 
 class ChronoStoreFileReader : AutoCloseable {
 
@@ -62,7 +63,7 @@ class ChronoStoreFileReader : AutoCloseable {
 
     constructor(
         driver: RandomFileAccessDriver,
-        blockCache: LocalBlockCache
+        blockCache: LocalBlockCache,
     ) {
         this.driver = driver
         this.fileHeader = loadFileHeader(driver)
@@ -315,10 +316,30 @@ class ChronoStoreFileReader : AutoCloseable {
                 return null
             }
             val cursor = this.currentCursor
-                ?: return super.peekNext() // fall back to default implementation
+                ?: return super.peekNext() // safeguard: fall back to default implementation
 
-            return cursor.peekNext() // fast track
-                ?: return super.peekNext() // fall back to default implementation
+            val peekNext = cursor.peekNext()
+            if (peekNext != null) {
+                return peekNext
+            }
+
+            // we're at the end of the block. Check if there is a next block.
+            val block = this.currentBlock
+                ?: return null
+            val nextBlockIndex = block.metaData.blockSequenceNumber + 1
+            if (nextBlockIndex >= fileHeader.metaData.numberOfBlocks) {
+                // there IS no next block. Peeking won't work.
+                return null
+            }
+
+            // we're at the end of a block and there IS a next block. This means
+            // we have to read the next block, read the first entry, and then come
+            // back to this block. This is rather unfortunate from a performance
+            // perspective.
+
+            // the default implementation will take care of this.
+            return super.peekNext()
+
         }
 
         override fun peekPrevious(): Pair<KeyAndTSN, Command>? {
@@ -326,10 +347,29 @@ class ChronoStoreFileReader : AutoCloseable {
                 return null
             }
             val cursor = this.currentCursor
-                ?: return super.peekPrevious() // fall back to default implementation
+                ?: return super.peekPrevious() // safeguard: fall back to default implementation
 
-            return cursor.peekPrevious() // fast track
-                ?: return super.peekPrevious()
+            val peekNext = cursor.peekPrevious()
+            if(peekNext != null){
+                return peekNext
+            }
+
+            // we're at the start of the block. Check if there is a previous block.
+            val block = this.currentBlock
+                ?: return null
+            val previousBlockIndex = block.metaData.blockSequenceNumber - 1
+            if (previousBlockIndex < 0) {
+                // there IS no previous block. Peeking won't work.
+                return null
+            }
+
+            // we're at the start of a block and there IS a previous block. This means
+            // we have to read the previous block, read the last entry, and then come
+            // back to this block. This is rather unfortunate from a performance
+            // perspective.
+
+            // the default implementation will take care of this.
+            return super.peekPrevious()
         }
 
         override val keyOrNull: KeyAndTSN?

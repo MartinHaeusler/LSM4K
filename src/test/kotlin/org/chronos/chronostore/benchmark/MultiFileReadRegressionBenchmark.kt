@@ -8,6 +8,7 @@ import org.chronos.chronostore.test.util.ChronoStoreMode
 import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.unit.BinarySize.Companion.GiB
 import org.chronos.chronostore.util.unit.BinarySize.Companion.KiB
+import org.chronos.chronostore.util.unit.BinarySize.Companion.MiB
 import kotlin.random.Random
 
 /**
@@ -23,8 +24,8 @@ object MultiFileReadRegressionBenchmark {
             maxForestSize = 1.GiB,
             // don't merge automatically
             compactionInterval = null,
-            // disable caching
-            blockCacheSize = null,
+            // use a very small cache
+            blockCacheSize = 20.MiB,
         )
 
         ChronoStoreMode.ONDISK.withChronoStore(config) { chronoStore ->
@@ -51,7 +52,7 @@ object MultiFileReadRegressionBenchmark {
 //            chronoStore.mergeService.performMajorCompaction()
 
             // delete the files which are now unused
-//            chronoStore.performGarbageCollection()
+            chronoStore.performGarbageCollection()
 
             val numberOfFiles = chronoStore.transaction { tx ->
                 val store = tx.getStore("test")

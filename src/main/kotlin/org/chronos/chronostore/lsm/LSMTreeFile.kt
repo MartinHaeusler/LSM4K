@@ -57,4 +57,7 @@ class LSMTreeFile(
         }
     }
 
+    override fun toString(): String {
+        return "LSMTreeFile[${this.virtualFile}]"
+    }
 }

@@ -55,13 +55,8 @@ class Command(
             val key = PrefixIO.readBytes(buffer)
             val tsn = buffer.takeLittleEndianLong()
             val value = when (opCode) {
-                OpCode.PUT -> {
-                    PrefixIO.readBytes(buffer)
-                }
-
-                OpCode.DEL -> {
-                    Bytes.EMPTY
-                }
+                OpCode.PUT -> PrefixIO.readBytes(buffer)
+                OpCode.DEL -> Bytes.EMPTY
             }
             return Command(
                 opCode = opCode,

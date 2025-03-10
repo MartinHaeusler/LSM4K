@@ -90,7 +90,7 @@ import org.chronos.chronostore.util.unit.BinarySize.Companion.MiB
 class LeveledCompactionStrategy(
     val levelSizeMultiplier: Double = 10.0,
     val level0FileNumberCompactionTrigger: Int = 5,
-    val maxLevels: Int = 10,
+    val maxLevels: Int = 8,
     val baseLevelMinSize: BinarySize = 200.MiB,
     val fileSelectionStrategy: FileSelectionStrategy = FileSelectionStrategy.DEFAULT,
 ) : CompactionStrategy {

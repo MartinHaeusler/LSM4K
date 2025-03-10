@@ -65,7 +65,7 @@ object CompactionUtil {
         val finalIterator = if (keepTombstones) {
             latestVersionIterator
         } else {
-            latestVersionIterator.filter(Command::isDeletion)
+            latestVersionIterator.filter(Command::isInsertOrUpdate)
         }
 
         writer.writeFile(
