@@ -2,6 +2,7 @@ package org.chronos.chronostore.lsm
 
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.chronos.chronostore.api.ChronoStoreTransaction
+import org.chronos.chronostore.api.exceptions.FileMissingException
 import org.chronos.chronostore.api.exceptions.FlushException
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.forEach
@@ -11,11 +12,13 @@ import org.chronos.chronostore.io.format.ChronoStoreFileSettings
 import org.chronos.chronostore.io.format.ChronoStoreFileWriter
 import org.chronos.chronostore.io.vfs.VirtualDirectory
 import org.chronos.chronostore.io.vfs.VirtualFile
+import org.chronos.chronostore.io.vfs.VirtualReadWriteFile
 import org.chronos.chronostore.io.vfs.VirtualReadWriteFile.Companion.withOverWriter
 import org.chronos.chronostore.lsm.LSMTreeFile.Companion.FILE_EXTENSION
 import org.chronos.chronostore.lsm.cache.FileHeaderCache
 import org.chronos.chronostore.lsm.cache.LocalBlockCache
 import org.chronos.chronostore.lsm.compaction.algorithms.CompactionTrigger
+import org.chronos.chronostore.manifest.StoreMetadata
 import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.model.command.KeyAndTSN
 import org.chronos.chronostore.util.FileIndex
@@ -37,6 +40,7 @@ import kotlin.system.measureTimeMillis
 
 class LSMTree(
     val storeId: StoreId,
+    initialStoreMetadata: StoreMetadata,
     private val forest: LSMForestMemoryManager,
     private val directory: VirtualDirectory,
     private val blockCache: LocalBlockCache,
@@ -62,6 +66,7 @@ class LSMTree(
     private val nextFreeFileIndex = AtomicInteger(0)
 
     private val cursorManager = CursorManager()
+    private val garbageFileManager = GarbageFileManager()
 
     private val activeTaskLock = ReentrantReadWriteLock(true)
     private val activeTaskCondition = activeTaskLock.writeLock().newCondition()
@@ -69,16 +74,61 @@ class LSMTree(
     @Volatile
     private var activeTaskMonitor: TaskMonitor? = null
 
-    private var garbageFileManager: GarbageFileManager
 
     init {
         if (!this.directory.exists()) {
             this.directory.mkdirs()
         }
-        this.garbageFileManager = GarbageFileManager(this.directory.file(GarbageFileManager.FILE_NAME))
-        this.fileList = loadFileList()
+        val existingFiles = loadFilesAndSyncWithStoreMetadata(initialStoreMetadata)
+
+        this.fileList = existingFiles
         this.nextFreeFileIndex.set(getNextFreeFileIndex(this.fileList))
         forest.addTree(this)
+    }
+
+    private fun loadFilesAndSyncWithStoreMetadata(initialStoreMetadata: StoreMetadata): MutableList<LSMTreeFile> {
+        val existingFiles = this.loadFileList()
+        val filesAccordingToManifest = initialStoreMetadata.lsmFiles.keys
+        this.deleteGarbageFilesOnStoreCreation(existingFiles, filesAccordingToManifest)
+        val existingFileIndices = existingFiles.asSequence()
+            .map { it.index }
+            .toSet()
+
+        this.checkForMissingFiles(filesAccordingToManifest, existingFileIndices)
+        return existingFiles
+    }
+
+    private fun checkForMissingFiles(
+        filesAccordingToManifest: MutableSet<FileIndex>,
+        existingFileIndices: Set<FileIndex>,
+    ) {
+        val missingFiles = filesAccordingToManifest.asSequence()
+            .filter { it !in existingFileIndices }
+            .map { this.createFileNameForIndex(it) }
+            .toSet()
+
+        if (missingFiles.isNotEmpty()) {
+            throw FileMissingException("The following files are missing from store ${this.storeId}: ${missingFiles.joinToString()}")
+        }
+    }
+
+    private fun deleteGarbageFilesOnStoreCreation(
+        existingFiles: MutableList<LSMTreeFile>,
+        filesAccordingToManifest: MutableSet<FileIndex>,
+    ) {
+        val fileIterator = existingFiles.iterator()
+        while (fileIterator.hasNext()) {
+            val existingFile = fileIterator.next()
+            if (existingFile.index in filesAccordingToManifest) {
+                // this file is expected, keep it.
+                continue
+            }
+            // this file is garbage and needs to be removed.
+            val readWriteFile = existingFile.virtualFile as VirtualReadWriteFile
+            readWriteFile.deleteOverWriterFileIfExists()
+            readWriteFile.delete()
+            fileIterator.remove()
+        }
     }
 
     private fun loadFileList(): MutableList<LSMTreeFile> {
@@ -366,7 +416,7 @@ class LSMTree(
     fun performGarbageCollection(taskMonitor: TaskMonitor) {
         taskMonitor.reportStarted("Collecting Garbage in '${this.path}'")
         val deleted = mutableSetOf<String>()
-        taskMonitor.forEach(1.0, "Deleting old files", this.garbageFileManager.garbageFiles) { fileName ->
+        taskMonitor.forEach(1.0, "Deleting old files", this.garbageFileManager.garbageFiles.toList()) { fileName ->
             if (this.cursorManager.hasOpenCursorOnFile(fileName)) {
                 // we must not delete any files we're currently iterating over.
                 return@forEach

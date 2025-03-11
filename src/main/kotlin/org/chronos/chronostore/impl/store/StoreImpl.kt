@@ -8,23 +8,27 @@ import org.chronos.chronostore.lsm.LSMForestMemoryManager
 import org.chronos.chronostore.lsm.LSMTree
 import org.chronos.chronostore.lsm.cache.FileHeaderCache
 import org.chronos.chronostore.lsm.cache.LocalBlockCache
+import org.chronos.chronostore.manifest.StoreMetadata
 import org.chronos.chronostore.util.StoreId
 import org.chronos.chronostore.util.TSN
 import org.chronos.chronostore.util.TransactionId
 
 class StoreImpl(
-    override val storeId: StoreId,
-    override val validFromTSN: TSN,
-    override var validToTSN: TSN?,
-    override val createdByTransactionId: TransactionId,
     override val directory: VirtualDirectory,
+    initialStoreMetadata: StoreMetadata,
     forest: LSMForestMemoryManager,
     blockCache: LocalBlockCache,
     fileHeaderCache: FileHeaderCache,
     driverFactory: RandomFileAccessDriverFactory,
     newFileSettings: ChronoStoreFileSettings,
-    getSmallestOpenReadTSN: () -> TSN?
+    getSmallestOpenReadTSN: () -> TSN?,
 ) : Store {
+
+    override val storeId: StoreId = initialStoreMetadata.storeId
+    override val validFromTSN: TSN = initialStoreMetadata.info.validFromTSN
+    override var validToTSN: TSN? = initialStoreMetadata.info.validToTSN
+    override val createdByTransactionId: TransactionId = initialStoreMetadata.info.createdByTransactionId
+
 
     val tree = LSMTree(
         storeId = this.storeId,
@@ -35,6 +39,7 @@ class StoreImpl(
         newFileSettings = newFileSettings,
         fileHeaderCache = fileHeaderCache,
         getSmallestOpenReadTSN = getSmallestOpenReadTSN,
+        initialStoreMetadata = initialStoreMetadata,
     )
 
     override val highWatermarkTSN: TSN?
@@ -42,7 +47,7 @@ class StoreImpl(
 
     override val lowWatermarkTSN: TSN?
         get() {
-            if(!this.hasInMemoryChanges()){
+            if (!this.hasInMemoryChanges()) {
                 // we have no in-memory changes, therefore ALL data belonging
                 // to this store has been persisted. We have nothing to
                 // contribute to the low watermark.

@@ -1,6 +1,7 @@
 package org.chronos.chronostore.lsm.compaction.strategy
 
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor
+import org.chronos.chronostore.util.StoreId
 
 interface MergeService {
 
@@ -23,5 +24,13 @@ interface MergeService {
     fun performMinorCompaction(taskMonitor: TaskMonitor = TaskMonitor.create())
 
     fun flushAllInMemoryStoresToDisk(taskMonitor: TaskMonitor = TaskMonitor.create())
+
+    fun flushInMemoryStoreToDisk(storeId: String, taskMonitor: TaskMonitor = TaskMonitor.create()){
+        return this.flushInMemoryStoreToDisk(StoreId.of(storeId), taskMonitor)
+    }
+
+    fun flushInMemoryStoreToDisk(storeId: StoreId, taskMonitor: TaskMonitor = TaskMonitor.create())
+
+
 
 }

@@ -29,7 +29,7 @@ interface ChronoStore : AutoCloseable {
         }
 
         @JvmStatic
-        fun openOnVirtualFileSystem(vfs: VirtualFileSystem, configuration: ChronoStoreConfiguration): ChronoStore {
+        fun openOnVirtualFileSystem(vfs: VirtualFileSystem, configuration: ChronoStoreConfiguration = ChronoStoreConfiguration()): ChronoStore {
             return ChronoStoreImpl(vfs, configuration)
         }
 

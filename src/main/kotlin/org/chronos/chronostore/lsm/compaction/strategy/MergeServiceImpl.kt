@@ -9,6 +9,8 @@ import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.forEachWi
 import org.chronos.chronostore.lsm.compaction.tasks.CompactionTask
 import org.chronos.chronostore.lsm.compaction.tasks.FlushInMemoryTreeToDiskTask
 import org.chronos.chronostore.manifest.ManifestFile
+import org.chronos.chronostore.util.StoreId
+import java.lang.IllegalArgumentException
 
 class MergeServiceImpl(
     private val taskManager: AsyncTaskManager,
@@ -52,6 +54,13 @@ class MergeServiceImpl(
             task.run(subTaskMonitor)
         }
         taskMonitor.reportDone()
+    }
+
+    override fun flushInMemoryStoreToDisk(storeId: StoreId, taskMonitor: TaskMonitor) {
+        val lsmTree = this.storeManager.getAllLsmTrees().singleOrNull { it.storeId == storeId }
+            ?: throw IllegalArgumentException("There is no store with ID '${storeId}'!")
+        val task = FlushInMemoryTreeToDiskTask(lsmTree, this.manifestFile)
+        task.run(taskMonitor)
     }
 
     private fun warnAboutCompactionDisabled() {

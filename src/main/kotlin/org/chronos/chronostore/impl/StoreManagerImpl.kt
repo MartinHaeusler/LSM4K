@@ -66,10 +66,10 @@ class StoreManagerImpl(
                 log.info { "Opening an existing database in '${this.vfs.rootPath}'." }
                 // read the store infos from the JSON file
                 val manifest = this.manifestFile.getManifest()
-                for (storeInfo in manifest.storeInfos) {
-                    val storeId = storeInfo.storeId
+                for(storeMetadata in manifest.stores.values){
+                    val storeId = storeMetadata.storeId
                     val storeDirectory = getStoreDirectory(storeId)
-                    val store = createStore(storeInfo, storeDirectory)
+                    val store = createStore(storeMetadata, storeDirectory)
                     this.registerStoreInCaches(store)
                 }
             }
@@ -96,16 +96,12 @@ class StoreManagerImpl(
         }
     }
 
-    private fun createStore(storeInfo: StoreInfo, directory: VirtualDirectory): StoreImpl {
-        val storeId = storeInfo.storeId
+    private fun createStore(storeMetadata: StoreMetadata, directory: VirtualDirectory): StoreImpl {
         return StoreImpl(
-            storeId = storeId,
-            validFromTSN = storeInfo.validFromTSN,
-            validToTSN = storeInfo.validToTSN,
-            createdByTransactionId = storeInfo.createdByTransactionId,
+            initialStoreMetadata = storeMetadata,
             directory = directory,
             forest = this.forest,
-            blockCache = this.blockCacheManager.getBlockCache(storeId),
+            blockCache = this.blockCacheManager.getBlockCache(storeMetadata.storeId),
             fileHeaderCache = this.fileHeaderCache,
             driverFactory = this.driverFactory,
             newFileSettings = this.newFileSettings,
@@ -179,16 +175,15 @@ class StoreManagerImpl(
 
         // first, write the store info into our JSON file. This will ensure that
         // the store still exists upon the next database restart.
-        this.manifestFile.appendCreateStoreOperation(
-            StoreMetadata(
-                info = newStoreInfo,
-                lsmFiles = TreePMap.empty(),
-                compactionStrategy = compactionStrategy ?: this.configuration.defaultCompactionStrategy,
-            )
+        val newStoreMetadata = StoreMetadata(
+            info = newStoreInfo,
+            lsmFiles = TreePMap.empty(),
+            compactionStrategy = compactionStrategy ?: this.configuration.defaultCompactionStrategy,
         )
+        this.manifestFile.appendCreateStoreOperation(newStoreMetadata)
 
         // then, create the store object itself
-        val store = createStore(newStoreInfo, directory)
+        val store = createStore(newStoreMetadata, directory)
         this.registerStoreInCaches(store)
         return store
     }
