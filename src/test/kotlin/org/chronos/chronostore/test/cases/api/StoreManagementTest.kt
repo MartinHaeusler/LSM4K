@@ -18,6 +18,7 @@ import org.chronos.chronostore.util.StoreId
 import org.chronos.chronostore.util.bytes.BasicBytes
 import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.unit.BinarySize.Companion.GiB
+import org.chronos.chronostore.util.unit.BinarySize.Companion.MiB
 import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.fail
 import strikt.api.expect
@@ -212,6 +213,64 @@ class StoreManagementTest {
             c2.close()
             tx2.close()
         }
+    }
+
+    @ChronoStoreTest
+    fun compactionDoesNotAffectRepeatableReads(mode: ChronoStoreMode){
+        val config = ChronoStoreConfiguration(
+            // disable auto-compaction, we will compact manually
+            compactionInterval = null,
+        )
+
+        mode.withChronoStore(config) { chronoStore ->
+            chronoStore.transaction { tx ->
+                tx.createNewStore("test")
+                tx.commit()
+            }
+            // write some data, flush after every transaction
+            repeat(10){ txIndex ->
+                chronoStore.transaction { tx ->
+                    val store = tx.getStore("test")
+                    repeat(1000){ i ->
+                        store.put("key#${i}", "value#${i}@${txIndex}")
+                    }
+                    tx.commit()
+                }
+                chronoStore.mergeService.flushAllInMemoryStoresToDisk()
+            }
+
+            // now we should have 10 files on disk.
+            chronoStore.transaction { readTx ->
+                // grab all the latest entries from the store
+                val entryMap = readTx.getStore("test").withCursor { cursor ->
+                    cursor.firstOrThrow()
+                    cursor.ascendingEntrySequenceFromHere().toMap()
+                }
+
+                // have a parallel transaction commit newer data
+                chronoStore.transaction { writeTx ->
+                    val store = writeTx.getStore("test")
+                    repeat(1000){ i ->
+                        store.put("key#${i}", "value#${i}@${11}")
+                    }
+                    writeTx.commit()
+                }
+
+                chronoStore.mergeService.flushAllInMemoryStoresToDisk()
+
+                chronoStore.mergeService.performMajorCompaction()
+
+                // grab the entries again on our still-open transaction
+                val entryMap2 = readTx.getStore("test").withCursor { cursor ->
+                    cursor.firstOrThrow()
+                    cursor.ascendingEntrySequenceFromHere().toMap()
+                }
+
+                // ensure that repeatable reads isolation was not violated
+                expectThat(entryMap.entries).containsExactlyInAnyOrder(entryMap2.entries)
+            }
+        }
+
     }
 
     @ChronoStoreTest

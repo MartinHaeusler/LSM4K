@@ -385,8 +385,10 @@ class LSMTree(
     }
 
     fun mergeFiles(fileIndices: Set<Int>, keepTombstones: Boolean, trigger: CompactionTrigger, monitor: TaskMonitor, updateManifest: (FileIndex) -> Unit): FileIndex? {
-        log.debug { "TASK: merge files due to trigger ${trigger}: ${fileIndices.sorted().joinToString(prefix = "[", separator = ", ", postfix = "]")}" }
+        log.debug { "TASK [${this.storeId}] merge files due to trigger ${trigger}: ${fileIndices.sorted().joinToString(prefix = "[", separator = ", ", postfix = "]")}" }
+        // TODO [CORRECTNESS]: selecting the files to compact would actually also need to happen within the tree lock. Otherwise we may end up picking files for compaction which don't exist anymore.
         this.performAsyncWriteTask(monitor) {
+            val timeBefore = System.currentTimeMillis()
             monitor.reportStarted("Merging ${fileIndices.size} files")
             val filesToMerge = this.getFilesToMerge(fileIndices)
 
@@ -440,6 +442,8 @@ class LSMTree(
                 this.performGarbageCollection(TaskMonitor.create())
             }
 
+            val timeAfter = System.currentTimeMillis()
+            log.debug { "TASK [${this.storeId}] merge files due to trigger ${trigger} completed in ${timeAfter - timeBefore}ms." }
             return targetFileIndex
         }
     }
