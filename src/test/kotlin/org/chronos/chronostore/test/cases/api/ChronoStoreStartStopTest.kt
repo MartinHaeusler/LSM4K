@@ -4,6 +4,8 @@ import org.chronos.chronostore.api.ChronoStore
 import org.chronos.chronostore.api.ChronoStoreConfiguration
 import org.chronos.chronostore.api.exceptions.FileMissingException
 import org.chronos.chronostore.impl.ChronoStoreImpl
+import org.chronos.chronostore.test.extensions.ChronoStoreTestExtensions.flush
+import org.chronos.chronostore.test.extensions.ChronoStoreTestExtensions.flushAll
 import org.chronos.chronostore.test.extensions.transaction.ChronoStoreTransactionTestExtensions.put
 import org.chronos.chronostore.test.util.ChronoStoreMode
 import org.chronos.chronostore.test.util.ChronoStoreTest
@@ -52,7 +54,7 @@ class ChronoStoreStartStopTest {
                 }
 
                 // flush "foo", leave "bar" and "empty" alone
-                (chronoStore as ChronoStoreImpl).mergeService.flushInMemoryStoreToDisk("foo")
+                chronoStore.flush("foo")
             }
 
             // reopen the chronostore instance on the same data and check that
@@ -107,7 +109,7 @@ class ChronoStoreStartStopTest {
                     tx.commit()
                 }
 
-                (chronoStore as ChronoStoreImpl).mergeService.flushAllInMemoryStoresToDisk()
+                chronoStore.flushAll()
             }
 
             // delete the file in "foo"
@@ -122,7 +124,38 @@ class ChronoStoreStartStopTest {
                     contains("0000000000.chronostore")
                 }
             }
+        }
+    }
 
+    @VirtualFileSystemTest
+    fun canDetectAndDeleteSuperfluousFilesDuringStartup(mode: VFSMode){
+        mode.withVFS { vfs ->
+            // open chronostore, add some data
+            ChronoStore.openOnVirtualFileSystem(vfs).use { chronoStore ->
+                chronoStore.transaction { tx ->
+                    tx.createNewStore("foo")
+                    tx.commit()
+                }
+
+                chronoStore.transaction { tx ->
+                    val foo = tx.getStore("foo")
+                    foo.put("a", "1")
+                    foo.put("b", "2")
+                    foo.put("c", "3")
+
+                    tx.commit()
+                }
+
+                chronoStore.flushAll()
+            }
+
+            // delete the file in "foo"
+            vfs.directory("foo").file("0000000001.chronostore").create()
+
+            // attempt to restart chronostore and make sure that the extra file gets deleted
+            ChronoStore.openOnVirtualFileSystem(vfs).close()
+
+            expectThat(vfs.directory("foo").file("0000000001.chronostore").exists()).isFalse()
         }
     }
 }

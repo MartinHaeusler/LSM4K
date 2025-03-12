@@ -79,23 +79,18 @@ class LSMTree(
         if (!this.directory.exists()) {
             this.directory.mkdirs()
         }
-        val existingFiles = loadFilesAndSyncWithStoreMetadata(initialStoreMetadata)
-
+        loadFilesAndSyncWithStoreMetadata(initialStoreMetadata)
+        val existingFiles = this.loadFileList()
         this.fileList = existingFiles
         this.nextFreeFileIndex.set(getNextFreeFileIndex(this.fileList))
         forest.addTree(this)
     }
 
-    private fun loadFilesAndSyncWithStoreMetadata(initialStoreMetadata: StoreMetadata): MutableList<LSMTreeFile> {
-        val existingFiles = this.loadFileList()
+    private fun loadFilesAndSyncWithStoreMetadata(initialStoreMetadata: StoreMetadata) {
+        val existingFileIndices = this.loadFileIndices()
         val filesAccordingToManifest = initialStoreMetadata.lsmFiles.keys
-        this.deleteGarbageFilesOnStoreCreation(existingFiles, filesAccordingToManifest)
-        val existingFileIndices = existingFiles.asSequence()
-            .map { it.index }
-            .toSet()
-
+        this.deleteGarbageFilesOnStoreCreation(existingFileIndices, filesAccordingToManifest)
         this.checkForMissingFiles(filesAccordingToManifest, existingFileIndices)
-        return existingFiles
     }
 
     private fun checkForMissingFiles(
@@ -113,22 +108,31 @@ class LSMTree(
     }
 
     private fun deleteGarbageFilesOnStoreCreation(
-        existingFiles: MutableList<LSMTreeFile>,
+        existingFileIndices: MutableSet<FileIndex>,
         filesAccordingToManifest: MutableSet<FileIndex>,
     ) {
-        val fileIterator = existingFiles.iterator()
-        while (fileIterator.hasNext()) {
-            val existingFile = fileIterator.next()
-            if (existingFile.index in filesAccordingToManifest) {
+        val fileIndexIterator = existingFileIndices.iterator()
+        while (fileIndexIterator.hasNext()) {
+            val existingFileIndex = fileIndexIterator.next()
+            if (existingFileIndex in filesAccordingToManifest) {
                 // this file is expected, keep it.
                 continue
             }
             // this file is garbage and needs to be removed.
-            val readWriteFile = existingFile.virtualFile as VirtualReadWriteFile
-            readWriteFile.deleteOverWriterFileIfExists()
-            readWriteFile.delete()
-            fileIterator.remove()
+            val file = this.directory.file(this.createFileNameForIndex(existingFileIndex))
+            file.deleteOverWriterFileIfExists()
+            file.delete()
+            fileIndexIterator.remove()
         }
+    }
+
+    private fun loadFileIndices(): MutableSet<FileIndex> {
+        return directory.list()
+            .asSequence()
+            .map { it.substringAfterLast(File.separatorChar) }
+            .filter { it.endsWith(FILE_EXTENSION) }
+            .mapNotNull(::parseFileIndexOrNull)
+            .toMutableSet()
     }
 
     private fun loadFileList(): MutableList<LSMTreeFile> {
@@ -168,6 +172,10 @@ class LSMTree(
     private fun createLsmTreeFileOrNull(file: VirtualFile): LSMTreeFile? {
         val index = this.parseFileIndexOrNull(file.name)
             ?: return null
+
+        if (file.length <= 12) {
+            return null
+        }
 
         return LSMTreeFile(
             virtualFile = file,
