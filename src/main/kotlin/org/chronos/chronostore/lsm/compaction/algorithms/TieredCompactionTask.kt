@@ -2,6 +2,7 @@ package org.chronos.chronostore.lsm.compaction.algorithms
 
 import org.chronos.chronostore.api.compaction.TieredCompactionStrategy
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor
+import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.mainTask
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.subTask
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.subTaskWithMonitor
 import org.chronos.chronostore.lsm.compaction.model.CompactableStore
@@ -10,6 +11,7 @@ import org.chronos.chronostore.manifest.ManifestFile
 import org.chronos.chronostore.manifest.operations.TieredCompactionOperation
 import org.chronos.chronostore.util.GroupingExtensions.toSets
 import org.chronos.chronostore.util.TierIndex
+import java.awt.MouseInfo
 
 class TieredCompactionTask(
     val manifestFile: ManifestFile,
@@ -33,8 +35,7 @@ class TieredCompactionTask(
     }
 
 
-    fun runCompaction(monitor: TaskMonitor) {
-        monitor.reportStarted("Executing Tiered Compaction")
+    fun runCompaction(monitor: TaskMonitor) = monitor.mainTask("Executing Tiered Compaction") {
         ensureExecutableOnlyOnce()
         // verify that we have enough files on disk to make the operation worth the effort.
         // If that's not the case, we exit out immediately.
@@ -76,7 +77,6 @@ class TieredCompactionTask(
                 }
             )
         }
-        monitor.reportDone()
     }
 
     private fun ensureExecutableOnlyOnce() {

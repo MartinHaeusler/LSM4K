@@ -2,6 +2,7 @@ package org.chronos.chronostore.lsm.compaction.tasks
 
 import org.chronos.chronostore.api.StoreManager
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor
+import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.mainTask
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.subTask
 import org.chronos.chronostore.async.tasks.AsyncTask
 import org.chronos.chronostore.checkpoint.CheckpointData
@@ -17,8 +18,7 @@ class CheckpointTask(
     override val name: String
         get() = "Checkpoint"
 
-    override fun run(monitor: TaskMonitor) {
-        monitor.reportStarted("WAL Compaction")
+    override fun run(monitor: TaskMonitor) = monitor.mainTask("WAL Compaction") {
         // first, attempt to shorten the WAL by dropping all files that are no longer needed.
         monitor.subTask(0.7, "Shortening Write-Ahead-Log") {
             if (this.writeAheadLog.needsToBeShortened()) {
@@ -33,7 +33,6 @@ class CheckpointTask(
         monitor.subTask(0.3, "Generating Checksums for Write-Ahead-Log files") {
             this.writeAheadLog.generateChecksumsForCompletedFiles()
         }
-        monitor.reportDone()
     }
 
 }

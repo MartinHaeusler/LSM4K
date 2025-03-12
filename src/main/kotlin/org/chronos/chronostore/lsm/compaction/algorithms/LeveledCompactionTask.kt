@@ -3,6 +3,7 @@ package org.chronos.chronostore.lsm.compaction.algorithms
 import com.google.common.annotations.VisibleForTesting
 import org.chronos.chronostore.api.compaction.LeveledCompactionStrategy
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor
+import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.mainTask
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.subTask
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.subTaskWithMonitor
 import org.chronos.chronostore.lsm.compaction.model.CompactableStore
@@ -111,8 +112,7 @@ class LeveledCompactionTask(
 
     }
 
-    fun runCompaction(monitor: TaskMonitor) {
-        monitor.reportStarted("Executing Leveled Compaction")
+    fun runCompaction(monitor: TaskMonitor)  = monitor.mainTask("Executing Leveled Compaction") {
         val storeMetadata = this.store.metadata
         val realLevelSizes = monitor.subTask(0.1, "Collecting current disk footprints") {
             this.getOnDiskSizesOfLevels(storeMetadata)
@@ -151,8 +151,6 @@ class LeveledCompactionTask(
             }
             return
         }
-
-        monitor.reportDone()
     }
 
     private fun compactBasedOnTargetSizeRatio(

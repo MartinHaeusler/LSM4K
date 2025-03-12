@@ -6,13 +6,13 @@ import org.chronos.chronostore.api.exceptions.FileMissingException
 import org.chronos.chronostore.api.exceptions.FlushException
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.forEach
+import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.mainTask
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.subTask
 import org.chronos.chronostore.io.fileaccess.RandomFileAccessDriverFactory
 import org.chronos.chronostore.io.format.ChronoStoreFileSettings
 import org.chronos.chronostore.io.format.ChronoStoreFileWriter
 import org.chronos.chronostore.io.vfs.VirtualDirectory
 import org.chronos.chronostore.io.vfs.VirtualFile
-import org.chronos.chronostore.io.vfs.VirtualReadWriteFile
 import org.chronos.chronostore.io.vfs.VirtualReadWriteFile.Companion.withOverWriter
 import org.chronos.chronostore.lsm.LSMTreeFile.Companion.FILE_EXTENSION
 import org.chronos.chronostore.lsm.cache.FileHeaderCache
@@ -172,10 +172,6 @@ class LSMTree(
     private fun createLsmTreeFileOrNull(file: VirtualFile): LSMTreeFile? {
         val index = this.parseFileIndexOrNull(file.name)
             ?: return null
-
-        if (file.length <= 12) {
-            return null
-        }
 
         return LSMTreeFile(
             virtualFile = file,
@@ -421,8 +417,7 @@ class LSMTree(
         }
     }
 
-    fun performGarbageCollection(taskMonitor: TaskMonitor) {
-        taskMonitor.reportStarted("Collecting Garbage in '${this.path}'")
+    fun performGarbageCollection(taskMonitor: TaskMonitor) = taskMonitor.mainTask("Collecting Garbage in '${this.path}'") {
         val deleted = mutableSetOf<String>()
         taskMonitor.forEach(1.0, "Deleting old files", this.garbageFileManager.garbageFiles.toList()) { fileName ->
             if (this.cursorManager.hasOpenCursorOnFile(fileName)) {
@@ -439,70 +434,69 @@ class LSMTree(
         }
         // remember that we deleted these files and don't need to try that again.
         this.garbageFileManager.removeAll(deleted)
-        taskMonitor.reportDone()
     }
 
     fun mergeFiles(fileIndices: Set<Int>, keepTombstones: Boolean, trigger: CompactionTrigger, monitor: TaskMonitor, updateManifest: (FileIndex) -> Unit): FileIndex? {
         log.debug { "TASK [${this.storeId}] merge files due to trigger ${trigger}: ${fileIndices.sorted().joinToString(prefix = "[", separator = ", ", postfix = "]")}" }
         // TODO [CORRECTNESS]: selecting the files to compact would actually also need to happen within the tree lock. Otherwise we may end up picking files for compaction which don't exist anymore.
         this.performAsyncWriteTask(monitor) {
-            val timeBefore = System.currentTimeMillis()
-            monitor.reportStarted("Merging ${fileIndices.size} files")
-            val filesToMerge = this.getFilesToMerge(fileIndices)
+            monitor.mainTask("Merging ${fileIndices.size} files") {
+                val timeBefore = System.currentTimeMillis()
+                val filesToMerge = this.getFilesToMerge(fileIndices)
 
-            if (filesToMerge.size < 2) {
-                monitor.reportDone()
-                return null
-            }
-            // get the file index we're going to use (nobody else will get the same index, because of the AtomicInteger used here)
-            val targetFileIndex = this.nextFreeFileIndex.getAndIncrement()
-
-            // this is the file we're going to write to
-            val targetFile = this.directory.file(this.createFileNameForIndex(targetFileIndex))
-            val maxNumberOfMergesInInputFiles = filesToMerge.maxOfOrNull {
-                it.header.metaData.numberOfMerges
-            } ?: 0
-
-            targetFile.deleteOverWriterFileIfExists()
-            targetFile.createOverWriter().use { overWriter ->
-                val totalEntries = filesToMerge.sumOf { it.header.metaData.totalEntries }
-                val cursors = filesToMerge.map { it.cursor() }
-                try {
-                    ChronoStoreFileWriter(
-                        outputStream = overWriter.outputStream,
-                        settings = this.newFileSettings,
-                    ).use { writer ->
-                        CompactionUtil.compact(
-                            cursors = cursors,
-                            writer = writer,
-                            maxNumberOfMergesInInputFiles = maxNumberOfMergesInInputFiles,
-                            resultingCommandCountEstimate = totalEntries,
-                            keepTombstones = keepTombstones,
-                            smallestReadTSN = this.getSmallestOpenReadTSN(),
-                        )
-                    }
-                } finally {
-                    for (cursor in cursors) {
-                        cursor.close()
-                    }
+                if (filesToMerge.size < 2) {
+                    return null
                 }
-                // prepare the new LSM file outside the lock (we don't need the lock, and opening the file can take a few seconds)
-                val mergedLsmTreeFile = this.createLsmTreeFile(targetFile)
-                this.lock.write {
-                    overWriter.commit()
-                    updateManifest(targetFileIndex)
-                    this.garbageFileManager.addAll(filesToMerge.map { it.virtualFile.name })
-                    this.fileList.removeAll(filesToMerge.toSet())
-                    this.fileList.add(mergedLsmTreeFile)
+                // get the file index we're going to use (nobody else will get the same index, because of the AtomicInteger used here)
+                val targetFileIndex = this.nextFreeFileIndex.getAndIncrement()
+
+                // this is the file we're going to write to
+                val targetFile = this.directory.file(this.createFileNameForIndex(targetFileIndex))
+                val maxNumberOfMergesInInputFiles = filesToMerge.maxOfOrNull {
+                    it.header.metaData.numberOfMerges
+                } ?: 0
+
+                targetFile.deleteOverWriterFileIfExists()
+                targetFile.createOverWriter().use { overWriter ->
+                    val totalEntries = filesToMerge.sumOf { it.header.metaData.totalEntries }
+                    val cursors = filesToMerge.map { it.cursor() }
+                    try {
+                        ChronoStoreFileWriter(
+                            outputStream = overWriter.outputStream,
+                            settings = this.newFileSettings,
+                        ).use { writer ->
+                            CompactionUtil.compact(
+                                cursors = cursors,
+                                writer = writer,
+                                maxNumberOfMergesInInputFiles = maxNumberOfMergesInInputFiles,
+                                resultingCommandCountEstimate = totalEntries,
+                                keepTombstones = keepTombstones,
+                                smallestReadTSN = this.getSmallestOpenReadTSN(),
+                            )
+                        }
+                    } finally {
+                        for (cursor in cursors) {
+                            cursor.close()
+                        }
+                    }
+                    // prepare the new LSM file outside the lock (we don't need the lock, and opening the file can take a few seconds)
+                    val mergedLsmTreeFile = this.createLsmTreeFile(targetFile)
+                    this.lock.write {
+                        overWriter.commit()
+                        updateManifest(targetFileIndex)
+                        this.garbageFileManager.addAll(filesToMerge.map { it.virtualFile.name })
+                        this.fileList.removeAll(filesToMerge.toSet())
+                        this.fileList.add(mergedLsmTreeFile)
+                    }
+
+                    // perform garbage collection in an attempt to free disk space
+                    this.performGarbageCollection(TaskMonitor.create())
                 }
 
-                // perform garbage collection in an attempt to free disk space
-                this.performGarbageCollection(TaskMonitor.create())
+                val timeAfter = System.currentTimeMillis()
+                log.debug { "TASK [${this.storeId}] merge files due to trigger ${trigger} completed in ${timeAfter - timeBefore}ms." }
+                return targetFileIndex
             }
-
-            val timeAfter = System.currentTimeMillis()
-            log.debug { "TASK [${this.storeId}] merge files due to trigger ${trigger} completed in ${timeAfter - timeBefore}ms." }
-            return targetFileIndex
         }
     }
 

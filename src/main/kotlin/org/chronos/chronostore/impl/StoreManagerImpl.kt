@@ -5,6 +5,7 @@ import org.chronos.chronostore.api.*
 import org.chronos.chronostore.api.compaction.CompactionStrategy
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.forEachWithMonitor
+import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.mainTask
 import org.chronos.chronostore.impl.store.StoreImpl
 import org.chronos.chronostore.io.fileaccess.RandomFileAccessDriverFactory
 import org.chronos.chronostore.io.format.ChronoStoreFileSettings
@@ -35,7 +36,7 @@ class StoreManagerImpl(
     private val newFileSettings: ChronoStoreFileSettings,
     private val configuration: ChronoStoreConfiguration,
     private val manifestFile: ManifestFile,
-    private val getSmallestOpenReadTSN: () -> TSN?
+    private val getSmallestOpenReadTSN: () -> TSN?,
 ) : StoreManager, AutoCloseable {
 
     companion object {
@@ -66,7 +67,7 @@ class StoreManagerImpl(
                 log.info { "Opening an existing database in '${this.vfs.rootPath}'." }
                 // read the store infos from the JSON file
                 val manifest = this.manifestFile.getManifest()
-                for(storeMetadata in manifest.stores.values){
+                for (storeMetadata in manifest.stores.values) {
                     val storeId = storeMetadata.storeId
                     val storeDirectory = getStoreDirectory(storeId)
                     val store = createStore(storeMetadata, storeDirectory)
@@ -262,10 +263,8 @@ class StoreManagerImpl(
         return this.getAllStoresInternal().filter { it.isVisibleFor(transaction) }
     }
 
-    override fun performGarbageCollection(monitor: TaskMonitor) {
-        monitor.reportStarted("Performing LSM Garbage Collection")
+    override fun performGarbageCollection(monitor: TaskMonitor) = monitor.mainTask("Perform LSM Garbage Collection") {
         if (!this.isOpen) {
-            monitor.reportDone()
             return
         }
         this.storeManagementLock.read {
@@ -274,7 +273,6 @@ class StoreManagerImpl(
                 store.tree.performGarbageCollection(taskMonitor)
             }
         }
-        monitor.reportDone()
     }
 
     override fun getHighWatermarkTSN(): TSN {

@@ -2,6 +2,7 @@ package org.chronos.chronostore.lsm.compaction.tasks
 
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor
+import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.mainTask
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.subTask
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.subTaskWithMonitor
 import org.chronos.chronostore.async.tasks.AsyncTask
@@ -31,8 +32,7 @@ class FlushInMemoryTreeToDiskTask(
     override val name: String
         get() = "Flushing LSM Tree to Disk [${this.index}]: ${lsmTree.path}"
 
-    override fun run(monitor: TaskMonitor) {
-        monitor.reportStarted(this.name)
+    override fun run(monitor: TaskMonitor)  = monitor.mainTask(this.name) {
         log.ioDebug { "FLUSH TASK [${this.index}] START on ${this.lsmTree}" }
         val flushResult = monitor.subTaskWithMonitor(0.95) { subMonitor ->
             lsmTree.flushInMemoryDataToDisk(
@@ -47,7 +47,6 @@ class FlushInMemoryTreeToDiskTask(
         }
         logTaskResult(flushResult)
         updateStatistics(flushResult)
-        monitor.reportDone()
     }
 
 

@@ -122,6 +122,55 @@ interface TaskMonitor {
             }
         }
 
+        inline fun TaskMonitor.onSuccess(crossinline action: () -> Unit): TaskMonitor {
+            this.addListener(object : TaskMonitorListener {
+
+                override fun handleDone(sourceMonitor: TaskMonitor) {
+                    action()
+                }
+
+            })
+
+            return this
+        }
+
+        inline fun TaskMonitor.onFailure(crossinline action: () -> Unit): TaskMonitor {
+            this.addListener(object : TaskMonitorListener {
+
+                override fun handleFailed(sourceMonitor: TaskMonitor, message: String, cause: Throwable?) {
+                    action()
+                }
+
+            })
+
+            return this
+        }
+
+        inline fun TaskMonitor.onExit(crossinline action: ()->Unit): TaskMonitor {
+            this.addListener(object : TaskMonitorListener{
+                private var called = false
+
+                override fun handleDone(sourceMonitor: TaskMonitor) {
+                    if(this.called){
+                        return
+                    }
+                    this.called = true
+                    action()
+                }
+
+                override fun handleFailed(sourceMonitor: TaskMonitor, message: String, cause: Throwable?) {
+                    if(this.called){
+                        return
+                    }
+                    this.called = true
+                    action()
+                }
+
+            })
+
+            return this
+        }
+
     }
 
     fun reportStarted(taskName: String)
@@ -186,7 +235,7 @@ interface TaskMonitor {
         val progress: Double,
         val taskNames: List<String>,
         val failureMessage: String?,
-        val failureCause: Throwable?
+        val failureCause: Throwable?,
     )
 
 }

@@ -5,6 +5,7 @@ import org.chronos.chronostore.api.compaction.LeveledCompactionStrategy
 import org.chronos.chronostore.api.compaction.TieredCompactionStrategy
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.forEachWithMonitor
+import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.mainTask
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.subTaskWithMonitor
 import org.chronos.chronostore.async.tasks.AsyncTask
 import org.chronos.chronostore.impl.StoreManagerImpl
@@ -45,10 +46,11 @@ class CompactionTask(
 
     private fun runInternal(monitor: TaskMonitor, major: Boolean) {
         this.lock.withLock {
-            monitor.reportStarted("Compacting ChronoStore")
-            val allStores = (this.storeManager as StoreManagerImpl).getAllStoresInternal()
-            monitor.forEachWithMonitor(1.0, "Compacting Store", allStores) { taskMonitor, store ->
-                mergeFilesIn(store as StoreImpl, major, taskMonitor)
+            monitor.mainTask("Compacting ChronoStore"){
+                val allStores = (this.storeManager as StoreManagerImpl).getAllStoresInternal()
+                monitor.forEachWithMonitor(1.0, "Compacting Store", allStores) { taskMonitor, store ->
+                    mergeFilesIn(store as StoreImpl, major, taskMonitor)
+                }
             }
         }
     }
@@ -59,12 +61,13 @@ class CompactionTask(
         } else {
             "(Minor Compaction)"
         }
-        monitor.reportStarted("Compacting Store '${store.storeId}' ${compactionNote}")
-        monitor.subTaskWithMonitor(1.0) { subMonitor ->
-            if (major) {
-                this.performMajorCompaction(store, subMonitor)
-            } else {
-                this.performMinorCompaction(store, subMonitor)
+        monitor.mainTask("Compacting Store '${store.storeId}' ${compactionNote}"){
+            monitor.subTaskWithMonitor(1.0) { subMonitor ->
+                if (major) {
+                    this.performMajorCompaction(store, subMonitor)
+                } else {
+                    this.performMinorCompaction(store, subMonitor)
+                }
             }
         }
     }
