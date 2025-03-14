@@ -2,12 +2,15 @@ package org.chronos.chronostore.lsm
 
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.chronos.chronostore.api.ChronoStoreTransaction
+import org.chronos.chronostore.api.compaction.LeveledCompactionStrategy
+import org.chronos.chronostore.api.compaction.TieredCompactionStrategy
 import org.chronos.chronostore.api.exceptions.FileMissingException
 import org.chronos.chronostore.api.exceptions.FlushException
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.forEach
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.mainTask
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.subTask
+import org.chronos.chronostore.async.tasks.CompletableAsyncTask
 import org.chronos.chronostore.io.fileaccess.RandomFileAccessDriverFactory
 import org.chronos.chronostore.io.format.ChronoStoreFileSettings
 import org.chronos.chronostore.io.format.ChronoStoreFileWriter
@@ -18,19 +21,31 @@ import org.chronos.chronostore.lsm.LSMTreeFile.Companion.FILE_EXTENSION
 import org.chronos.chronostore.lsm.cache.FileHeaderCache
 import org.chronos.chronostore.lsm.cache.LocalBlockCache
 import org.chronos.chronostore.lsm.compaction.algorithms.CompactionTrigger
+import org.chronos.chronostore.lsm.compaction.tasks.FlushInMemoryTreeToDiskTask
+import org.chronos.chronostore.lsm.compaction.tasks.SingleStoreMajorCompactionTask
+import org.chronos.chronostore.lsm.compaction.tasks.SingleStoreMinorCompactionTask
+import org.chronos.chronostore.manifest.ManifestFile
 import org.chronos.chronostore.manifest.StoreMetadata
+import org.chronos.chronostore.manifest.operations.CompactionOperation
+import org.chronos.chronostore.manifest.operations.FullCompactionOperation
+import org.chronos.chronostore.manifest.operations.LeveledCompactionOperation
+import org.chronos.chronostore.manifest.operations.TieredCompactionOperation
 import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.model.command.KeyAndTSN
 import org.chronos.chronostore.util.FileIndex
+import org.chronos.chronostore.util.GroupingExtensions.toSets
 import org.chronos.chronostore.util.StoreId
 import org.chronos.chronostore.util.TSN
 import org.chronos.chronostore.util.bytes.Bytes
+import org.chronos.chronostore.util.concurrent.TaskQueue
 import org.chronos.chronostore.util.cursor.*
 import org.chronos.chronostore.util.logging.LogExtensions.perfTrace
 import org.chronos.chronostore.util.unit.BinarySize
 import org.chronos.chronostore.util.unit.BinarySize.Companion.Bytes
 import org.pcollections.TreePMap
 import java.io.File
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.Executor
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.locks.ReentrantReadWriteLock
@@ -42,6 +57,9 @@ class LSMTree(
     val storeId: StoreId,
     initialStoreMetadata: StoreMetadata,
     private val forest: LSMForestMemoryManager,
+    compactionExecutor: Executor,
+    memtableFlushExecutor: Executor,
+    private val manifestFile: ManifestFile,
     private val directory: VirtualDirectory,
     private val blockCache: LocalBlockCache,
     private val fileHeaderCache: FileHeaderCache,
@@ -68,12 +86,8 @@ class LSMTree(
     private val cursorManager = CursorManager()
     private val garbageFileManager = GarbageFileManager()
 
-    private val activeTaskLock = ReentrantReadWriteLock(true)
-    private val activeTaskCondition = activeTaskLock.writeLock().newCondition()
-
-    @Volatile
-    private var activeTaskMonitor: TaskMonitor? = null
-
+    private val compactionTaskQueue = TaskQueue(compactionExecutor)
+    private val flushTaskQueue = TaskQueue(memtableFlushExecutor)
 
     init {
         if (!this.directory.exists()) {
@@ -344,76 +358,95 @@ class LSMTree(
             .maxOrNull() ?: -1
     }
 
+    fun scheduleMajorCompaction(): CompletableFuture<*> {
+        // when we do a major compaction anyway, all open minor compaction tasks become useless
+        // because their results will be superseded by the major compaction anyway. Remove them from the queue.
+        this.compactionTaskQueue.cancelWaitingTasksIf { it is SingleStoreMinorCompactionTask }
+        return this.compactionTaskQueue.schedule(SingleStoreMajorCompactionTask(this, this.manifestFile))
+    }
+
+    fun scheduleMinorCompaction(): CompletableFuture<*> {
+        return this.compactionTaskQueue.schedule(SingleStoreMinorCompactionTask(this))
+    }
+
+    fun scheduleMemtableFlush(): CompletableFuture<*> {
+        val completableTask = CompletableAsyncTask(FlushInMemoryTreeToDiskTask(this))
+        this.flushTaskQueue.schedule(completableTask)
+        return completableTask.future
+    }
+
     fun flushInMemoryDataToDisk(minFlushSize: BinarySize, monitor: TaskMonitor): FlushResult? {
         log.perfTrace { "TASK: Flush in-memory data to disk" }
-        this.performAsyncWriteTask(monitor) {
-            try {
-                val timeBefore = System.currentTimeMillis()
-                monitor.reportStarted("Flushing Data to Disk")
-                if (this.inMemoryTree.isEmpty() || this.inMemorySize < minFlushSize) {
-                    // flush not necessary
-                    monitor.reportDone()
-                    return null
-                }
-                log.perfTrace { "Flushing LSM Tree '${this.directory}'!" }
-                val commands = monitor.subTask(0.1, "Collecting Entries to flush") {
-                    // [C0001]: We *must* take *all* of the commits in the in-memory tree
-                    // and flush them to avoid writing SST files with partial transactions in them.
-                    this.inMemoryTree
-                }
-                val newFileIndex = this.nextFreeFileIndex.getAndIncrement()
-                log.perfTrace { "Target file index ${newFileIndex} will be used for flush of tree ${this.path}" }
-                val file = this.directory.file(this.createFileNameForIndex(newFileIndex))
-                val flushTime = measureTimeMillis {
-                    monitor.subTask(0.8, "Writing File") {
-                        file.deleteOverWriterFileIfExists()
-                        file.withOverWriter { overWriter ->
-                            ChronoStoreFileWriter(
-                                outputStream = overWriter.outputStream,
-                                settings = this.newFileSettings,
-                            ).use { writer ->
-                                log.perfTrace { "Flushing ${commands.size} commands from in-memory segment into '${file.path}'." }
-                                writer.writeFile(
-                                    // we're flushing this file from in-memory,
-                                    // so the resulting file has never been merged.
-                                    numberOfMerges = 0,
-                                    orderedCommands = commands.values.iterator(),
-                                    commandCountEstimate = commands.size.toLong(),
-                                )
-                            }
-                            overWriter.commit()
-                        }
-                    }
-                }
-                log.perfTrace { "Flush into index file ${newFileIndex} completed in ${flushTime}ms. Redirecting traffic to new data file for LSM tree ${this.path}" }
-                monitor.subTask(0.1, "Redirecting traffic to file") {
-                    this.lock.write {
-                        this.fileList += this.createLsmTreeFile(file)
-                        // ensure that the merged file is at the correct position in the list
-                        this.fileList.sortBy { it.header.metaData.minTSN }
-                        log.perfTrace { "Removing ${commands.keys.size} keys from the in-memory tree (which has ${this.inMemoryTree.size} keys)..." }
-                        this.inMemoryTree = this.inMemoryTree.minusAll(commands.keys)
-                        log.perfTrace { "${inMemoryTree.size} entries remaining in-memory after flush of tree ${this.path}" }
-                        this.inMemoryTreeSizeInBytes.addAndGet(commands.values.sumOf { it.byteSize } * -1L)
-
-                        // the in-memory tree size has changed, notify listeners
-                        this.forest.onInMemoryFlush(this)
-                    }
-                }
-
-                val timeAfter = System.currentTimeMillis()
-
+        try {
+            val timeBefore = System.currentTimeMillis()
+            monitor.reportStarted("Flushing Data to Disk")
+            if (this.inMemoryTree.isEmpty() || this.inMemorySize < minFlushSize) {
+                // flush not necessary
                 monitor.reportDone()
-                return FlushResult(
-                    targetFile = file,
-                    targetFileIndex = newFileIndex,
-                    bytesWritten = file.length,
-                    entriesWritten = commands.size,
-                    runtimeMillis = timeAfter - timeBefore,
-                )
-            } catch (e: Exception) {
-                throw FlushException("An exception occurred during flush task on '${storeId}': ${e}", e)
+                return null
             }
+            log.perfTrace { "Flushing LSM Tree '${this.directory}'!" }
+            val commands = monitor.subTask(0.1, "Collecting Entries to flush") {
+                // [C0001]: We *must* take *all* of the commits in the in-memory tree
+                // and flush them to avoid writing SST files with partial transactions in them.
+                this.inMemoryTree
+            }
+            val newFileIndex = this.nextFreeFileIndex.getAndIncrement()
+            log.perfTrace { "Target file index ${newFileIndex} will be used for flush of tree ${this.path}" }
+            val file = this.directory.file(this.createFileNameForIndex(newFileIndex))
+            val flushTime = measureTimeMillis {
+                monitor.subTask(0.8, "Writing File") {
+                    file.deleteOverWriterFileIfExists()
+                    file.withOverWriter { overWriter ->
+                        ChronoStoreFileWriter(
+                            outputStream = overWriter.outputStream,
+                            settings = this.newFileSettings,
+                        ).use { writer ->
+                            log.perfTrace { "Flushing ${commands.size} commands from in-memory segment into '${file.path}'." }
+                            writer.writeFile(
+                                // we're flushing this file from in-memory,
+                                // so the resulting file has never been merged.
+                                numberOfMerges = 0,
+                                orderedCommands = commands.values.iterator(),
+                                commandCountEstimate = commands.size.toLong(),
+                            )
+                        }
+                        overWriter.commit()
+                    }
+                }
+            }
+            this.manifestFile.appendFlushOperation(this.storeId, newFileIndex)
+
+            log.perfTrace { "Flush into index file ${newFileIndex} completed in ${flushTime}ms. Redirecting traffic to new data file for LSM tree ${this.path}" }
+            monitor.subTask(0.1, "Redirecting traffic to file") {
+                this.lock.write {
+                    this.fileList += this.createLsmTreeFile(file)
+                    // ensure that the merged file is at the correct position in the list
+                    this.fileList.sortBy { it.header.metaData.minTSN }
+                    log.perfTrace { "Removing ${commands.keys.size} keys from the in-memory tree (which has ${this.inMemoryTree.size} keys)..." }
+                    this.inMemoryTree = this.inMemoryTree.minusAll(commands.keys)
+                    log.perfTrace { "${inMemoryTree.size} entries remaining in-memory after flush of tree ${this.path}" }
+                    this.inMemoryTreeSizeInBytes.addAndGet(commands.values.sumOf { it.byteSize } * -1L)
+
+                    // the in-memory tree size has changed, notify listeners
+                    this.forest.onInMemoryFlush(this)
+                }
+            }
+
+            val timeAfter = System.currentTimeMillis()
+
+            monitor.reportDone()
+            return FlushResult(
+                targetFile = file,
+                targetFileIndex = newFileIndex,
+                bytesWritten = file.length,
+                entriesWritten = commands.size,
+                runtimeMillis = timeAfter - timeBefore,
+            )
+        } catch (e: Exception) {
+            val ex = FlushException("An exception occurred during flush task on '${storeId}': ${e}", e)
+            monitor.reportFailed(ex)
+            throw ex
         }
     }
 
@@ -436,72 +469,211 @@ class LSMTree(
         this.garbageFileManager.removeAll(deleted)
     }
 
-    fun mergeFiles(fileIndices: Set<Int>, keepTombstones: Boolean, trigger: CompactionTrigger, monitor: TaskMonitor, updateManifest: (FileIndex) -> Unit): FileIndex? {
+    fun mergeFiles(fileIndices: Set<Int>, keepTombstones: Boolean, trigger: CompactionTrigger, monitor: TaskMonitor): Set<FileIndex> {
         log.debug { "TASK [${this.storeId}] merge files due to trigger ${trigger}: ${fileIndices.sorted().joinToString(prefix = "[", separator = ", ", postfix = "]")}" }
-        // TODO [CORRECTNESS]: selecting the files to compact would actually also need to happen within the tree lock. Otherwise we may end up picking files for compaction which don't exist anymore.
-        this.performAsyncWriteTask(monitor) {
-            monitor.mainTask("Merging ${fileIndices.size} files") {
-                val timeBefore = System.currentTimeMillis()
-                val filesToMerge = this.getFilesToMerge(fileIndices)
+        monitor.mainTask("Merging ${fileIndices.size} files") {
+            val timeBefore = System.currentTimeMillis()
+            val filesToMerge = this.getFilesToMerge(fileIndices)
 
-                if (filesToMerge.size < 2) {
-                    return null
-                }
-                // get the file index we're going to use (nobody else will get the same index, because of the AtomicInteger used here)
-                val targetFileIndex = this.nextFreeFileIndex.getAndIncrement()
+            if (filesToMerge.size < 2) {
+                return emptySet()
+            }
+            // get the file index we're going to use (nobody else will get the same index, because of the AtomicInteger used here)
+            val targetFileIndex = this.nextFreeFileIndex.getAndIncrement()
 
-                // this is the file we're going to write to
-                val targetFile = this.directory.file(this.createFileNameForIndex(targetFileIndex))
-                val maxNumberOfMergesInInputFiles = filesToMerge.maxOfOrNull {
-                    it.header.metaData.numberOfMerges
-                } ?: 0
+            // this is the file we're going to write to
+            val targetFile = this.directory.file(this.createFileNameForIndex(targetFileIndex))
+            val maxNumberOfMergesInInputFiles = filesToMerge.maxOfOrNull {
+                it.header.metaData.numberOfMerges
+            } ?: 0
 
-                targetFile.deleteOverWriterFileIfExists()
-                targetFile.createOverWriter().use { overWriter ->
-                    val totalEntries = filesToMerge.sumOf { it.header.metaData.totalEntries }
-                    val cursors = filesToMerge.map { it.cursor() }
-                    try {
-                        ChronoStoreFileWriter(
-                            outputStream = overWriter.outputStream,
-                            settings = this.newFileSettings,
-                        ).use { writer ->
-                            CompactionUtil.compact(
-                                cursors = cursors,
-                                writer = writer,
-                                maxNumberOfMergesInInputFiles = maxNumberOfMergesInInputFiles,
-                                resultingCommandCountEstimate = totalEntries,
-                                keepTombstones = keepTombstones,
-                                smallestReadTSN = this.getSmallestOpenReadTSN(),
-                            )
-                        }
-                    } finally {
-                        for (cursor in cursors) {
-                            cursor.close()
-                        }
+            // TODO [LOGIC]: Currently we only create a single output file per compaction. We want to split that up (e.g. using Spooky, max. file size, etc.)
+            targetFile.deleteOverWriterFileIfExists()
+            targetFile.createOverWriter().use { overWriter ->
+                val totalEntries = filesToMerge.sumOf { it.header.metaData.totalEntries }
+                val cursors = filesToMerge.map { it.cursor() }
+                try {
+                    ChronoStoreFileWriter(
+                        outputStream = overWriter.outputStream,
+                        settings = this.newFileSettings,
+                    ).use { writer ->
+                        CompactionUtil.compact(
+                            cursors = cursors,
+                            writer = writer,
+                            maxNumberOfMergesInInputFiles = maxNumberOfMergesInInputFiles,
+                            resultingCommandCountEstimate = totalEntries,
+                            keepTombstones = keepTombstones,
+                            smallestReadTSN = this.getSmallestOpenReadTSN(),
+                        )
                     }
-                    // prepare the new LSM file outside the lock (we don't need the lock, and opening the file can take a few seconds)
-                    val mergedLsmTreeFile = this.createLsmTreeFile(targetFile)
-                    this.lock.write {
-                        overWriter.commit()
-                        updateManifest(targetFileIndex)
-                        this.garbageFileManager.addAll(filesToMerge.map { it.virtualFile.name })
-                        this.fileList.removeAll(filesToMerge.toSet())
-                        this.fileList.add(mergedLsmTreeFile)
+                } finally {
+                    for (cursor in cursors) {
+                        cursor.close()
+                    }
+                }
+
+                val targetFiles = setOf(targetFile)
+
+                // prepare the new LSM file outside the lock (we don't need the lock for that,
+                // and opening the file can take a few seconds)
+                val mergedLsmTreeFiles = targetFiles.asSequence()
+                    .map { this.createLsmTreeFile(it) }
+                    .toSet()
+
+                this.lock.write {
+                    overWriter.commit()
+                    this.manifestFile.appendOperation { operationSequenceNumber ->
+                        createManifestOperationForCompaction(
+                            trigger = trigger,
+                            filesToMerge = filesToMerge,
+                            operationSequenceNumber = operationSequenceNumber,
+                            mergedLsmTreeFiles = mergedLsmTreeFiles,
+                            fileIndices = fileIndices,
+                        )
                     }
 
-                    // perform garbage collection in an attempt to free disk space
-                    this.performGarbageCollection(TaskMonitor.create())
+                    this.garbageFileManager.addAll(filesToMerge.map { it.virtualFile.name })
+                    this.fileList.removeAll(filesToMerge.toSet())
+                    this.fileList.addAll(mergedLsmTreeFiles)
                 }
+
+                // perform garbage collection in an attempt to free disk space
+                this.performGarbageCollection(TaskMonitor.create())
 
                 val timeAfter = System.currentTimeMillis()
                 log.debug { "TASK [${this.storeId}] merge files due to trigger ${trigger} completed in ${timeAfter - timeBefore}ms." }
-                return targetFileIndex
+                return mergedLsmTreeFiles.asSequence().map { it.index }.toSet()
             }
         }
     }
 
-    private fun getFilesToMerge(fileIndices: Set<Int>): MutableList<LSMTreeFile> {
-        val filesToMerge = mutableListOf<LSMTreeFile>()
+    private fun createManifestOperationForCompaction(
+        trigger: CompactionTrigger,
+        filesToMerge: Set<LSMTreeFile>,
+        operationSequenceNumber: Int,
+        mergedLsmTreeFiles: Set<LSMTreeFile>,
+        fileIndices: Set<Int>,
+    ): CompactionOperation {
+        return when (trigger) {
+            CompactionTrigger.TIER_SPACE_AMPLIFICATION,
+            CompactionTrigger.TIER_SIZE_RATIO,
+            CompactionTrigger.TIER_HEIGHT_REDUCTION,
+                -> createTieredCompactionManifestOperation(
+                filesToMerge = filesToMerge,
+                operationSequenceNumber = operationSequenceNumber,
+                mergedLsmTreeFiles = mergedLsmTreeFiles,
+            )
+
+            CompactionTrigger.LEVELED_LEVEL0,
+            CompactionTrigger.LEVELED_TARGET_SIZE_RATIO,
+                -> createLeveledCompactionManifestOperation(
+                filesToMerge = filesToMerge,
+                operationSequenceNumber = operationSequenceNumber,
+                mergedLsmTreeFiles = mergedLsmTreeFiles,
+            )
+
+            CompactionTrigger.FULL_COMPACTION -> createFullCompactionManifestOperation(
+                operationSequenceNumber = operationSequenceNumber,
+                fileIndices = fileIndices,
+                mergedLsmTreeFiles = mergedLsmTreeFiles,
+            )
+        }
+    }
+
+    private fun createTieredCompactionManifestOperation(
+        filesToMerge: Set<LSMTreeFile>,
+        operationSequenceNumber: Int,
+        mergedLsmTreeFiles: Set<LSMTreeFile>,
+    ): TieredCompactionOperation {
+        val storeMetadata = this.getStoreMetadata()
+        check(storeMetadata.compactionStrategy is TieredCompactionStrategy) {
+            "Cannot apply a tiered compaction operation on store '${this.storeId}' because this store is configured to use leveled compaction!"
+        }
+        val fileIndexToFileInfo = storeMetadata.getAllFileInfos().associateBy { it.fileIndex }
+        val tierToFileIndices = filesToMerge.asSequence()
+            .mapNotNull { fileIndexToFileInfo[it.index] }
+            .groupingBy { it.levelOrTier }
+            .toSets { it.fileIndex }
+        val outputFileIndices = mergedLsmTreeFiles.asSequence()
+            .map { it.index }
+            .toSet()
+        return TieredCompactionOperation(
+            sequenceNumber = operationSequenceNumber,
+            storeId = this.storeId,
+            outputFileIndices = outputFileIndices,
+            tierToFileIndices = tierToFileIndices,
+        )
+    }
+
+    private fun createLeveledCompactionManifestOperation(
+        filesToMerge: Set<LSMTreeFile>,
+        operationSequenceNumber: Int,
+        mergedLsmTreeFiles: Set<LSMTreeFile>,
+    ): LeveledCompactionOperation {
+        val storeMetadata = this.getStoreMetadata()
+        check(storeMetadata.compactionStrategy is LeveledCompactionStrategy) {
+            "Cannot apply a tiered compaction operation on store '${this.storeId}' because this store is configured to use leveled compaction!"
+        }
+        val fileIndexToFileInfo = storeMetadata.getAllFileInfos().associateBy { it.fileIndex }
+        val inputFileInfos = filesToMerge.mapNotNull { fileIndexToFileInfo[it.index] }
+
+        val levelToInputFiles = inputFileInfos.groupingBy { it.levelOrTier }.toSets { it.fileIndex }
+        // there should be exactly 2 levels in the map:
+        // - the lower level, from which we merge (potentially level 0)
+        // - the upper level which receives the merge (potentially the highest level
+
+        check(levelToInputFiles.size == 2) {
+            "Expected exactly two levels to be affected by a minor compaction, but got ${levelToInputFiles.keys.size}: ${levelToInputFiles.keys}"
+        }
+
+        val lowerLevelIndex = levelToInputFiles.keys.min()
+        val upperLevelIndex = levelToInputFiles.keys.max()
+        val lowerLevelFileIndices = levelToInputFiles.getValue(lowerLevelIndex)
+        val upperLevelFileIndices = levelToInputFiles.getValue(upperLevelIndex)
+        val outputFileIndices = mergedLsmTreeFiles.asSequence()
+            .map { it.index }
+            .toSet()
+        return LeveledCompactionOperation(
+            sequenceNumber = operationSequenceNumber,
+            storeId = this.storeId,
+            outputFileIndices = outputFileIndices,
+            upperLevelIndex = upperLevelIndex,
+            upperLevelFileIndices = upperLevelFileIndices,
+            lowerLevelFileIndices = lowerLevelFileIndices,
+            lowerLevelIndex = lowerLevelIndex,
+        )
+    }
+
+    private fun createFullCompactionManifestOperation(
+        operationSequenceNumber: Int,
+        fileIndices: Set<Int>,
+        mergedLsmTreeFiles: Set<LSMTreeFile>,
+    ): FullCompactionOperation {
+        val storeMetadata = this.getStoreMetadata()
+        val maxLevelOrTierIndex = when (val compactionStrategy = storeMetadata.compactionStrategy) {
+            is LeveledCompactionStrategy -> compactionStrategy.maxLevels - 1
+            is TieredCompactionStrategy -> compactionStrategy.numberOfTiers - 1
+        }
+        val outputFileIndices = mergedLsmTreeFiles.asSequence()
+            .map { it.index }
+            .toSet()
+        return FullCompactionOperation(
+            sequenceNumber = operationSequenceNumber,
+            storeId = this.storeId,
+            inputFileIndices = fileIndices,
+            outputFileIndices = outputFileIndices,
+            outputLevelOrTier = maxLevelOrTierIndex,
+        )
+    }
+
+    fun getStoreMetadata(): StoreMetadata {
+        val manifest = this.manifestFile.getManifest()
+        val storeMetadata = manifest.getStore(this.storeId)
+        return storeMetadata
+    }
+
+    private fun getFilesToMerge(fileIndices: Set<Int>): Set<LSMTreeFile> {
+        val filesToMerge = mutableSetOf<LSMTreeFile>()
         var previousFile: LSMTreeFile? = null
         for (file in this.fileList) {
             if (filesToMerge.isNotEmpty() && previousFile != null && previousFile.index !in fileIndices && file.index in fileIndices) {
@@ -519,23 +691,6 @@ class LSMTree(
             previousFile = file
         }
         return filesToMerge
-    }
-
-    private inline fun <T> performAsyncWriteTask(monitor: TaskMonitor, task: () -> T): T {
-        this.activeTaskLock.write {
-            while (this.activeTaskMonitor != null) {
-                this.activeTaskCondition.awaitUninterruptibly()
-            }
-            this.activeTaskMonitor = monitor
-        }
-        try {
-            return task()
-        } finally {
-            this.activeTaskLock.write {
-                this.activeTaskMonitor = null
-                this.activeTaskCondition.signalAll()
-            }
-        }
     }
 
     private fun createFileNameForIndex(fileIndex: Int): String {

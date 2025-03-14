@@ -14,7 +14,7 @@ class FakeCompactableStore(
 
     val executedMerges = mutableListOf<ExecutedMerge>()
 
-    override fun mergeFiles(fileIndices: Set<FileIndex>, keepTombstones: Boolean, trigger: CompactionTrigger, monitor: TaskMonitor, updateManifest: (FileIndex) -> Unit) {
+    override fun mergeFiles(fileIndices: Set<FileIndex>, keepTombstones: Boolean, trigger: CompactionTrigger, monitor: TaskMonitor) {
         this.executedMerges += ExecutedMerge(
             fileIndices = fileIndices.toSet(),
             keepTombstones = keepTombstones,

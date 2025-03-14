@@ -13,7 +13,6 @@ interface CompactableStore {
         keepTombstones: Boolean,
         trigger: CompactionTrigger,
         monitor: TaskMonitor,
-        updateManifest: (FileIndex) -> Unit,
     )
 
     val storeId: StoreId

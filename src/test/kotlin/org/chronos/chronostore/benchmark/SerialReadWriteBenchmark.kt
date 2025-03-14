@@ -74,13 +74,13 @@ object SerialReadWriteBenchmark {
 
             log.info { "Flushing changes to disk" }
             measureTimeMillis {
-                chronoStore.mergeService.flushAllInMemoryStoresToDisk()
+                chronoStore.flushAllStoresSynchronous()
             }.let { log.info { "Flushed changes to disk in ${it}ms." } }
 
-            log.info { "Performing major compaction" }
-            measureTimeMillis {
-                chronoStore.mergeService.performMajorCompaction()
-            }.let { log.info { "Major compaction took ${it}ms." } }
+//            log.info { "Performing major compaction" }
+//            measureTimeMillis {
+//                chronoStore.performMajorCompaction()
+//            }.let { log.info { "Major compaction took ${it}ms." } }
 
             log.info { "root path: ${chronoStore.rootPath}" }
 

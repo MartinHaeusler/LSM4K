@@ -18,7 +18,6 @@ import org.chronos.chronostore.util.StoreId
 import org.chronos.chronostore.util.bytes.BasicBytes
 import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.unit.BinarySize.Companion.GiB
-import org.chronos.chronostore.util.unit.BinarySize.Companion.MiB
 import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.fail
 import strikt.api.expect
@@ -170,7 +169,8 @@ class StoreManagementTest {
         val config = ChronoStoreConfiguration(
             // disable flushing and merging, we will do it manually in this test
             maxForestSize = 10.GiB,
-            compactionInterval = null,
+            minorCompactionCron = null,
+            majorCompactionCron = null,
         )
         mode.withChronoStore(config) { chronoStore ->
             chronoStore.transaction { tx ->
@@ -188,7 +188,7 @@ class StoreManagementTest {
             val c1Sequence1 = c1.ascendingEntrySequenceFromHere()
 
             // flush the in-memory stores to the VFS
-            chronoStore.mergeService.flushAllInMemoryStoresToDisk()
+            chronoStore.flushAllStoresSynchronous()
 
             val c1Result = c1Sequence1.toList()
             assertListEntries(c1Result)
@@ -202,7 +202,7 @@ class StoreManagementTest {
             val c2Sequence1 = c2.ascendingEntrySequenceFromHere()
             val c1Sequence2 = c1.ascendingEntrySequenceFromHere()
 
-            chronoStore.mergeService.performMajorCompaction()
+            chronoStore.majorCompactionOnAllStoresSynchronous()
 
             assertListEntries(c1Sequence2.toList())
 
@@ -216,10 +216,11 @@ class StoreManagementTest {
     }
 
     @ChronoStoreTest
-    fun compactionDoesNotAffectRepeatableReads(mode: ChronoStoreMode){
+    fun compactionDoesNotAffectRepeatableReads(mode: ChronoStoreMode) {
         val config = ChronoStoreConfiguration(
             // disable auto-compaction, we will compact manually
-            compactionInterval = null,
+            minorCompactionCron = null,
+            majorCompactionCron = null,
         )
 
         mode.withChronoStore(config) { chronoStore ->
@@ -228,15 +229,15 @@ class StoreManagementTest {
                 tx.commit()
             }
             // write some data, flush after every transaction
-            repeat(10){ txIndex ->
+            repeat(10) { txIndex ->
                 chronoStore.transaction { tx ->
                     val store = tx.getStore("test")
-                    repeat(1000){ i ->
+                    repeat(1000) { i ->
                         store.put("key#${i}", "value#${i}@${txIndex}")
                     }
                     tx.commit()
                 }
-                chronoStore.mergeService.flushAllInMemoryStoresToDisk()
+                chronoStore.flushAllStoresSynchronous()
             }
 
             // now we should have 10 files on disk.
@@ -250,15 +251,15 @@ class StoreManagementTest {
                 // have a parallel transaction commit newer data
                 chronoStore.transaction { writeTx ->
                     val store = writeTx.getStore("test")
-                    repeat(1000){ i ->
+                    repeat(1000) { i ->
                         store.put("key#${i}", "value#${i}@${11}")
                     }
                     writeTx.commit()
                 }
 
-                chronoStore.mergeService.flushAllInMemoryStoresToDisk()
+                chronoStore.flushAllStoresSynchronous()
 
-                chronoStore.mergeService.performMajorCompaction()
+                chronoStore.majorCompactionOnAllStoresSynchronous()
 
                 // grab the entries again on our still-open transaction
                 val entryMap2 = readTx.getStore("test").withCursor { cursor ->
@@ -278,7 +279,8 @@ class StoreManagementTest {
         val config = ChronoStoreConfiguration(
             // disable flushing and merging, we will do it manually in this test
             maxForestSize = 10.GiB,
-            compactionInterval = null,
+            minorCompactionCron = null,
+            majorCompactionCron = null,
         )
 
         val numberOfEntries = 20

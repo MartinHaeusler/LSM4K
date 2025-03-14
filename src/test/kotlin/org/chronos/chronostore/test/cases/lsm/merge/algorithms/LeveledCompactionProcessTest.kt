@@ -4,7 +4,7 @@ import org.chronos.chronostore.api.compaction.LeveledCompactionStrategy
 import org.chronos.chronostore.api.compaction.LeveledCompactionStrategy.FileSelectionStrategy.BY_MOST_DELETIONS
 import org.chronos.chronostore.io.vfs.VirtualFileSystem
 import org.chronos.chronostore.lsm.compaction.algorithms.CompactionTrigger
-import org.chronos.chronostore.lsm.compaction.algorithms.LeveledCompactionTask
+import org.chronos.chronostore.lsm.compaction.algorithms.LeveledCompactionProcess
 import org.chronos.chronostore.manifest.ManifestFile
 import org.chronos.chronostore.test.util.CompactionTestUtils.executeLeveledCompactionSynchronously
 import org.chronos.chronostore.test.util.VFSMode
@@ -18,12 +18,12 @@ import org.junit.jupiter.params.ParameterizedTest
 import strikt.api.expectThat
 import strikt.assertions.*
 
-class LeveledCompactionTaskTest {
+class LeveledCompactionProcessTest {
 
     @Test
     fun canComputeTargetLevelSizes1() {
         expectThat(
-            LeveledCompactionTask.computeTargetLevelSizes(
+            LeveledCompactionProcess.computeTargetLevelSizes(
                 longArrayOf(
                     /* L0 */ 0,
                     /* L1 */ 0,
@@ -51,7 +51,7 @@ class LeveledCompactionTaskTest {
     @Test
     fun canComputeTargetLevelSizes2() {
         expectThat(
-            LeveledCompactionTask.computeTargetLevelSizes(
+            LeveledCompactionProcess.computeTargetLevelSizes(
                 longArrayOf(
                     /* L0 */ 0,
                     /* L1 */ 300.MiB.bytes,
@@ -75,7 +75,7 @@ class LeveledCompactionTaskTest {
     @Test
     fun canComputeTargetLevelSizes3() {
         expectThat(
-            LeveledCompactionTask.computeTargetLevelSizes(
+            LeveledCompactionProcess.computeTargetLevelSizes(
                 longArrayOf(
                     /* L0 */ 0,
                     /* L1 */ 0,
@@ -103,7 +103,7 @@ class LeveledCompactionTaskTest {
     @Test
     fun canComputeCurrentSizeToTargetSizeRatios() {
         expectThat(
-            LeveledCompactionTask.computeCurrentSizeToTargetSizeRatios(
+            LeveledCompactionProcess.computeCurrentSizeToTargetSizeRatios(
                 currentSizes = longArrayOf(
                     /* L0 */ 10.GiB.bytes,
                     /* L1 */ 1.GiB.bytes,
@@ -138,7 +138,7 @@ class LeveledCompactionTaskTest {
     @Test
     fun canSelectLevelWithHighestSizeToTargetRatio() {
         expectThat(
-            LeveledCompactionTask.selectLevelWithHighestSizeToTargetRatio(
+            LeveledCompactionProcess.selectLevelWithHighestSizeToTargetRatio(
                 doubleArrayOf(
                     /* L0 */ 0.0,
                     /* L1 */ 0.0,
@@ -208,7 +208,6 @@ class LeveledCompactionTaskTest {
 
             // run the compaction
             store.executeLeveledCompactionSynchronously(
-                manifestFile = manifestFile,
                 strategy = LeveledCompactionStrategy(
                     maxLevels = 3,
                     level0FileNumberCompactionTrigger = 2,
@@ -283,7 +282,6 @@ class LeveledCompactionTaskTest {
 
             // run the compaction
             store.executeLeveledCompactionSynchronously(
-                manifestFile = manifestFile,
                 strategy = LeveledCompactionStrategy(
                     maxLevels = 3,
                     level0FileNumberCompactionTrigger = 2,

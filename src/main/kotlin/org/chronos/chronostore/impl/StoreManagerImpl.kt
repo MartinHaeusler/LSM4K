@@ -3,6 +3,7 @@ package org.chronos.chronostore.impl
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.chronos.chronostore.api.*
 import org.chronos.chronostore.api.compaction.CompactionStrategy
+import org.chronos.chronostore.api.exceptions.StoreNotFoundException
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.forEachWithMonitor
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.mainTask
@@ -22,6 +23,7 @@ import org.chronos.chronostore.util.StoreId
 import org.chronos.chronostore.util.TSN
 import org.chronos.chronostore.util.TransactionId
 import org.pcollections.TreePMap
+import java.util.concurrent.Executors
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.concurrent.read
 import kotlin.concurrent.write
@@ -56,6 +58,9 @@ class StoreManagerImpl(
     private var initialized: Boolean = false
     private val storesById = mutableMapOf<StoreId, Store>()
     private val storeManagementLock = ReentrantReadWriteLock(true)
+
+    private val compactionWorkerPool = Executors.newScheduledThreadPool(this.configuration.maxCompactionThreads)
+    private val memtableFlushWorkerPool = Executors.newScheduledThreadPool(this.configuration.maxMemtableFlushThreads)
 
     fun initialize(isEmptyDatabase: Boolean) {
         this.storeManagementLock.write {
@@ -100,7 +105,10 @@ class StoreManagerImpl(
     private fun createStore(storeMetadata: StoreMetadata, directory: VirtualDirectory): StoreImpl {
         return StoreImpl(
             initialStoreMetadata = storeMetadata,
+            manifestFile = this.manifestFile,
             directory = directory,
+            compactionExecutor = this.compactionWorkerPool,
+            memtableFlushExecutor = this.memtableFlushWorkerPool,
             forest = this.forest,
             blockCache = this.blockCacheManager.getBlockCache(storeMetadata.storeId),
             fileHeaderCache = this.fileHeaderCache,
@@ -116,6 +124,28 @@ class StoreManagerImpl(
 
     override fun <T> withStoreReadLock(action: () -> T): T {
         return this.storeManagementLock.read(action)
+    }
+
+    fun getStoreByIdAdmin(storeId: String): StoreImpl {
+        return this.getStoreByIdAdmin(StoreId.of(storeId))
+    }
+
+    fun getStoreByIdAdmin(storeId: StoreId): StoreImpl {
+        return this.getStoreByIdOrNullAdmin(storeId)
+            ?: throw StoreNotFoundException("There is no store with ID '${storeId}'!")
+    }
+
+    fun getStoreByIdOrNullAdmin(storeId: String): StoreImpl? {
+        return this.getStoreByIdOrNullAdmin(StoreId.of(storeId))
+    }
+
+    fun getStoreByIdOrNullAdmin(storeId: StoreId): StoreImpl? {
+        check(this.isOpen) { DB_ALREADY_CLOSED }
+        this.storeManagementLock.read {
+            val store = this.storesById[storeId]
+                ?: return null
+            return store as StoreImpl
+        }
     }
 
     override fun getStoreByIdOrNull(transaction: ChronoStoreTransaction, name: StoreId): Store? {
@@ -254,7 +284,7 @@ class StoreManagerImpl(
         }
     }
 
-    override fun getAllLsmTrees(): List<LSMTree> {
+    fun getAllLsmTreesAdmin(): List<LSMTree> {
         return this.getAllStoresInternal().map { (it as StoreImpl).tree }
     }
 
@@ -324,6 +354,16 @@ class StoreManagerImpl(
             return
         }
         this.isOpen = false
+        try {
+            this.compactionWorkerPool.shutdownNow()
+        } catch (e: Exception) {
+            log.warn { "An exception occurred during ChronoStore shutdown: ${e}" }
+        }
+        try {
+            this.memtableFlushWorkerPool.shutdownNow()
+        } catch (e: Exception) {
+            log.warn { "An exception occurred during ChronoStore shutdown: ${e}" }
+        }
     }
 
     private fun registerStoreInCaches(store: Store) {

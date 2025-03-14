@@ -7,14 +7,9 @@ import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.subTask
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.subTaskWithMonitor
 import org.chronos.chronostore.lsm.compaction.model.CompactableStore
 import org.chronos.chronostore.manifest.LSMFileInfo
-import org.chronos.chronostore.manifest.ManifestFile
-import org.chronos.chronostore.manifest.operations.TieredCompactionOperation
-import org.chronos.chronostore.util.GroupingExtensions.toSets
 import org.chronos.chronostore.util.TierIndex
-import java.awt.MouseInfo
 
-class TieredCompactionTask(
-    val manifestFile: ManifestFile,
+class TieredCompactionProcess(
     val configuration: TieredCompactionStrategy,
     val store: CompactableStore,
 ) {
@@ -60,21 +55,6 @@ class TieredCompactionTask(
                 keepTombstones = shouldKeepTombstonesInMerge(filesToCompact),
                 monitor = mergeMonitor,
                 trigger = compactionTrigger,
-                // TODO [LOGIC] This is quite dirty. Can we find a nicer solution instead of the lambda?
-                updateManifest = { outputFileIndex ->
-                    val tierToFileIndices = filesToCompact
-                        .groupingBy { it.levelOrTier }
-                        .toSets { it.fileIndex }
-
-                    this.manifestFile.appendOperation { sequenceNumber ->
-                        TieredCompactionOperation(
-                            sequenceNumber = sequenceNumber,
-                            storeId = this.store.storeId,
-                            outputFileIndices = setOf(outputFileIndex),
-                            tierToFileIndices = tierToFileIndices,
-                        )
-                    }
-                }
             )
         }
     }

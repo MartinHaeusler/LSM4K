@@ -1,18 +1,15 @@
 package org.chronos.chronostore.test.cases.api
 
 import org.chronos.chronostore.api.ChronoStore
-import org.chronos.chronostore.api.ChronoStoreConfiguration
 import org.chronos.chronostore.api.exceptions.FileMissingException
-import org.chronos.chronostore.impl.ChronoStoreImpl
-import org.chronos.chronostore.test.extensions.ChronoStoreTestExtensions.flush
-import org.chronos.chronostore.test.extensions.ChronoStoreTestExtensions.flushAll
+import org.chronos.chronostore.test.extensions.ChronoStoreTestExtensions.flushStoreSynchronous
+import org.chronos.chronostore.test.extensions.ChronoStoreTestExtensions.flushAllStoresSynchronous
 import org.chronos.chronostore.test.extensions.transaction.ChronoStoreTransactionTestExtensions.put
 import org.chronos.chronostore.test.util.ChronoStoreMode
 import org.chronos.chronostore.test.util.ChronoStoreTest
 import org.chronos.chronostore.test.util.VFSMode
 import org.chronos.chronostore.test.util.VirtualFileSystemTest
 import org.chronos.chronostore.util.StoreId
-import org.chronos.chronostore.util.bytes.Bytes
 import strikt.api.expectThat
 import strikt.api.expectThrows
 import strikt.assertions.*
@@ -54,7 +51,7 @@ class ChronoStoreStartStopTest {
                 }
 
                 // flush "foo", leave "bar" and "empty" alone
-                chronoStore.flush("foo")
+                chronoStore.flushStoreSynchronous("foo")
             }
 
             // reopen the chronostore instance on the same data and check that
@@ -109,7 +106,7 @@ class ChronoStoreStartStopTest {
                     tx.commit()
                 }
 
-                chronoStore.flushAll()
+                chronoStore.flushAllStoresSynchronous()
             }
 
             // delete the file in "foo"
@@ -146,7 +143,7 @@ class ChronoStoreStartStopTest {
                     tx.commit()
                 }
 
-                chronoStore.flushAll()
+                chronoStore.flushAllStoresSynchronous()
             }
 
             // delete the file in "foo"

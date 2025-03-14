@@ -7,16 +7,13 @@ import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.mainTask
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.subTask
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.subTaskWithMonitor
 import org.chronos.chronostore.lsm.compaction.model.CompactableStore
-import org.chronos.chronostore.manifest.ManifestFile
 import org.chronos.chronostore.manifest.StoreMetadata
-import org.chronos.chronostore.manifest.operations.LeveledCompactionOperation
 import org.chronos.chronostore.util.FileIndex
 import org.chronos.chronostore.util.LevelIndex
 import org.chronos.chronostore.util.unit.BinarySize
 import kotlin.math.max
 
-class LeveledCompactionTask(
-    val manifestFile: ManifestFile,
+class LeveledCompactionProcess(
     val configuration: LeveledCompactionStrategy,
     val store: CompactableStore,
 ) {
@@ -175,19 +172,7 @@ class LeveledCompactionTask(
             keepTombstones = targetLevelIndex != highestNonEmptyLevel,
             trigger = CompactionTrigger.LEVELED_TARGET_SIZE_RATIO,
             monitor = monitor
-        ) { newFileIndex ->
-            this.manifestFile.appendOperation { sequenceNumber ->
-                LeveledCompactionOperation(
-                    sequenceNumber = sequenceNumber,
-                    storeId = this.store.storeId,
-                    outputFileIndices = setOf(newFileIndex),
-                    upperLevelIndex = targetLevelIndex,
-                    upperLevelFileIndices = overlappingSSTFilesInTargetLevel,
-                    lowerLevelFileIndices = setOf(chosenSSTFile.index),
-                    lowerLevelIndex = levelWithHighestSizeToTargetRatio,
-                )
-            }
-        }
+        )
     }
 
     private fun compactLevel0Files(filesToMerge: Set<FileIndex>, minLevelWithTargetSize: Int, monitor: TaskMonitor) {
@@ -199,19 +184,7 @@ class LeveledCompactionTask(
             keepTombstones = minLevelWithTargetSize != configuration.maxLevels,
             trigger = CompactionTrigger.LEVELED_LEVEL0,
             monitor = monitor
-        ) { newFileIndex ->
-            this.manifestFile.appendOperation { sequenceNumber ->
-                LeveledCompactionOperation(
-                    sequenceNumber = sequenceNumber,
-                    storeId = this.store.storeId,
-                    outputFileIndices = setOf(newFileIndex),
-                    upperLevelIndex = minLevelWithTargetSize,
-                    upperLevelFileIndices = overlappingSSTFilesInTargetLevel,
-                    lowerLevelFileIndices = filesToMerge,
-                    lowerLevelIndex = 0,
-                )
-            }
-        }
+        )
     }
 
     private fun findOverlappingSSTFiles(inputFileIndices: Set<FileIndex>, level: Int): Set<FileIndex> {

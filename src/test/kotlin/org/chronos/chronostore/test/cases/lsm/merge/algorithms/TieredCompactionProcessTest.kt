@@ -12,19 +12,18 @@ import org.chronos.chronostore.util.unit.BinarySize.Companion.MiB
 import strikt.api.expectThat
 import strikt.assertions.*
 
-class TieredCompactionTaskTest {
+class TieredCompactionProcessTest {
 
     @VirtualFileSystemTest
     fun tieredCompactionDoesNothingOnEmptyStore(mode: VFSMode) {
         mode.withVFS { vfs ->
             // set up a fake store with some files
-            val manifestFile = vfs.createManifestFile()
             val store = vfs.createFakeTieredStore {
                 tier(0)
             }
 
             // run the compaction
-            store.executeTieredCompactionSynchronously(manifestFile)
+            store.executeTieredCompactionSynchronously()
 
             // inspect the merges which have been executed by the compaction
             expectThat(store.executedMerges).isEmpty()
@@ -56,7 +55,6 @@ class TieredCompactionTaskTest {
 
             // run the compaction
             store.executeTieredCompactionSynchronously(
-                manifestFile = manifestFile,
                 strategy = TieredCompactionStrategy(
                     numberOfTiers = 1,
                 )
@@ -96,7 +94,6 @@ class TieredCompactionTaskTest {
 
             // run the compaction
             store.executeTieredCompactionSynchronously(
-                manifestFile = manifestFile,
                 strategy = TieredCompactionStrategy(
                     numberOfTiers = 1,
                     minMergeTiers = 1,
@@ -139,7 +136,6 @@ class TieredCompactionTaskTest {
 
             // run the compaction
             store.executeTieredCompactionSynchronously(
-                manifestFile = manifestFile,
                 strategy = TieredCompactionStrategy(
                     numberOfTiers = 1,
                     minMergeTiers = 1,
@@ -187,7 +183,6 @@ class TieredCompactionTaskTest {
 
             // run the compaction
             store.executeTieredCompactionSynchronously(
-                manifestFile = manifestFile,
                 strategy = TieredCompactionStrategy(
                     numberOfTiers = 3,
                     minMergeTiers = 1,

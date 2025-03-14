@@ -2,14 +2,14 @@ package org.chronos.chronostore.lsm.compaction.model
 
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor
 import org.chronos.chronostore.impl.store.StoreImpl
+import org.chronos.chronostore.lsm.LSMTree
 import org.chronos.chronostore.lsm.compaction.algorithms.CompactionTrigger
 import org.chronos.chronostore.manifest.StoreMetadata
 import org.chronos.chronostore.util.FileIndex
 import org.chronos.chronostore.util.StoreId
 
 class StandardCompactableStore(
-    val store: StoreImpl,
-    override val metadata: StoreMetadata,
+    val tree: LSMTree,
 ) : CompactableStore {
 
     companion object {
@@ -23,7 +23,7 @@ class StandardCompactableStore(
     }
 
     init {
-        validateStoreIdMatchesMetadata(this.store.storeId, this.metadata.storeId)
+        validateStoreIdMatchesMetadata(this.tree.storeId, this.metadata.storeId)
     }
 
     override fun mergeFiles(
@@ -31,18 +31,19 @@ class StandardCompactableStore(
         keepTombstones: Boolean,
         trigger: CompactionTrigger,
         monitor: TaskMonitor,
-        updateManifest: (FileIndex) -> Unit,
     ) {
-        this.store.tree.mergeFiles(
+        this.tree.mergeFiles(
             fileIndices = fileIndices,
             keepTombstones = keepTombstones,
             trigger = trigger,
             monitor = monitor,
-            updateManifest = updateManifest,
         )
     }
 
+    override val metadata: StoreMetadata
+        get() = tree.getStoreMetadata()
+
     override val allFiles: List<CompactableFile>
-        get() = this.store.tree.allFiles.map(::StandardCompactableFile)
+        get() = this.tree.allFiles.map(::StandardCompactableFile)
 
 }

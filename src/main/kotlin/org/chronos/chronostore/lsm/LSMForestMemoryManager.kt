@@ -11,6 +11,7 @@ import org.chronos.chronostore.manifest.ManifestFile
 import org.chronos.chronostore.util.logging.LogExtensions.perfTrace
 import org.chronos.chronostore.util.statistics.ChronoStoreStatistics
 import org.chronos.chronostore.util.unit.BinarySize.Companion.Bytes
+import java.util.concurrent.CompletableFuture
 import java.util.concurrent.Future
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.concurrent.write
@@ -38,10 +39,8 @@ import kotlin.math.min
  * size becomes less than the configured threshold.
  */
 class LSMForestMemoryManager(
-    private val asyncTaskManager: AsyncTaskManager,
     private val maxForestSize: Long,
     private val flushThresholdSize: Long,
-    private val manifestFile: ManifestFile,
 ) {
 
     companion object {
@@ -132,8 +131,7 @@ class LSMForestMemoryManager(
                     // all trees have a flush task scheduled, we just have to wait
                     break
                 }
-                val flushTask = FlushInMemoryTreeToDiskTask(largestTree, this.manifestFile)
-                this.asyncTaskManager.executeAsync(flushTask)
+                largestTree.scheduleMemtableFlush()
                 // we assume here that the tree will have 0 bytes in-memory after the flush.
                 val bytesVirtuallyFreed = largestTreeStats.virtualTreeSize
                 largestTreeStats.virtualTreeSize = 0
@@ -176,15 +174,14 @@ class LSMForestMemoryManager(
                 this.treeStats.mapNotNull { (tree, treeStats) ->
                     if (treeStats.virtualTreeSize > 0) {
                         treeStats.virtualTreeSize = 0
-                        val flushTask = FlushInMemoryTreeToDiskTask(tree, this.manifestFile)
-                        this.asyncTaskManager.executeAsync(flushTask)
+                        tree.scheduleMemtableFlush()
                     } else {
                         log.trace { "SKIP FLUSH; NO DATA in tree '${tree.path}'" }
                         null
                     }
                 }
             }
-            taskMonitor.forEach(1.0, "Waiting for flush tasks to complete", futures, Future<TaskExecutionResult>::get)
+            taskMonitor.forEach(1.0, "Waiting for flush tasks to complete", futures, CompletableFuture<*>::join)
         }
     }
 

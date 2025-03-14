@@ -6,6 +6,7 @@ import org.chronos.chronostore.util.StoreId
 import org.chronos.chronostore.util.TSN
 import org.chronos.chronostore.util.TransactionId
 import org.chronos.chronostore.util.bytes.Bytes
+import java.util.concurrent.CompletableFuture
 
 /**
  * A [Store] binds an ordered set of [Bytes] keys to a set of [Bytes] values.
@@ -46,5 +47,10 @@ interface Store {
             createdByTransactionId = this.createdByTransactionId,
         )
 
+    fun scheduleMajorCompaction(): CompletableFuture<*>
+
+    fun scheduleMinorCompaction(): CompletableFuture<*>
+
+    fun scheduleMemtableFlush(): CompletableFuture<*>
 
 }

@@ -39,18 +39,7 @@ class FullCompactionTask(
             keepTombstones = false,
             trigger = CompactionTrigger.FULL_COMPACTION,
             monitor = monitor
-        ) { newFileIndex ->
-            this.manifestFile.appendOperation { operationSequenceNumber ->
-                FullCompactionOperation(
-                    sequenceNumber = operationSequenceNumber,
-                    storeId = this.store.storeId,
-                    inputFileIndices = fileIndices,
-                    outputFileIndices = setOf(newFileIndex),
-                    outputLevelOrTier = maxLevelOrTierIndex,
-                )
-            }
-        }
-
+        )
     }
 
 }

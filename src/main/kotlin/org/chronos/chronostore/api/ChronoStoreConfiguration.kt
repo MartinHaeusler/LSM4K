@@ -12,12 +12,34 @@ import org.chronos.chronostore.util.cron.CronUtils.isValid
 import org.chronos.chronostore.util.unit.BinarySize
 import org.chronos.chronostore.util.unit.BinarySize.Companion.Bytes
 import org.chronos.chronostore.util.unit.BinarySize.Companion.MiB
-import kotlin.time.Duration
-import kotlin.time.Duration.Companion.minutes
 
 class ChronoStoreConfiguration(
 
-    val maxWriterThreads: Int = 5,
+    /**
+     * The maximum number of threads to use for executing compactions.
+     *
+     * Each individual store may only have a single concurrent compaction running at any point in time, but if there
+     * are multiple stores, there can be multiple concurrent compactions (at most one per store). This setting controls
+     * how many parallel compactions there can be at most, regardless of the number of stores.
+     *
+     * A higher number means that more stores can perform background compaction work simultaneously, but it also means
+     * that more I/O throughput will be dedicated to those operations (rather than queries or flushes).
+     */
+    val maxCompactionThreads: Int = 4,
+
+    /**
+     * the maximum number of threads to use for executing memtable flush tasks.
+     *
+     * Each store has a memtable which gradually fills up with data as transactions on it are committed. When the memtable
+     * is full, it needs to be written to disk to avoid out-of-memory issues. While this is a pressing concern, having too
+     * many concurrent flush tasks can overwhelm the disk and consume large amounts of IO operations. This setting allows
+     * to limit the maximum number of concurrent flush tasks. Please note that regardless of this setting, each store only
+     * allows for up to one flush task at the same time.
+     *
+     * A higher number means that more stores can flush their memtables simultaneously, but it also means
+     * that more I/O throughput will be dedicated to those operations (rather than queries or compactions).
+     */
+    val maxMemtableFlushThreads: Int = 4,
 
     /** When writing new files: the compression algorithm to use. All old files will remain readable if this setting is changed.*/
     val compressionAlgorithm: CompressionAlgorithm = CompressionAlgorithm.SNAPPY,
@@ -42,13 +64,31 @@ class ChronoStoreConfiguration(
     val defaultCompactionStrategy: CompactionStrategy = CompactionStrategy.DEFAULT,
 
     /**
-     * The interval between time-triggered compactions.
+     * The timing for time-triggered minor compactions.
      *
-     * Use `null` to disable time-based compaction.
+     * Minor compactions only compact a small fraction of the files in each store and should be scheduled
+     * fairly frequently (multiple times per hour). Minor compactions are additionally also triggered
+     * automatically when new data is committed.
      *
-     * Which compaction will be triggered on which store(s) is decided dynamically based on the current situation.
+     * Use `null` to disable time-based minor compaction. This is not recommended, as periodic compaction is critical
+     * for good read performance.
      */
-    val compactionInterval: Duration? = 10.minutes,
+    val minorCompactionCron: Cron? = cron("0 */10 * * * *"), // every 10 minutes
+
+    /**
+     * The timing for time-triggered major compactions.
+     *
+     * Major compactions compact all files in all stores and are therefore expensive operations in terms
+     * of all sorts of resources (I/O operations, memory utilization, CPU utilization). A major compaction
+     * also takes a considerable amount of time; how much exactly depends on the amount of data in each store.
+     * As a general rule of thumb, major compactions should be performed when the system is otherwise idle
+     * (e.g. during nighttime) and not when the system is under heavy load. How frequent major compactions
+     * need to occur depends on how much data gets written to the store.
+     *
+     * Use `null` to disable time-based major compaction. This is not recommended, as periodic compaction is critical
+     * for good read performance.
+     */
+    val majorCompactionCron: Cron? = cron("0 0 2 * * 0"), // at 02:00 every sunday
 
     /**
      * The maximum size of the in-memory trees.

@@ -23,7 +23,8 @@ object MultiFileReadRegressionBenchmark {
         val config = ChronoStoreConfiguration(
             maxForestSize = 1.GiB,
             // don't merge automatically
-            compactionInterval = null,
+            minorCompactionCron = null,
+            majorCompactionCron = null,
             // use a very small cache
             blockCacheSize = 20.MiB,
         )
@@ -43,7 +44,7 @@ object MultiFileReadRegressionBenchmark {
                     tx.commit()
                 }
 
-                chronoStore.mergeService.flushAllInMemoryStoresToDisk()
+                chronoStore.flushAllStoresSynchronous()
             }
 
             var entriesInHead = 0L
@@ -52,7 +53,7 @@ object MultiFileReadRegressionBenchmark {
 //            chronoStore.mergeService.performMajorCompaction()
 
             // delete the files which are now unused
-            chronoStore.performGarbageCollection()
+            chronoStore.garbageCollectionSynchronous()
 
             val numberOfFiles = chronoStore.transaction { tx ->
                 val store = tx.getStore("test")

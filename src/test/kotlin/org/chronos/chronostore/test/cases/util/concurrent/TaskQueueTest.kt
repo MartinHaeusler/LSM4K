@@ -22,7 +22,7 @@ class TaskQueueTest {
                 var value = 0
                 repeat(1000) {
                     feedingExecutor.submit {
-                        queue.addTask(object : AsyncTask {
+                        queue.schedule(object : AsyncTask {
                             override val name: String
                                 get() = "Test task"
 

@@ -12,13 +12,15 @@ import org.chronos.chronostore.io.vfs.VirtualFileSystem
 import org.chronos.chronostore.lsm.LSMForestMemoryManager
 import org.chronos.chronostore.lsm.cache.BlockCacheManager
 import org.chronos.chronostore.lsm.cache.FileHeaderCache
-import org.chronos.chronostore.lsm.compaction.strategy.MergeService
-import org.chronos.chronostore.lsm.compaction.strategy.MergeServiceImpl
 import org.chronos.chronostore.lsm.compaction.tasks.CheckpointTask
+import org.chronos.chronostore.lsm.compaction.tasks.TriggerMajorCompactionOnAllStoresTask
+import org.chronos.chronostore.lsm.compaction.tasks.TriggerMinorCompactionOnAllStoresTask
 import org.chronos.chronostore.lsm.garbagecollector.tasks.GarbageCollectorTask
 import org.chronos.chronostore.manifest.ManifestFile
+import org.chronos.chronostore.util.StoreId
 import org.chronos.chronostore.util.TSN
 import org.chronos.chronostore.wal.WriteAheadLog
+import java.util.concurrent.CompletableFuture
 import java.util.concurrent.Executors
 import kotlin.math.max
 
@@ -46,18 +48,9 @@ class ChronoStoreImpl(
     private val blockCacheManager = BlockCacheManager.create(configuration.blockCacheSize)
     private val fileHeaderCache = FileHeaderCache.create(configuration.fileHeaderCacheSize)
 
-    private val taskManager = AsyncTaskManagerImpl(
-        executorService = Executors.newScheduledThreadPool(this.configuration.maxWriterThreads),
-        getChronoStoreState = this::state,
-    )
-
-    val mergeService: MergeService
-
     val forest: LSMForestMemoryManager = LSMForestMemoryManager(
-        asyncTaskManager = this.taskManager,
         maxForestSize = this.configuration.maxForestSize.bytes,
         flushThresholdSize = (this.configuration.maxForestSize.bytes * this.configuration.forestFlushThreshold).toLong(),
-        manifestFile = this.manifestFile,
     )
 
     private val storeManager = StoreManagerImpl(
@@ -70,6 +63,11 @@ class ChronoStoreImpl(
         manifestFile = this.manifestFile,
         configuration = this.configuration,
         getSmallestOpenReadTSN = { this.transactionManager.getSmallestOpenReadTSN() }
+    )
+
+    private val asyncTaskManager = AsyncTaskManagerImpl(
+        Executors.newSingleThreadScheduledExecutor(),
+        this::state,
     )
 
     private val writeAheadLog: WriteAheadLog
@@ -128,23 +126,34 @@ class ChronoStoreImpl(
             checkpointManager = this.checkpointManager,
             storeManager = this.storeManager
         )
+
         val checkpointCron = this.configuration.checkpointCron
         if (checkpointCron != null) {
-            this.taskManager.scheduleRecurringWithCron(checkpointTask, checkpointCron)
+            this.asyncTaskManager.scheduleRecurringWithCron(checkpointTask, checkpointCron)
         }
 
         val garbageCollectorTask = GarbageCollectorTask(storeManager)
         val garbageCollectionCron = this.configuration.garbageCollectionCron
         if (garbageCollectionCron != null) {
-            this.taskManager.scheduleRecurringWithCron(garbageCollectorTask, garbageCollectionCron)
+            this.asyncTaskManager.scheduleRecurringWithCron(garbageCollectorTask, garbageCollectionCron)
         }
 
-        this.mergeService = MergeServiceImpl(
-            taskManager = this.taskManager,
-            storeConfig = this.configuration,
-            manifestFile = this.manifestFile,
-            storeManager = this.storeManager,
-        )
+        val minorCompactionCron = this.configuration.minorCompactionCron
+        if (minorCompactionCron != null) {
+            val triggerMinorCompactionOnAllStoresTask = TriggerMinorCompactionOnAllStoresTask(this.storeManager::getAllStoresInternal)
+            this.asyncTaskManager.scheduleRecurringWithCron(triggerMinorCompactionOnAllStoresTask, minorCompactionCron)
+        } else {
+            this.warnAboutMinorCompactionDisabled()
+        }
+
+        val majorCompactionCron = this.configuration.majorCompactionCron
+        if (majorCompactionCron != null) {
+            val triggerMajorCompactionOnAllStoresTask = TriggerMajorCompactionOnAllStoresTask(this.storeManager::getAllStoresInternal)
+            this.asyncTaskManager.scheduleRecurringWithCron(triggerMajorCompactionOnAllStoresTask, majorCompactionCron)
+        } else {
+            this.warnAboutMajorCompactionDisabled()
+        }
+
         this.state = ChronoStoreState.RUNNING
     }
 
@@ -239,13 +248,111 @@ class ChronoStoreImpl(
             this.checkpointTask.run(TaskMonitor.create())
         }
         this.transactionManager.close()
-        this.taskManager.close()
+        this.asyncTaskManager.close()
         this.storeManager.close()
         log.info { "Completed shut-down of ChronoStore at '${this.vfs}'." }
     }
 
-    fun performGarbageCollection(monitor: TaskMonitor = TaskMonitor.create()) {
+    fun garbageCollectionSynchronous(monitor: TaskMonitor = TaskMonitor.create()) {
         this.storeManager.performGarbageCollection(monitor)
+    }
+
+    fun flushAllStoresAsync(): CompletableFuture<*> {
+        val futures = this.storeManager
+            .getAllLsmTreesAdmin()
+            .map { it.scheduleMemtableFlush() }
+        return CompletableFuture.allOf(*futures.toTypedArray())
+    }
+
+    fun flushAllStoresSynchronous() {
+        this.flushAllStoresAsync().join()
+    }
+
+    fun flushAsync(storeId: StoreId): CompletableFuture<*> {
+        return this.storeManager
+            .getStoreByIdAdmin(storeId)
+            .scheduleMemtableFlush()
+    }
+
+    fun flushAsync(storeId: String): CompletableFuture<*> {
+        return this.flushAsync(StoreId.of(storeId))
+    }
+
+    fun flushSynchronous(storeId: StoreId) {
+        this.flushAsync(storeId).join()
+    }
+
+    fun flushSynchronous(storeId: String) {
+        this.flushSynchronous(StoreId.of(storeId))
+    }
+
+    fun majorCompactionOnAllStoresAsync(): CompletableFuture<*> {
+        val futures = this.storeManager.getAllLsmTreesAdmin()
+            .map { it.scheduleMajorCompaction() }
+            .toList()
+        return CompletableFuture.allOf(*futures.toTypedArray())
+    }
+
+    fun majorCompactionOnAllStoresSynchronous() {
+        this.majorCompactionOnAllStoresAsync().join()
+    }
+
+    fun majorCompactionOnStoreAsync(storeId: StoreId): CompletableFuture<*> {
+        return this.storeManager.getStoreByIdAdmin(storeId).scheduleMajorCompaction()
+    }
+
+    fun majorCompactionOnStoreAsync(storeId: String): CompletableFuture<*> {
+        return this.majorCompactionOnStoreAsync(StoreId.of(storeId))
+    }
+
+    fun majorCompactionOnStoreSynchronous(storeId: StoreId) {
+        this.majorCompactionOnStoreAsync(storeId).join()
+    }
+
+    fun majorCompactionOnStoreSynchronous(storeId: String) {
+        this.majorCompactionOnStoreAsync(storeId).join()
+    }
+
+    fun minorCompactionOnAllStoresAsync(): CompletableFuture<*> {
+        val futures = this.storeManager.getAllLsmTreesAdmin()
+            .map { it.scheduleMinorCompaction() }
+            .toList()
+        return CompletableFuture.allOf(*futures.toTypedArray())
+    }
+
+    fun minorCompactionOnAllStoresSynchronous() {
+        this.minorCompactionOnAllStoresAsync().join()
+    }
+
+    fun minorCompactionOnStoreAsync(storeId: StoreId): CompletableFuture<*> {
+        return this.storeManager.getStoreByIdAdmin(storeId).scheduleMinorCompaction()
+    }
+
+    fun minorCompactionOnStoreAsync(storeId: String): CompletableFuture<*> {
+        return this.minorCompactionOnStoreAsync(StoreId.of(storeId))
+    }
+
+    fun minorCompactionOnStoreSynchronous(storeId: StoreId) {
+        this.minorCompactionOnStoreAsync(storeId).join()
+    }
+
+    fun minorCompactionOnStoreSynchronous(storeId: String) {
+        this.minorCompactionOnStoreAsync(storeId).join()
+    }
+
+
+    private fun warnAboutMinorCompactionDisabled() {
+        log.warn {
+            "Periodic Minor Compaction is disabled, because the corresponding CRON expression is NULL!" +
+                " You need to compact the store explicitly to prevent performance degradation."
+        }
+    }
+
+    private fun warnAboutMajorCompactionDisabled() {
+        log.warn {
+            "Periodic Major Compaction is disabled, because the corresponding CRON expression is NULL!" +
+                " You need to compact the store explicitly to prevent performance degradation."
+        }
     }
 
 }

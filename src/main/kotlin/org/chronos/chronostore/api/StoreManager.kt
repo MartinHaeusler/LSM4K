@@ -29,8 +29,6 @@ interface StoreManager {
 
     fun getAllStores(transaction: ChronoStoreTransaction): List<Store>
 
-    fun getAllLsmTrees(): List<LSMTree>
-
     fun <T> withStoreReadLock(action: () -> T): T
 
     fun performGarbageCollection(monitor: TaskMonitor)

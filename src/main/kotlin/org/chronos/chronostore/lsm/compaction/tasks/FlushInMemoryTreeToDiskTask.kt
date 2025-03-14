@@ -16,7 +16,6 @@ import java.util.concurrent.atomic.AtomicLong
 
 class FlushInMemoryTreeToDiskTask(
     private val lsmTree: LSMTree,
-    val manifestFile: ManifestFile,
 ) : AsyncTask {
 
     companion object {
@@ -34,16 +33,11 @@ class FlushInMemoryTreeToDiskTask(
 
     override fun run(monitor: TaskMonitor)  = monitor.mainTask(this.name) {
         log.ioDebug { "FLUSH TASK [${this.index}] START on ${this.lsmTree}" }
-        val flushResult = monitor.subTaskWithMonitor(0.95) { subMonitor ->
+        val flushResult = monitor.subTaskWithMonitor(1.0) { subMonitor ->
             lsmTree.flushInMemoryDataToDisk(
                 minFlushSize = 0.Bytes,
                 monitor = subMonitor,
             )
-        }
-        monitor.subTask(0.05, "Updating Manifest") {
-            if (flushResult != null) {
-                this.manifestFile.appendFlushOperation(lsmTree.storeId, flushResult.targetFileIndex)
-            }
         }
         logTaskResult(flushResult)
         updateStatistics(flushResult)
