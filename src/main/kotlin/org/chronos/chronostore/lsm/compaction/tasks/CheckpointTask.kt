@@ -1,5 +1,6 @@
 package org.chronos.chronostore.lsm.compaction.tasks
 
+import io.github.oshai.kotlinlogging.KotlinLogging
 import org.chronos.chronostore.api.StoreManager
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.mainTask
@@ -15,6 +16,12 @@ class CheckpointTask(
     private val storeManager: StoreManager,
 ) : AsyncTask {
 
+    companion object {
+
+        private val log = KotlinLogging.logger {}
+
+    }
+
     override val name: String
         get() = "Checkpoint"
 
@@ -24,6 +31,14 @@ class CheckpointTask(
             if (this.writeAheadLog.needsToBeShortened()) {
                 // save the checkpoint data first because it's faster than the shortening
                 val lowWatermark = this.storeManager.getLowWatermarkTSN()
+                if (lowWatermark == null) {
+                    // we can only perform a meaningful checkpoint if there is at least
+                    // one completed transaction in the store. WAL shortening also only
+                    // makes sense if we have completed transactions in the store.
+                    // Since that's not the case, we're exiting out here.
+                    log.warn { "No data has been fully written into persistent LSM tree files yet, no checkpoint will be created and WAL will not be shortened." }
+                    return
+                }
                 this.checkpointManager.saveCheckpoint(CheckpointData(lowWatermark))
                 // shorten the WAL by discarding old files based on the low watermark
                 this.writeAheadLog.shorten(lowWatermark)

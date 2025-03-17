@@ -33,7 +33,12 @@ class ChronoStoreFileTest {
                     outputStream = overWriter.outputStream,
                     settings = ChronoStoreFileSettings(CompressionAlgorithm.NONE, 16.MiB),
                 )
-                writer.writeFile(0, orderedCommands = emptySequence<Command>().iterator(), commandCountEstimate = 10)
+                writer.writeFile(
+                    numberOfMerges = 0,
+                    orderedCommands = emptySequence<Command>().iterator(),
+                    commandCountEstimate = 10,
+                    maxCompletelyWrittenTSN = 1,
+                )
                 overWriter.commit()
             }
 
@@ -56,6 +61,7 @@ class ChronoStoreFileTest {
                                 get { this.maxKey }.isNull()
                                 get { this.minTSN }.isNull()
                                 get { this.maxTSN }.isNull()
+                                get { this.maxCompletelyWrittenTSN }.isEqualTo(1L)
                                 get { this.headEntries }.isEqualTo(0L)
                                 get { this.historyEntries }.isEqualTo(0L)
                                 get { this.totalEntries }.isEqualTo(0)
@@ -92,7 +98,12 @@ class ChronoStoreFileTest {
                     settings = ChronoStoreFileSettings(CompressionAlgorithm.NONE, 16.KiB),
                 )
                 val commands = listOf(Command.put(theKey, 1000L, BasicBytes("hello")))
-                writer.writeFile(0, orderedCommands = commands.iterator(), commandCountEstimate = 10)
+                writer.writeFile(
+                    numberOfMerges = 0,
+                    orderedCommands = commands.iterator(),
+                    commandCountEstimate = 10,
+                    maxCompletelyWrittenTSN = 42,
+                )
                 overWriter.commit()
             }
 
@@ -111,6 +122,7 @@ class ChronoStoreFileTest {
 
                     expectThat(reader) {
                         get { fileHeader.indexOfBlocks.size }.isEqualTo(1)
+                        get { fileHeader.metaData.maxCompletelyWrittenTSN }.isEqualTo(42L)
 
                         get { get(KeyAndTSN(theKey, max + 1)) }.isNotNull().and {
                             get { key }.isEqualTo(theKey)
@@ -151,7 +163,12 @@ class ChronoStoreFileTest {
                         Command.put(theKey, (i + 1) * 1000L, Bytes.random(random, 1024))
                     }
                 }
-                writer.writeFile(0, orderedCommands = commands.iterator(), commandCountEstimate = 1000)
+                writer.writeFile(
+                    numberOfMerges = 0,
+                    orderedCommands = commands.iterator(),
+                    commandCountEstimate = 1000,
+                    maxCompletelyWrittenTSN = 34233,
+                )
                 overWriter.commit()
             }
 
@@ -170,6 +187,7 @@ class ChronoStoreFileTest {
 
                     expectThat(reader) {
                         get { fileHeader.indexOfBlocks.size }.isGreaterThan(1)
+                        get { fileHeader.metaData.maxCompletelyWrittenTSN }.isEqualTo(34233L)
 
                         get { get(KeyAndTSN(theKey, max + 1)) }.isNotNull().and {
                             get { key }.isEqualTo(theKey)
@@ -250,7 +268,12 @@ class ChronoStoreFileTest {
                         Command.put(theKey, (i + 1) * 1000L, Bytes.random(random, 1024))
                     }
                 }
-                writer.writeFile(0, orderedCommands = commands.iterator(), commandCountEstimate = 1000)
+                writer.writeFile(
+                    numberOfMerges = 0,
+                    orderedCommands = commands.iterator(),
+                    commandCountEstimate = 1000,
+                    maxCompletelyWrittenTSN = null,
+                )
                 overWriter.commit()
             }
 
@@ -269,7 +292,6 @@ class ChronoStoreFileTest {
                         assert(!cursor.previous()) { "could navigate to previous() from first()!" }
                         val entries = cursor.ascendingEntrySequenceFromHere().toList()
                         expectThat(entries).hasSize(1000)
-
                     }
                 }
             }
@@ -300,6 +322,7 @@ class ChronoStoreFileTest {
                         numberOfMerges = 0L,
                         orderedCommands = commands.iterator(),
                         commandCountEstimate = 10,
+                        maxCompletelyWrittenTSN = 673456434L,
                     )
                 }
                 overWriter.commit()
@@ -341,6 +364,7 @@ class ChronoStoreFileTest {
                         get { this.maxKey }.isNotNull().get { this.asString() }.isEqualTo("hello")
                         get { this.minTSN }.isEqualTo(1234)
                         get { this.maxTSN }.isEqualTo(100_000)
+                        get { this.maxCompletelyWrittenTSN }.isEqualTo(673456434L)
                         get { this.settings }.and {
                             get { this.maxBlockSize }.isEqualTo(16.KiB)
                             get { this.compression }.isEqualTo(CompressionAlgorithm.SNAPPY)
@@ -388,6 +412,7 @@ class ChronoStoreFileTest {
                         numberOfMerges = 0L,
                         orderedCommands = commands.iterator(),
                         commandCountEstimate = 10,
+                        maxCompletelyWrittenTSN = null,
                     )
                 }
                 overWriter.commit()
@@ -399,7 +424,12 @@ class ChronoStoreFileTest {
                     outputStream = overWriter.outputStream.buffered(),
                     settings = ChronoStoreFileSettings(CompressionAlgorithm.NONE, 16.MiB),
                 )
-                writer.writeFile(0, orderedCommands = emptySequence<Command>().iterator(), commandCountEstimate = 10)
+                writer.writeFile(
+                    numberOfMerges = 0,
+                    orderedCommands = emptySequence<Command>().iterator(),
+                    commandCountEstimate = 10,
+                    maxCompletelyWrittenTSN = null,
+                )
                 overWriter.commit()
             }
 
@@ -441,6 +471,7 @@ class ChronoStoreFileTest {
                         get { this.maxKey }.isNotNull().get { this.asString() }.isEqualTo("hello")
                         get { this.minTSN }.isEqualTo(1234)
                         get { this.maxTSN }.isEqualTo(100_000)
+                        get { this.maxCompletelyWrittenTSN }.isNull()
                         get { this.settings }.and {
                             get { this.maxBlockSize }.isEqualTo(16.KiB)
                             get { this.compression }.isEqualTo(CompressionAlgorithm.SNAPPY)

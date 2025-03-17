@@ -30,7 +30,8 @@ object CompactionUtil {
      * @param resultingCommandCountEstimate An estimate on how many commands will be in the final resulting file. Will be used for sizing the bloom filter.
      * @param maxNumberOfMergesInInputFiles The highest number of received merges across all input files. The output file will have a "numberOfMerges"
      *                 equal to [maxMerge] + 1. For statistical purposes only.
-     * @param smallestReadTSN Among all currently open transactions, returns the smallest [TSN] used for reading. In other words, this is the oldest
+     * @param maxCompletelyWrittenTSN The highest [TSN] which has been fully written in the input files. May be `null` if no transaction has been fully written yet.
+     * @param smallestReadTSN Among all currently open transactions, this is the smallest [TSN] used for reading. In other words, this is the oldest
      *                        TSN which still needs to be accessible after the merge. All older historic data will be discarded during the compaction.
      *                        If this value is `null`, all historic entries will be discarded during the transaction.
      */
@@ -40,6 +41,7 @@ object CompactionUtil {
         keepTombstones: Boolean,
         resultingCommandCountEstimate: Long,
         maxNumberOfMergesInInputFiles: Long,
+        maxCompletelyWrittenTSN: TSN?,
         smallestReadTSN: TSN?,
     ) {
         val iterators = cursors.mapNotNull {
@@ -72,6 +74,7 @@ object CompactionUtil {
             numberOfMerges = maxNumberOfMergesInInputFiles + 1,
             orderedCommands = finalIterator,
             commandCountEstimate = resultingCommandCountEstimate,
+            maxCompletelyWrittenTSN = maxCompletelyWrittenTSN,
         )
     }
 

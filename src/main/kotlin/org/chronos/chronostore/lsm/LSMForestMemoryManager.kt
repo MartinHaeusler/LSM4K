@@ -145,7 +145,7 @@ class LSMForestMemoryManager(
 
     fun onInMemoryFlush(tree: LSMTree) {
         this.lock.write {
-            val stats = getTreeStats(tree)
+            val stats = this.getTreeStats(tree)
             val removedBytes = stats.actualTreeSize - tree.inMemorySize.bytes
             if (removedBytes <= 0) {
                 // safeguard: if no data was actually flushed from the tree,

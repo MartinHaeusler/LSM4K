@@ -76,6 +76,8 @@ class LSMTree(
 
     @Volatile
     private var inMemoryTree = TreePMap.empty<KeyAndTSN, Command>()
+    private var highestCompletelyWrittenTSN: TSN? = null
+
     private val inMemoryTreeSizeInBytes = AtomicLong(0)
     private val lock = ReentrantReadWriteLock(true)
     private val treeSizeChangedCondition = this.lock.writeLock().newCondition()
@@ -223,9 +225,9 @@ class LSMTree(
     val latestPersistedCommitTSN: TSN?
         get() {
             this.lock.read {
-                // we don't have in-memory commits, check the files.
-                // IMPORTANT: we assume here that the highest TSN is in the file with the HIGHEST index!
-                return this.fileList.lastOrNull()?.header?.metaData?.maxTSN
+                return this.fileList.asSequence()
+                    .mapNotNull { it.header.metaData.maxCompletelyWrittenTSN }
+                    .maxOrNull()
             }
         }
 
@@ -352,6 +354,17 @@ class LSMTree(
         this.forest.onBeforeInMemoryInsert(this, bytesToInsert)
     }
 
+    fun setHighestCompletelyWrittenTSN(commitTSN: TSN) {
+        this.lock.write {
+            val current = this.highestCompletelyWrittenTSN
+            this.highestCompletelyWrittenTSN = if (current != null && current >= commitTSN) {
+                current
+            } else {
+                commitTSN
+            }
+        }
+    }
+
     fun getMaxPersistedTSN(): TSN {
         return fileList.asSequence()
             .mapNotNull { it.header.metaData.maxTSN }
@@ -386,6 +399,7 @@ class LSMTree(
                 return null
             }
             log.perfTrace { "Flushing LSM Tree '${this.directory}'!" }
+            val highestCompletelyWrittenTSN = this.highestCompletelyWrittenTSN ?: -1
             val commands = monitor.subTask(0.1, "Collecting Entries to flush") {
                 // [C0001]: We *must* take *all* of the commits in the in-memory tree
                 // and flush them to avoid writing SST files with partial transactions in them.
@@ -409,6 +423,7 @@ class LSMTree(
                                 numberOfMerges = 0,
                                 orderedCommands = commands.values.iterator(),
                                 commandCountEstimate = commands.size.toLong(),
+                                maxCompletelyWrittenTSN = highestCompletelyWrittenTSN,
                             )
                         }
                         overWriter.commit()
@@ -487,6 +502,10 @@ class LSMTree(
                 it.header.metaData.numberOfMerges
             } ?: 0
 
+            val maxCompletelyWrittenTSN = filesToMerge.asSequence()
+                .mapNotNull { it.header.metaData.maxCompletelyWrittenTSN }
+                .maxOrNull()
+
             // TODO [LOGIC]: Currently we only create a single output file per compaction. We want to split that up (e.g. using Spooky, max. file size, etc.)
             targetFile.deleteOverWriterFileIfExists()
             targetFile.createOverWriter().use { overWriter ->
@@ -504,6 +523,7 @@ class LSMTree(
                             resultingCommandCountEstimate = totalEntries,
                             keepTombstones = keepTombstones,
                             smallestReadTSN = this.getSmallestOpenReadTSN(),
+                            maxCompletelyWrittenTSN = maxCompletelyWrittenTSN,
                         )
                     }
                 } finally {
@@ -707,4 +727,6 @@ class LSMTree(
     override fun toString(): String {
         return "LSMTree[${this.storeId}]"
     }
+
+
 }

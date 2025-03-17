@@ -218,7 +218,7 @@ class WriteAheadLog(
      *
      * In particular, this method will remove any invalid or incomplete transactions from the WAL.
      */
-    fun performStartupRecoveryCleanup(getHighWatermarkTSN: () -> TSN) {
+    fun performStartupRecoveryCleanup(getHighWatermarkTSN: () -> TSN?) {
         this.lock.write {
             log.debug { "Checking Write-Ahead-Log for incomplete transactions and data corruption." }
             val timeBefore = System.currentTimeMillis()
@@ -251,7 +251,8 @@ class WriteAheadLog(
                                         // commit was interrupted by process kill or power outage. We
                                         // can tolerate that, as long as no store has ever seen a
                                         // higher TSN than the previous entry.
-                                        if (getHighWatermarkTSN() > lastSuccessfulTransactionTSN) {
+                                        val highWatermarkTSN = getHighWatermarkTSN()
+                                        if (highWatermarkTSN != null && highWatermarkTSN > lastSuccessfulTransactionTSN) {
                                             throw WriteAheadLogEntryCorruptedException("WAL file '${walFile.file.path}' is has been truncated and cannot be read!")
                                         }
                                         // truncate the file

@@ -90,7 +90,9 @@ class TransactionManager(
                 for ((storeId, commands) in walTransaction.storeIdToCommands.entries) {
                     val store = storeNameToStore.getValue(storeId)
                     // we're missing the changes from this transaction, put them into the store.
-                    (store as StoreImpl).tree.putAll(commands)
+                    val lsmTree = (store as StoreImpl).tree
+                    lsmTree.putAll(commands)
+                    lsmTree.setHighestCompletelyWrittenTSN(walTransaction.commitTSN)
                 }
 
             }

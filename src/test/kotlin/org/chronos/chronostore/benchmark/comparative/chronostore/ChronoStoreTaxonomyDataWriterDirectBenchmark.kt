@@ -38,7 +38,7 @@ object ChronoStoreTaxonomyDataWriterDirectBenchmark {
                     outputStream = overWriter.outputStream.buffered(),
                     settings = ChronoStoreFileSettings(compression = compressionAlgorithm, maxBlockSize = blockSize),
                 )
-                writer.writeFile(0, commandSequence.iterator(), 3_500_000)
+                writer.writeFile(numberOfMerges = 0, orderedCommands = commandSequence.iterator(), commandCountEstimate = 3_500_000, maxCompletelyWrittenTSN = 1)
                 overWriter.commit()
             }
             val timeAfter = System.currentTimeMillis()

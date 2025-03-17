@@ -27,7 +27,6 @@ import java.util.concurrent.Executors
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.concurrent.read
 import kotlin.concurrent.write
-import kotlin.math.min
 
 class StoreManagerImpl(
     private val vfs: VirtualFileSystem,
@@ -305,7 +304,7 @@ class StoreManagerImpl(
         }
     }
 
-    override fun getHighWatermarkTSN(): TSN {
+    override fun getHighWatermarkTSN(): TSN? {
         this.storeManagementLock.read {
             if (!this.watermarkQueriesAllowed) {
                 throw IllegalStateException(
@@ -314,14 +313,13 @@ class StoreManagerImpl(
                 )
             }
 
-            val latestTSN = this.storesById.values.asSequence()
+            return storesById.values.asSequence()
                 .mapNotNull { it.highWatermarkTSN }
                 .maxOrNull()
-            return latestTSN ?: -1L
         }
     }
 
-    override fun getLowWatermarkTSN(): TSN {
+    override fun getLowWatermarkTSN(): TSN? {
         this.storeManagementLock.read {
             if (!this.watermarkQueriesAllowed) {
                 throw IllegalStateException(
@@ -329,23 +327,9 @@ class StoreManagerImpl(
                         " because startup recovery hasn't been completed yet!"
                 )
             }
-            val highWatermark = this.getHighWatermarkTSN()
-            val minLowWatermark = this.storesById.values.asSequence()
-                .filter(Store::hasInMemoryChanges)
+            return this.storesById.values.asSequence()
                 .mapNotNull { it.lowWatermarkTSN }
                 .minOrNull()
-
-            return if (minLowWatermark == null) {
-                // no store has in-memory changes
-                // => everything is 100% persisted
-                // => low watermark == high watermark
-                highWatermark
-            } else {
-                // some stores have in-memory changes.
-                // As a precaution, limit the low watermark with the
-                // high watermark.
-                min(highWatermark, minLowWatermark)
-            }
         }
     }
 

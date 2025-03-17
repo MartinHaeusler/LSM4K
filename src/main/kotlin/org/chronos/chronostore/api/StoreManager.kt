@@ -19,9 +19,9 @@ interface StoreManager {
         return this.getStoreByIdOrNull(transaction, name) != null
     }
 
-    fun getHighWatermarkTSN(): TSN
+    fun getHighWatermarkTSN(): TSN?
 
-    fun getLowWatermarkTSN(): TSN
+    fun getLowWatermarkTSN(): TSN?
 
     fun createNewStore(transaction: ChronoStoreTransaction, storeId: StoreId, validFromTSN: TSN, compactionStrategy: CompactionStrategy?): Store
 

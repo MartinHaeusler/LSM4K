@@ -15,6 +15,8 @@ class LsmFileConfiguratorImpl(
     val index: FileIndex?,
 ) : LsmFileConfigurator {
 
+    override var maxCompletelyWrittenTSN: TSN? = null
+
     override var minKey: Bytes? = null
         set(value) {
             field = value

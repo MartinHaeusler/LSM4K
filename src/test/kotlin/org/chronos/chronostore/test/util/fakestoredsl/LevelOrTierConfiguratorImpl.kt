@@ -45,6 +45,7 @@ class LevelOrTierConfiguratorImpl(
                     numberOfMerges = fileBuilder.numberOfMerges,
                     createdAt = fileBuilder.createdAt,
                     bloomFilter = fileBuilder.bloomFilter,
+                    maxCompletelyWrittenTSN = fileBuilder.maxCompletelyWrittenTSN,
                 ),
                 sizeOnDisk = fileBuilder.sizeOnDisk,
             )

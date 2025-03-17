@@ -31,6 +31,8 @@ interface LsmFileConfigurator {
 
     var maxTSN: TSN?
 
+    var maxCompletelyWrittenTSN: TSN?
+
     var headEntries: Long
 
     var totalEntries: Long
@@ -38,6 +40,7 @@ interface LsmFileConfigurator {
     var numberOfBlocks: Int
 
     var bloomFilter: BytesBloomFilter
+
 
 
 }

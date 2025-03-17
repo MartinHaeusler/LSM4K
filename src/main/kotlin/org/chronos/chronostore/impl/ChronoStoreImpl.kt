@@ -253,6 +253,12 @@ class ChronoStoreImpl(
         log.info { "Completed shut-down of ChronoStore at '${this.vfs}'." }
     }
 
+
+    // =================================================================================================================
+    // FLUSHING, COMPACTING & GARBAGE COLLECTION
+    // These methods are not exposed in the public API (interface) and primarily serve for automated testing purposes.
+    // =================================================================================================================
+
     fun garbageCollectionSynchronous(monitor: TaskMonitor = TaskMonitor.create()) {
         this.storeManager.performGarbageCollection(monitor)
     }

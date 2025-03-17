@@ -69,15 +69,7 @@ class StoreImpl(
         get() = this.tree.latestReceivedCommitTSN
 
     override val lowWatermarkTSN: TSN?
-        get() {
-            if (!this.hasInMemoryChanges()) {
-                // we have no in-memory changes, therefore ALL data belonging
-                // to this store has been persisted. We have nothing to
-                // contribute to the low watermark.
-                return null
-            }
-            return this.tree.latestPersistedCommitTSN
-        }
+        get() = this.tree.latestPersistedCommitTSN
 
     override fun hasInMemoryChanges(): Boolean {
         return this.tree.inMemorySize.bytes > 0L

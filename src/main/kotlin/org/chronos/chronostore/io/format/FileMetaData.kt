@@ -28,8 +28,23 @@ class FileMetaData(
     val maxKey: Bytes?,
     /** The smallest [TSN] in the file (independent of the key). May be `null` if the file is empty. */
     val minTSN: TSN?,
-    /** The largest [TSN] in the file (independent of the key). May be `null` if the file is empty. */
+    /**
+     * The largest [TSN] in the file (independent of the key).
+     *
+     * May be `null` if the file is empty.
+     *
+     * Please note that just because a file contains data from a given TSN, it does **not** mean that
+     * the corresponding transaction has been **fully** reflected in this file (or any other LSM file).
+     * Some parts of the data may still be missing. To see the maximum TSN which has been fully represented
+     * by this file (including previous LSM files), please use [maxCompletelyWrittenTSN]
+     */
     val maxTSN: TSN?,
+    /**
+     * The highest [TSN] which is guaranteed to be completely contained in this file (or previous already written LSM files).
+     *
+     * May be `null` if no transaction has been fully completed.
+     */
+    val maxCompletelyWrittenTSN: TSN?,
     /** The number of non-overwritten non-delete entries in this file (i.e. the size of the "head" key set of the file). */
     val headEntries: Long,
     /** The total number of entries in this file. */
@@ -57,6 +72,7 @@ class FileMetaData(
             val maxKey = PrefixIO.readBytes(inputStream).takeIf { it.isNotEmpty() }
             val minTSN = inputStream.readLittleEndianLong().takeIf { it > 0 }
             val maxTSN = inputStream.readLittleEndianLong().takeIf { it > 0 }
+            val maxCompletelyWrittenTSN = inputStream.readLittleEndianLong().takeIf { it > 0 }
             val headEntries = inputStream.readLittleEndianLong()
             val totalEntries = inputStream.readLittleEndianLong()
             val numberOfBlocks = inputStream.readLittleEndianInt()
@@ -71,6 +87,7 @@ class FileMetaData(
                 maxKey = maxKey,
                 minTSN = minTSN,
                 maxTSN = maxTSN,
+                maxCompletelyWrittenTSN = maxCompletelyWrittenTSN,
                 headEntries = headEntries,
                 totalEntries = totalEntries,
                 numberOfBlocks = numberOfBlocks,
@@ -90,6 +107,7 @@ class FileMetaData(
         PrefixIO.writeBytes(outputStream, this.maxKey ?: Bytes.EMPTY)
         outputStream.writeLittleEndianLong(this.minTSN ?: 0)
         outputStream.writeLittleEndianLong(this.maxTSN ?: 0)
+        outputStream.writeLittleEndianLong(this.maxCompletelyWrittenTSN ?: 0)
         outputStream.writeLittleEndianLong(this.headEntries)
         outputStream.writeLittleEndianLong(this.totalEntries)
         outputStream.writeLittleEndianInt(this.numberOfBlocks)
@@ -160,6 +178,7 @@ class FileMetaData(
             val maxKeySize = this.maxKey?.size ?: 0
             val minTSNSize = TSN.SIZE_BYTES
             val maxTSNSize = TSN.SIZE_BYTES
+            val maxCompletelyWrittenTSNSize = TSN.SIZE_BYTES
             val statsSize = Long.SIZE_BYTES * 3 + Int.SIZE_BYTES
             val createdAtSize = Timestamp.SIZE_BYTES
             val bloomFilterSize = Int.SIZE_BYTES + this.bloomFilter.sizeBytes
@@ -169,13 +188,14 @@ class FileMetaData(
                 maxKeySize +
                 minTSNSize +
                 maxTSNSize +
+                maxCompletelyWrittenTSNSize +
                 statsSize +
                 createdAtSize +
                 bloomFilterSize
         }
 
     override fun toString(): String {
-        return "FileMetaData(settings=$settings, fileUUID=$fileUUID, minKey=$minKey, maxKey=$maxKey, minTSN=$minTSN, maxTSN=$maxTSN, headEntries=$headEntries, totalEntries=$totalEntries, numberOfBlocks=$numberOfBlocks, numberOfMerges=$numberOfMerges, createdAt=$createdAt, historyEntries=$historyEntries, headHistoryRatio=$headHistoryRatio)"
+        return "FileMetaData(settings=$settings, fileUUID=$fileUUID, minKey=$minKey, maxKey=$maxKey, minTSN=$minTSN, maxTSN=$maxTSN, maxCompletelyWrittenTSN=$maxCompletelyWrittenTSN, headEntries=$headEntries, totalEntries=$totalEntries, numberOfBlocks=$numberOfBlocks, numberOfMerges=$numberOfMerges, createdAt=$createdAt, historyEntries=$historyEntries, headHistoryRatio=$headHistoryRatio)"
     }
 
 
