@@ -108,11 +108,6 @@ class ChronoStoreImpl(
             this.performStartupRecovery()
         }
 
-        // let the store manager know that watermark queries are valid from now on.
-        // Watermark queries deliver invalid results when performed before the WAL
-        // recovery has been performed.
-        this.storeManager.enableWatermarks()
-
         this.tsnManager = TSNManager(currentTSN)
 
         this.transactionManager = TransactionManager(

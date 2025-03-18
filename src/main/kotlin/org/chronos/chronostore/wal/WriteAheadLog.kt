@@ -1,6 +1,5 @@
 package org.chronos.chronostore.wal
 
-import com.google.common.io.CountingInputStream
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.chronos.chronostore.api.exceptions.TruncatedInputException
 import org.chronos.chronostore.api.exceptions.WriteAheadLogEntryCorruptedException
@@ -10,7 +9,10 @@ import org.chronos.chronostore.io.structure.ChronoStoreStructure.WRITE_AHEAD_LOG
 import org.chronos.chronostore.io.vfs.VirtualDirectory
 import org.chronos.chronostore.io.vfs.VirtualFile
 import org.chronos.chronostore.io.vfs.VirtualReadWriteFile
+import org.chronos.chronostore.util.ResourceContext.Companion.using
+import org.chronos.chronostore.util.StreamExtensions.byteCounting
 import org.chronos.chronostore.util.StreamExtensions.hasNext
+import org.chronos.chronostore.util.StreamExtensions.pushback
 import org.chronos.chronostore.util.TSN
 import org.chronos.chronostore.util.iterator.IteratorExtensions.peekOrNull
 import org.chronos.chronostore.util.iterator.IteratorExtensions.toPeekingIterator
@@ -235,43 +237,73 @@ class WriteAheadLog(
                 }
 
                 // we either HAVE no checksum file or it's invalid => check the content.
-                walFile.withInputStream { input ->
-                    PushbackInputStream(input.buffered()).use { pbIn ->
-                        CountingInputStream(pbIn).use { cIn ->
-                            var startOfBlock: Long
-                            var lastSuccessfulTransactionTSN = -1L
-                            while (pbIn.hasNext()) {
-                                startOfBlock = cIn.count
-                                try {
-                                    val tx = WriteAheadLogFormat.readTransaction(cIn)
-                                    lastSuccessfulTransactionTSN = tx.commitTSN
-                                } catch (e: TruncatedInputException) {
-                                    if (isLastFile) {
-                                        // the last file in our WAL may become truncated if the last
-                                        // commit was interrupted by process kill or power outage. We
-                                        // can tolerate that, as long as no store has ever seen a
-                                        // higher TSN than the previous entry.
-                                        val highWatermarkTSN = getHighWatermarkTSN()
-                                        if (highWatermarkTSN != null && highWatermarkTSN > lastSuccessfulTransactionTSN) {
-                                            throw WriteAheadLogEntryCorruptedException("WAL file '${walFile.file.path}' is has been truncated and cannot be read!")
-                                        }
-                                        // truncate the file
-                                        log.debug { "Detected truncation of Write-Ahead-Log file '${walFile.file.name}'. This is the latest file and it can be repaired. Dropping partial transactions..." }
-                                        walFile.file.truncateAfter(startOfBlock)
-                                        log.debug { "Repair of Write-Ahead-Log file '${walFile.file.name}' complete." }
-                                    } else {
-                                        // for all other WAL files (which are not the last one) we cannot tolerate missing data.
-                                        throw WriteAheadLogEntryCorruptedException("WAL file '${walFile.file.path}' is has been truncated and cannot be read!")
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
+                this.validateAndFixTruncatedWALFile(
+                    walFile = walFile,
+                    isLastFile = isLastFile,
+                    getHighWatermarkTSN = getHighWatermarkTSN,
+                )
             }
             val timeAfter = System.currentTimeMillis()
             log.debug { "Write-Ahead-Log validation complete. Checked ${walFiles.size} files in ${timeAfter - timeBefore}ms." }
         }
+    }
+
+    private fun validateAndFixTruncatedWALFile(
+        walFile: WALFile,
+        isLastFile: Boolean,
+        getHighWatermarkTSN: () -> TSN?,
+    ) = using {
+        val pushbackInputStream = walFile.inputStream()
+            .buffered()
+            .pushback()
+            .autoClose()
+
+        val countingInputStream = pushbackInputStream
+            .byteCounting()
+            .autoClose()
+
+        var startOfBlock: Long
+        var lastSuccessfulTransactionTSN = -1L
+        while (pushbackInputStream.hasNext()) {
+            // remember the current position in the input stream in case we
+            // need to truncate the file at this position later on.
+            startOfBlock = countingInputStream.count
+            try {
+                val tx = WriteAheadLogFormat.readTransaction(countingInputStream)
+                lastSuccessfulTransactionTSN = tx.commitTSN
+            } catch (e: TruncatedInputException) {
+                if (!isLastFile) {
+                    // for all other WAL files (which are not the last one) we cannot tolerate missing data.
+                    throw WriteAheadLogEntryCorruptedException("WAL file '${walFile.file.path}' is has been truncated and cannot be read!")
+                }
+                truncateIncompleteWALFile(
+                    highWatermarkTSN = getHighWatermarkTSN(),
+                    lastSuccessfulTransactionTSN = lastSuccessfulTransactionTSN,
+                    walFile = walFile,
+                    startOfBlock = startOfBlock,
+                )
+            }
+        }
+    }
+
+    private fun truncateIncompleteWALFile(
+        highWatermarkTSN: TSN?,
+        lastSuccessfulTransactionTSN: TSN,
+        walFile: WALFile,
+        startOfBlock: Long,
+    ) {
+        // the last file in our WAL may become truncated if the last
+        // commit was interrupted by process kill or power outage. We
+        // can tolerate that, as long as no store has ever seen a
+        // higher TSN than the previous entry.
+        if (highWatermarkTSN != null && highWatermarkTSN > lastSuccessfulTransactionTSN) {
+            throw WriteAheadLogEntryCorruptedException("WAL file '${walFile.file.path}' is has been truncated and cannot be read!")
+        }
+
+        // truncate the file
+        log.debug { "Detected truncation of Write-Ahead-Log file '${walFile.file.name}'. This is the latest file and it can be repaired. Dropping partial transactions..." }
+        walFile.file.truncateAfter(startOfBlock)
+        log.debug { "Repair of Write-Ahead-Log file '${walFile.file.name}' complete." }
     }
 
     fun generateChecksumsForCompletedFiles() {

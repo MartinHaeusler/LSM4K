@@ -19,6 +19,7 @@ import org.chronos.chronostore.lsm.cache.FileHeaderCache
 import org.chronos.chronostore.manifest.ManifestFile
 import org.chronos.chronostore.manifest.StoreMetadata
 import org.chronos.chronostore.manifest.operations.DeleteStoreOperation
+import org.chronos.chronostore.util.ListExtensions.headTail
 import org.chronos.chronostore.util.StoreId
 import org.chronos.chronostore.util.TSN
 import org.chronos.chronostore.util.TransactionId
@@ -51,9 +52,6 @@ class StoreManagerImpl(
     @Transient
     private var isOpen = true
 
-    @Transient
-    private var watermarkQueriesAllowed = false
-
     private var initialized: Boolean = false
     private val storesById = mutableMapOf<StoreId, Store>()
     private val storeManagementLock = ReentrantReadWriteLock(true)
@@ -73,9 +71,9 @@ class StoreManagerImpl(
                 val manifest = this.manifestFile.getManifest()
                 for (storeMetadata in manifest.stores.values) {
                     val storeId = storeMetadata.storeId
-                    val storeDirectory = getStoreDirectory(storeId)
-                    val store = createStore(storeMetadata, storeDirectory)
-                    this.registerStoreInCaches(store)
+                    val storeDirectory = this.getStoreDirectory(storeId)
+                    val store = this.createStore(storeMetadata, storeDirectory)
+                    this.registerStore(store)
                 }
             }
             // ensure that the system stores exist
@@ -89,16 +87,7 @@ class StoreManagerImpl(
     }
 
     private fun getStoreDirectory(storeId: StoreId): VirtualDirectory {
-        val names = storeId.path
-        return if (names.size == 1) {
-            this.vfs.directory(names[0])
-        } else {
-            val rootName = names[0]
-            val rootDir = this.vfs.directory(rootName)
-            names.asSequence().drop(1).fold(rootDir) { currentDir, name ->
-                currentDir.directory(name)
-            }
-        }
+        return this.vfs.directory(storeId.path)
     }
 
     private fun createStore(storeMetadata: StoreMetadata, directory: VirtualDirectory): StoreImpl {
@@ -115,10 +104,6 @@ class StoreManagerImpl(
             newFileSettings = this.newFileSettings,
             getSmallestOpenReadTSN = this.getSmallestOpenReadTSN,
         )
-    }
-
-    fun enableWatermarks() {
-        this.watermarkQueriesAllowed = true
     }
 
     override fun <T> withStoreReadLock(action: () -> T): T {
@@ -214,7 +199,7 @@ class StoreManagerImpl(
 
         // then, create the store object itself
         val store = createStore(newStoreMetadata, directory)
-        this.registerStoreInCaches(store)
+        this.registerStore(store)
         return store
     }
 
@@ -306,13 +291,6 @@ class StoreManagerImpl(
 
     override fun getHighWatermarkTSN(): TSN? {
         this.storeManagementLock.read {
-            if (!this.watermarkQueriesAllowed) {
-                throw IllegalStateException(
-                    "Cannot perform 'getHighWatermarkTSN()' on this StoreManager" +
-                        " because startup recovery hasn't been completed yet!"
-                )
-            }
-
             return storesById.values.asSequence()
                 .mapNotNull { it.highWatermarkTSN }
                 .maxOrNull()
@@ -321,12 +299,6 @@ class StoreManagerImpl(
 
     override fun getLowWatermarkTSN(): TSN? {
         this.storeManagementLock.read {
-            if (!this.watermarkQueriesAllowed) {
-                throw IllegalStateException(
-                    "Cannot perform 'getLowWatermarkTSN()' on this StoreManager" +
-                        " because startup recovery hasn't been completed yet!"
-                )
-            }
             return this.storesById.values.asSequence()
                 .mapNotNull { it.lowWatermarkTSN }
                 .minOrNull()
@@ -350,7 +322,7 @@ class StoreManagerImpl(
         }
     }
 
-    private fun registerStoreInCaches(store: Store) {
+    private fun registerStore(store: Store) {
         this.storeManagementLock.write {
             this.storesById[store.storeId] = store
         }

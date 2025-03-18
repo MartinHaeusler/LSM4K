@@ -1,5 +1,6 @@
 package org.chronos.chronostore.util
 
+import com.google.common.io.CountingInputStream
 import java.io.InputStream
 import java.io.PushbackInputStream
 import java.security.DigestInputStream
@@ -27,5 +28,12 @@ object StreamExtensions {
         return DigestInputStream(this, digest)
     }
 
+    fun InputStream.pushback(): PushbackInputStream {
+        return PushbackInputStream(this)
+    }
+
+    fun InputStream.byteCounting(): CountingInputStream {
+        return CountingInputStream(this)
+    }
 
 }

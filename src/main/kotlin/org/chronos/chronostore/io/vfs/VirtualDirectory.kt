@@ -1,5 +1,7 @@
 package org.chronos.chronostore.io.vfs
 
+import org.chronos.chronostore.util.ListExtensions.headTail
+
 interface VirtualDirectory: VirtualFileSystemElement {
 
     fun list(): List<String>
@@ -23,5 +25,11 @@ interface VirtualDirectory: VirtualFileSystemElement {
     fun directory(name: String): VirtualDirectory
 
     fun delete()
+
+    fun directory(path: List<String>): VirtualDirectory {
+        val (rootDirName, subPath) = path.headTail()
+        val rootDir = this.directory(rootDirName)
+        return subPath.fold(rootDir, VirtualDirectory::directory)
+    }
 
 }

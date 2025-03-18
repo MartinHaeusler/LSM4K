@@ -32,6 +32,10 @@ class WALFile(
         return this.file.append(action)
     }
 
+    fun inputStream(): InputStream {
+        return this.file.createInputStream()
+    }
+
     fun <T> withInputStream(action: (InputStream) -> T): T {
         return this.file.withInputStream(action)
     }
