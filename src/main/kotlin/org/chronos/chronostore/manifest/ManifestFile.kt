@@ -43,7 +43,12 @@ class ManifestFile(
 
     companion object {
 
-        val HASH_FUNCTION = Hashing.goodFastHash(32)
+        /**
+         * The hash function used on each particular entry of the WAL.
+         *
+         * ATTENTION: DO NOT CHANGE THIS! Changing this will make all WAL files out there permanently INVALID!
+         */
+        val HASH_FUNCTION = Hashing.murmur3_128()
 
         val FILE_NAME = "manifest.csmf"
 

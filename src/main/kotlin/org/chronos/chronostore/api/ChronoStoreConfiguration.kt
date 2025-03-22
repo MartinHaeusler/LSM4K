@@ -229,6 +229,16 @@ class ChronoStoreConfiguration(
      * Disable this option if the time-to-shutdown is more important than the time-to-restart.
      */
     val checkpointOnShutdown: Boolean = true,
+
+    /**
+     * The maximum size of the buffer when replaying the write ahead log (WAL).
+     *
+     * A larger buffer results in faster WAL replay at startup.
+     *
+     * Please note that this is a **soft** limit. If a single key-value pair is very large,
+     * this limit may be temporarily exceeded.
+     */
+    val walBufferSize: BinarySize = 128.MiB
 ) {
 
     init {

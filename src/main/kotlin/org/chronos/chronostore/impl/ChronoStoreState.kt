@@ -6,6 +6,8 @@ enum class ChronoStoreState {
 
     RUNNING,
 
-    SHUTTING_DOWN;
+    SHUTTING_DOWN,
+
+    PANIC;
 
 }

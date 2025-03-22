@@ -11,6 +11,7 @@ import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.forEach
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.mainTask
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.subTask
 import org.chronos.chronostore.async.tasks.CompletableAsyncTask
+import org.chronos.chronostore.impl.Killswitch
 import org.chronos.chronostore.io.fileaccess.RandomFileAccessDriverFactory
 import org.chronos.chronostore.io.format.ChronoStoreFileSettings
 import org.chronos.chronostore.io.format.ChronoStoreFileWriter
@@ -66,6 +67,7 @@ class LSMTree(
     private val driverFactory: RandomFileAccessDriverFactory,
     private val newFileSettings: ChronoStoreFileSettings,
     private val getSmallestOpenReadTSN: () -> TSN?,
+    private val killswitch: Killswitch,
 ) {
 
     companion object {
@@ -365,25 +367,41 @@ class LSMTree(
         }
     }
 
-    fun getMaxPersistedTSN(): TSN {
+    fun getMaxPersistedTSN(): TSN? {
         return fileList.asSequence()
             .mapNotNull { it.header.metaData.maxTSN }
-            .maxOrNull() ?: -1
+            .maxOrNull()
     }
 
     fun scheduleMajorCompaction(): CompletableFuture<*> {
         // when we do a major compaction anyway, all open minor compaction tasks become useless
         // because their results will be superseded by the major compaction anyway. Remove them from the queue.
         this.compactionTaskQueue.cancelWaitingTasksIf { it is SingleStoreMinorCompactionTask }
-        return this.compactionTaskQueue.schedule(SingleStoreMajorCompactionTask(this, this.manifestFile))
+        return this.compactionTaskQueue.schedule(
+            SingleStoreMajorCompactionTask(
+                lsmTree = this,
+                manifestFile = this.manifestFile,
+                killswitch = this.killswitch,
+            )
+        )
     }
 
     fun scheduleMinorCompaction(): CompletableFuture<*> {
-        return this.compactionTaskQueue.schedule(SingleStoreMinorCompactionTask(this))
+        return this.compactionTaskQueue.schedule(
+            SingleStoreMinorCompactionTask(
+                lsmTree = this,
+                killswitch = this.killswitch,
+            )
+        )
     }
 
     fun scheduleMemtableFlush(): CompletableFuture<*> {
-        val completableTask = CompletableAsyncTask(FlushInMemoryTreeToDiskTask(this))
+        val completableTask = CompletableAsyncTask(
+            FlushInMemoryTreeToDiskTask(
+                lsmTree = this,
+                killswitch = this.killswitch,
+            )
+        )
         this.flushTaskQueue.schedule(completableTask)
         return completableTask.future
     }

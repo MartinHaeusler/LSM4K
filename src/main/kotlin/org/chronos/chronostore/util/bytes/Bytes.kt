@@ -1,6 +1,10 @@
 package org.chronos.chronostore.util.bytes
 
 import com.google.common.hash.BloomFilter
+import com.google.common.hash.HashCode
+import com.google.common.hash.HashFunction
+import com.google.common.hash.Hasher
+import org.chronos.chronostore.impl.annotations.PersistentClass
 import org.chronos.chronostore.io.format.CompressionAlgorithm
 import org.chronos.chronostore.io.vfs.InputSource
 import org.chronos.chronostore.util.LittleEndianUtil
@@ -22,6 +26,7 @@ import kotlin.random.Random
  *
  * [Bytes] support arbitrary zero-copy slicing via [slice].
  */
+@PersistentClass(format = PersistentClass.Format.BINARY, details = "Used in many places, including LSM files and WAL files.")
 sealed interface Bytes :
     Comparable<Bytes>,
     Collection<Byte>,
@@ -148,6 +153,18 @@ sealed interface Bytes :
             return wrap(byteArray)
         }
 
+        /**
+         * Puts the given [bytes] object into this hasher.
+         *
+         * @param bytes The bytes to add to the hash
+         *
+         * @return The hasher
+         */
+        fun Hasher.putBytes(bytes: Bytes): Hasher {
+            bytes.hash(this)
+            return this
+        }
+
     }
 
 
@@ -259,6 +276,24 @@ sealed interface Bytes :
     fun hex(): String {
         return HexFormat.of().formatHex(this.toSharedArrayUnsafe())
     }
+
+    /**
+     * Hashes the content of `this` object using the given [hashFunction].
+     *
+     * @param hashFunction The hash function to use
+     *
+     * @return the computed hash code.
+     */
+    fun hash(hashFunction: HashFunction): HashCode
+
+    /**
+     * Puts the content of `this` object into the given [hasher].
+     *
+     * @param hasher The hasher to use
+     *
+     * @return the [hasher] with the data appended
+     */
+    fun hash(hasher: Hasher): Hasher
 
     /**
      * Converts the content of this [Bytes] object to a string with the given [charset].

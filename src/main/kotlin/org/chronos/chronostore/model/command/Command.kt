@@ -1,5 +1,8 @@
 package org.chronos.chronostore.model.command
 
+import com.google.common.hash.HashCode
+import com.google.common.hash.HashFunction
+import com.google.common.hash.Hasher
 import org.chronos.chronostore.util.IOExtensions.withInputStream
 import org.chronos.chronostore.util.LittleEndianExtensions.readLittleEndianLong
 import org.chronos.chronostore.util.LittleEndianExtensions.writeLittleEndianLong
@@ -7,6 +10,7 @@ import org.chronos.chronostore.util.PrefixIO
 import org.chronos.chronostore.util.StringExtensions.ellipsis
 import org.chronos.chronostore.util.TSN
 import org.chronos.chronostore.util.bytes.Bytes
+import org.chronos.chronostore.util.bytes.Bytes.Companion.putBytes
 import org.chronos.chronostore.util.bytes.BytesBuffer
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
@@ -77,6 +81,10 @@ class Command(
                 ?: throw IllegalStateException("Cannot read Command from input stream: it has no more data!")
         }
 
+        fun OutputStream.write(command: Command) {
+            command.writeToStream(this)
+        }
+
         fun readFromStreamOrNull(inputStream: InputStream): Command? {
             val firstByte = inputStream.read()
             if (firstByte < 0) {
@@ -96,6 +104,10 @@ class Command(
                 tsn = tsn,
                 value = value
             )
+        }
+
+        fun Hasher.putCommand(command: Command): Hasher {
+            return command.hash(this)
         }
 
     }
@@ -150,8 +162,17 @@ class Command(
         }
     }
 
+    fun getBinarySize(): Int {
+        return 1 +           // opcode
+            Int.SIZE_BYTES + // key length
+            key.size +       // key content
+            TSN.SIZE_BYTES + // Transaction Serial Number
+            Int.SIZE_BYTES + // value length
+            value.size       // value content
+    }
+
     fun toBytes(): Bytes {
-        val outputStream = ByteArrayOutputStream(1 + 8 + key.size + value.size)
+        val outputStream = ByteArrayOutputStream(this.getBinarySize())
         writeToStream(outputStream)
         return Bytes.wrap(outputStream.toByteArray())
     }
@@ -212,11 +233,24 @@ class Command(
         return result
     }
 
+    fun hash(hashFunction: HashFunction): HashCode {
+        return this.hash(hashFunction.newHasher()).hash()
+    }
+
+    fun hash(hasher: Hasher): Hasher {
+        return hasher
+            .putByte(this.opCode.byte)
+            .putBytes(this.key)
+            .putLong(this.tsn)
+            .putBytes(this.value)
+    }
+
     override fun toString(): String {
         return when (this.opCode) {
             OpCode.PUT -> "PUT[${this.key.hex()}@${this.tsn}: ${this.value.hex().ellipsis(32)}]"
             OpCode.DEL -> "DEL[${this.key.hex()}@${this.tsn}]"
         }
     }
+
 
 }

@@ -1,24 +1,36 @@
 package org.chronos.chronostore.wal
 
+import com.google.common.hash.Hashing
 import org.chronos.chronostore.io.vfs.VirtualReadWriteFile
 import org.chronos.chronostore.io.vfs.VirtualReadWriteFile.Companion.withOverWriter
-import org.chronos.chronostore.util.ByteArrayExtensions.hex
 import org.chronos.chronostore.util.IOExtensions.withInputStream
-import org.chronos.chronostore.util.TSN
-import org.chronos.chronostore.util.io.ChecksumUtils.computeMD5
+import org.chronos.chronostore.util.LittleEndianExtensions.readLittleEndianInt
+import org.chronos.chronostore.util.LittleEndianExtensions.writeLittleEndianInt
+import org.chronos.chronostore.util.io.ChecksumUtils.computeHash
 import java.io.InputStream
 import java.io.OutputStream
 
 class WALFile(
     val file: VirtualReadWriteFile,
-    val minTSN: TSN,
+    val sequenceNumber: Long,
 ) {
 
-    val checksumFile: VirtualReadWriteFile = this.file.parent?.file(this.file.name + ".md5")
+    companion object {
+
+        /**
+         * The hash function to use for WAL files.
+         *
+         * Do not change this value, or all WAL files out there will become permanently invalid!
+         */
+        private val HASH_FUNCTION = Hashing.murmur3_32_fixed()
+
+    }
+
+    val checksumFile: VirtualReadWriteFile = this.file.parent?.file(this.file.name + ".murmur3")
         ?: throw IllegalStateException("Could not determine parent directory of Write-Ahead-Log file '${file.path}'!")
 
     init {
-        require(minTSN >= 0) { "Argument 'minTSN' (${minTSN}) must not be negative!" }
+        require(sequenceNumber >= 0) { "Argument 'sequenceNumber' (${sequenceNumber}) must not be negative!" }
     }
 
     fun isFull(maxWalFileSizeBytes: Long): Boolean {
@@ -36,7 +48,7 @@ class WALFile(
         return this.file.createInputStream()
     }
 
-    fun <T> withInputStream(action: (InputStream) -> T): T {
+    inline fun <T> withInputStream(action: (InputStream) -> T): T {
         return this.file.withInputStream(action)
     }
 
@@ -54,10 +66,10 @@ class WALFile(
             return
         }
         // compute the actual checksum and write it into the target file.
-        val hex = this.file.computeMD5().hex()
+        val checksum = this.file.computeHash(HASH_FUNCTION).asInt()
         this.checksumFile.deleteOverWriterFileIfExists()
         this.checksumFile.withOverWriter { overWriter ->
-            overWriter.outputStream.writer().use { writer -> writer.write(hex) }
+            overWriter.outputStream.writeLittleEndianInt(checksum)
             overWriter.commit()
         }
     }
@@ -67,13 +79,11 @@ class WALFile(
             // we have no checksum to check against
             return null
         }
-        val knownChecksumHex = this.checksumFile.withInputStream { inputStream ->
-            inputStream.bufferedReader().use { reader ->
-                reader.readText().trim()
-            }
+        val knownChecksum = this.checksumFile.withInputStream { inputStream ->
+            inputStream.readLittleEndianInt()
         }
-        val actualChecksumHex = this.file.computeMD5().hex()
-        return knownChecksumHex == actualChecksumHex
+        val actualChecksum = this.file.computeHash(HASH_FUNCTION).asInt()
+        return knownChecksum == actualChecksum
     }
 
     override fun toString(): String {

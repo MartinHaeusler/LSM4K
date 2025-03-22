@@ -1,5 +1,7 @@
 package org.chronos.chronostore.util.io
 
+import com.google.common.hash.HashCode
+import com.google.common.hash.HashFunction
 import com.google.common.io.ByteStreams
 import org.chronos.chronostore.io.vfs.VirtualFile
 import org.chronos.chronostore.util.StreamExtensions.checked
@@ -37,5 +39,13 @@ object ChecksumUtils {
     fun VirtualFile.computeMD5(): ByteArray {
         return this.computeDigest(MessageDigest.getInstance("MD5"))
     }
+
+    fun VirtualFile.computeHash(hashFunction: HashFunction): HashCode {
+        return createInputStream().use { input ->
+            val processor = HashByteProcessor(hashFunction.newHasher())
+            ByteStreams.readBytes(input, processor)
+        }
+    }
+
 
 }

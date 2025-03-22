@@ -1,6 +1,7 @@
 package org.chronos.chronostore.impl.store
 
 import org.chronos.chronostore.api.Store
+import org.chronos.chronostore.impl.Killswitch
 import org.chronos.chronostore.io.fileaccess.RandomFileAccessDriverFactory
 import org.chronos.chronostore.io.format.ChronoStoreFileSettings
 import org.chronos.chronostore.io.vfs.VirtualDirectory
@@ -29,6 +30,7 @@ class StoreImpl(
     driverFactory: RandomFileAccessDriverFactory,
     newFileSettings: ChronoStoreFileSettings,
     getSmallestOpenReadTSN: () -> TSN?,
+    killswitch: Killswitch,
 ) : Store {
 
     override val storeId: StoreId = initialStoreMetadata.storeId
@@ -50,6 +52,7 @@ class StoreImpl(
         fileHeaderCache = fileHeaderCache,
         getSmallestOpenReadTSN = getSmallestOpenReadTSN,
         initialStoreMetadata = initialStoreMetadata,
+        killswitch = killswitch,
     )
 
 

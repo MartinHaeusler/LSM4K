@@ -7,11 +7,11 @@ import org.chronos.chronostore.api.StoreManager
 import org.chronos.chronostore.api.TransactionalReadWriteStore
 import org.chronos.chronostore.api.compaction.CompactionStrategy
 import org.chronos.chronostore.impl.TransactionManager
+import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.util.StoreId
 import org.chronos.chronostore.util.TSN
 import org.chronos.chronostore.util.TransactionId
 import org.chronos.chronostore.util.statistics.ChronoStoreStatistics
-import org.chronos.chronostore.wal.WriteAheadLogTransaction
 
 class ChronoStoreTransactionImpl(
     override val id: TransactionId,
@@ -82,16 +82,22 @@ class ChronoStoreTransactionImpl(
         this.storeManager.deleteStore(this, txStore.storeId)
     }
 
-    fun toWALTransaction(commitTSN: TSN): WriteAheadLogTransaction {
-        val changes = this.openStoresByName.values.associate { txStore ->
-            txStore.store.storeId to txStore.transactionContext.convertToCommands(commitTSN)
+    val modifiedStoreIds: Set<StoreId>
+        get() {
+            return this.openStoresByName.entries.asSequence()
+                .filter { it.value.transactionContext.isDirty() }
+                .map { it.key }
+                .toSet()
         }
 
-        return WriteAheadLogTransaction(
-            transactionId = this.id,
-            commitTSN = commitTSN,
-            storeIdToCommands = changes,
-        )
+    fun getChangesAsSequence(commitTSN: TSN): Sequence<Pair<StoreId, Command>> {
+        return this.openStoresByName.values.asSequence()
+            .filter { it.transactionContext.isDirty() }
+            .flatMap { store ->
+                store.transactionContext
+                    .convertToCommands(commitTSN)
+                    .map { store.storeId to it }
+            }
     }
 
     override fun rollback() {
@@ -126,4 +132,5 @@ class ChronoStoreTransactionImpl(
             this.rollback()
         }
     }
+
 }

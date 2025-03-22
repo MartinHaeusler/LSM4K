@@ -4,7 +4,6 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 import org.chronos.chronostore.api.*
 import org.chronos.chronostore.async.executor.AsyncTaskManagerImpl
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor
-import org.chronos.chronostore.checkpoint.CheckpointManager
 import org.chronos.chronostore.impl.store.StoreImpl
 import org.chronos.chronostore.io.format.ChronoStoreFileSettings
 import org.chronos.chronostore.io.structure.ChronoStoreStructure
@@ -19,6 +18,7 @@ import org.chronos.chronostore.lsm.garbagecollector.tasks.GarbageCollectorTask
 import org.chronos.chronostore.manifest.ManifestFile
 import org.chronos.chronostore.util.StoreId
 import org.chronos.chronostore.util.TSN
+import org.chronos.chronostore.wal.WALReadBuffer
 import org.chronos.chronostore.wal.WriteAheadLog
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.Executors
@@ -41,9 +41,10 @@ class ChronoStoreImpl(
     @Volatile
     private var state: ChronoStoreState = ChronoStoreState.STARTING
 
+    private val killswitch = Killswitch(this::panic)
+
     private val manifestFile = ManifestFile(this.vfs.file(ManifestFile.FILE_NAME))
 
-    private val checkpointManager: CheckpointManager
     private val tsnManager: TSNManager
     private val blockCacheManager = BlockCacheManager.create(configuration.blockCacheSize)
     private val fileHeaderCache = FileHeaderCache.create(configuration.fileHeaderCacheSize)
@@ -62,17 +63,17 @@ class ChronoStoreImpl(
         newFileSettings = ChronoStoreFileSettings(configuration.compressionAlgorithm, configuration.maxBlockSize),
         manifestFile = this.manifestFile,
         configuration = this.configuration,
-        getSmallestOpenReadTSN = { this.transactionManager.getSmallestOpenReadTSN() }
+        getSmallestOpenReadTSN = { this.transactionManager.getSmallestOpenReadTSN() },
+        killswitch = this.killswitch,
     )
 
     private val asyncTaskManager = AsyncTaskManagerImpl(
-        Executors.newSingleThreadScheduledExecutor(),
-        this::state,
+        executorService = Executors.newSingleThreadScheduledExecutor(),
+        getChronoStoreState = this::state,
     )
 
     private val writeAheadLog: WriteAheadLog
     private val transactionManager: TransactionManager
-
 
     private val checkpointTask: CheckpointTask
 
@@ -89,15 +90,11 @@ class ChronoStoreImpl(
             }
         }
         systemDir.mkdirs()
-        this.checkpointManager = CheckpointManager(
-            directory = systemDir.directory(ChronoStoreStructure.CHECKPOINT_DIR_NAME),
-            maxCheckpointFiles = this.configuration.maxCheckpointFiles,
-        )
+
         this.writeAheadLog = WriteAheadLog(
             directory = walDirectory,
-            compressionAlgorithm = this.configuration.compressionAlgorithm,
             maxWalFileSizeBytes = this.configuration.maxWriteAheadLogFileSize.bytes,
-            minNumberOfFiles = this.configuration.minNumberOfWriteAheadLogFiles
+            minNumberOfFiles = this.configuration.minNumberOfWriteAheadLogFiles,
         )
         val currentTSN = if (isEmptyDatabase) {
             // The WAL file doesn't exist. It's a new, empty database.
@@ -118,8 +115,9 @@ class ChronoStoreImpl(
 
         this.checkpointTask = CheckpointTask(
             writeAheadLog = this.writeAheadLog,
-            checkpointManager = this.checkpointManager,
-            storeManager = this.storeManager
+            storeManager = this.storeManager,
+            manifestFile = this.manifestFile,
+            killswitch = this.killswitch,
         )
 
         val checkpointCron = this.configuration.checkpointCron
@@ -135,7 +133,10 @@ class ChronoStoreImpl(
 
         val minorCompactionCron = this.configuration.minorCompactionCron
         if (minorCompactionCron != null) {
-            val triggerMinorCompactionOnAllStoresTask = TriggerMinorCompactionOnAllStoresTask(this.storeManager::getAllStoresInternal)
+            val triggerMinorCompactionOnAllStoresTask = TriggerMinorCompactionOnAllStoresTask(
+                getAllStores = this.storeManager::getAllStoresInternal,
+                killswitch = this.killswitch,
+            )
             this.asyncTaskManager.scheduleRecurringWithCron(triggerMinorCompactionOnAllStoresTask, minorCompactionCron)
         } else {
             this.warnAboutMinorCompactionDisabled()
@@ -143,7 +144,10 @@ class ChronoStoreImpl(
 
         val majorCompactionCron = this.configuration.majorCompactionCron
         if (majorCompactionCron != null) {
-            val triggerMajorCompactionOnAllStoresTask = TriggerMajorCompactionOnAllStoresTask(this.storeManager::getAllStoresInternal)
+            val triggerMajorCompactionOnAllStoresTask = TriggerMajorCompactionOnAllStoresTask(
+                getAllStores = this.storeManager::getAllStoresInternal,
+                killswitch = killswitch,
+            )
             this.asyncTaskManager.scheduleRecurringWithCron(triggerMajorCompactionOnAllStoresTask, majorCompactionCron)
         } else {
             this.warnAboutMajorCompactionDisabled()
@@ -162,62 +166,53 @@ class ChronoStoreImpl(
         log.info { "Opening database in: ${this.vfs}" }
         // initialize the store manager so that we can read from it.
         this.storeManager.initialize(isEmptyDatabase = false)
-        val checkpoint = this.checkpointManager.getLatestCheckpoint()
-        if (checkpoint != null) {
-            // remove superfluous WAL files with the data from the checkpoint
-            this.writeAheadLog.shorten(checkpoint.lowWatermark)
-        }
 
-        // remove any incomplete transactions from the WAL file.
-        this.writeAheadLog.performStartupRecoveryCleanup(this.storeManager::getHighWatermarkTSN)
+        // check which is the HIGHEST TSN ever received by any store?
+        // TODO [PERFORMANCE]: Fetching the metadata of EVERY LSM file in the store may become expensive
+        val highWatermarkTSN = this.storeManager.getHighWatermarkTSN() ?: -1
+
+        // remove any incomplete transactions from the WAL file. Ensure that
+        // we still have access to the WAL file which produced the highest
+        // TSN in the LSM trees after the operation has completed.
+        this.writeAheadLog.performStartupRecoveryCleanup(highWatermarkTSN)
+
         val allStores = this.storeManager.getAllStoresInternal()
         // with the store info, replay the changes found in the WAL.
         return this.replayWriteAheadLogChanges(allStores)
     }
 
     private fun replayWriteAheadLogChanges(allStores: List<Store>): TSN {
-        val storeNameToStore = allStores.associateBy { it.storeId }
-        val storeIdToMaxTSN = allStores.associate { store ->
-            val maxPersistedTSN = (store as StoreImpl).tree.getMaxPersistedTSN()
-            store.storeId to maxPersistedTSN
-        }
         log.info { "Replaying Write-Ahead-Log" }
         // replay the entries in the WAL which have not been persisted yet
-        var totalTransactions = 0
-        var missingTransactions = 0
         var maxTSN = 0L
+        val storeIdToLowWatermark = allStores.associate { it.storeId to it.lowWatermarkTSN }
+        val walReadBuffer = WALReadBuffer(this.configuration.walBufferSize.bytes, storeIdToLowWatermark)
+        val lsmTreesById = allStores.associate { it.storeId to (it as StoreImpl).tree }
         val timeBefore = System.currentTimeMillis()
-        this.writeAheadLog.readWalStreaming { walTransaction ->
-            totalTransactions++
-            maxTSN = max(maxTSN, walTransaction.commitTSN)
-            var changed = false
-            for (entry in walTransaction.storeIdToCommands.entries) {
-                val storeMaxTimestamp = storeIdToMaxTSN[entry.key]
-                    ?: continue // the store doesn't exist anymore, skip
 
-                if (storeMaxTimestamp >= walTransaction.commitTSN) {
-                    // we already have these changes in our store.
-                    continue
+        this.writeAheadLog.readWalStreaming(walReadBuffer) {
+            // buffer needs to be flushed
+            val modifiedStoreIds = walReadBuffer.getModifiedStoreIds()
+            for (modifiedStoreId in modifiedStoreIds) {
+                val lsmTree = lsmTreesById[modifiedStoreId]
+                    ?: continue  // the store doesn't exist anymore, skip
+                val commandsToFlush = walReadBuffer.getCommandsForStore(modifiedStoreId)
+                val completedTSN = walReadBuffer.getCompletedTSNForStore(modifiedStoreId)
+
+                if (commandsToFlush.isNotEmpty()) {
+                    // we're missing the changes from this transaction,
+                    // put them into the store.
+                    lsmTree.putAll(commandsToFlush)
                 }
-
-                // we don't have this change yet, apply it
-                val store = storeNameToStore[entry.key]
-                    ?: continue // the store doesn't exist anymore, skip
-
-                // we're missing the changes from this transaction,
-                // put them into the store. Note that we put ALL changes
-                // by this transaction into the store at once. This is
-                // important because it avoids flushing partial transactions
-                // to the LSM tree files.
-                (store as StoreImpl).tree.putAll(entry.value)
-                changed = true
-            }
-            if (changed) {
-                missingTransactions++
+                if (completedTSN != null) {
+                    maxTSN = max(maxTSN, completedTSN)
+                    lsmTree.setHighestCompletelyWrittenTSN(completedTSN)
+                }
             }
         }
+
         val timeAfter = System.currentTimeMillis()
-        log.info { "Successfully replayed ${totalTransactions} transactions in the WAL file in ${timeAfter - timeBefore}ms. ${missingTransactions} transactions were missing in store files." }
+        log.info { "Successfully replayed transactions in the Write-Ahead-Log in ${timeAfter - timeBefore}ms." }
         return maxTSN
     }
 
@@ -248,6 +243,15 @@ class ChronoStoreImpl(
         log.info { "Completed shut-down of ChronoStore at '${this.vfs}'." }
     }
 
+    private fun panic(message: String, cause: Throwable?) {
+        log.error(cause) { "ChronoStore Panic: A fatal failure has occurred during an operation. Store will shut down immediately in order to protect data integrity. Message: '${message}', cause: ${cause}" }
+        this.state = ChronoStoreState.PANIC
+        this.isOpen = false
+        this.transactionManager.closePanic()
+        this.asyncTaskManager.closePanic()
+        this.storeManager.closePanic()
+        log.info(cause) { "ChronoStore has been shut down due to panic trigger." }
+    }
 
     // =================================================================================================================
     // FLUSHING, COMPACTING & GARBAGE COLLECTION
@@ -341,7 +345,6 @@ class ChronoStoreImpl(
         this.minorCompactionOnStoreAsync(storeId).join()
     }
 
-
     private fun warnAboutMinorCompactionDisabled() {
         log.warn {
             "Periodic Minor Compaction is disabled, because the corresponding CRON expression is NULL!" +
@@ -355,5 +358,6 @@ class ChronoStoreImpl(
                 " You need to compact the store explicitly to prevent performance degradation."
         }
     }
+
 
 }

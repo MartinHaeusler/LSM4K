@@ -2,12 +2,13 @@ package org.chronos.chronostore.impl.transaction
 
 import org.chronos.chronostore.api.Store
 import org.chronos.chronostore.model.command.Command
+import org.chronos.chronostore.util.TSN
 import org.chronos.chronostore.util.Timestamp
 import org.chronos.chronostore.util.bytes.Bytes
 import java.util.*
 
 class TransactionBoundStoreContext(
-    private val store: Store
+    private val store: Store,
 ) {
 
     private val modifications = mutableMapOf<Bytes, Bytes?>()
@@ -23,7 +24,7 @@ class TransactionBoundStoreContext(
         this.modifications[key] = null
     }
 
-    fun clearModifications(){
+    fun clearModifications() {
         this.modifications.clear()
     }
 
@@ -31,12 +32,12 @@ class TransactionBoundStoreContext(
         return this.modifications.isNotEmpty()
     }
 
-    fun convertToCommands(commitTimestamp: Timestamp): List<Command> {
-        return this.modifications.map { (key, value) ->
+    fun convertToCommands(commitTSN: TSN): Sequence<Command> {
+        return this.modifications.asSequence().map { (key, value) ->
             if (value == null) {
-                Command.del(key, commitTimestamp)
+                Command.del(key, commitTSN)
             } else {
-                Command.put(key, commitTimestamp, value)
+                Command.put(key, commitTSN, value)
             }
         }
     }

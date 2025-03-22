@@ -6,6 +6,7 @@ import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.mainTask
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.subTask
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.subTaskWithMonitor
 import org.chronos.chronostore.async.tasks.AsyncTask
+import org.chronos.chronostore.impl.Killswitch
 import org.chronos.chronostore.lsm.FlushResult
 import org.chronos.chronostore.lsm.LSMTree
 import org.chronos.chronostore.manifest.ManifestFile
@@ -16,6 +17,7 @@ import java.util.concurrent.atomic.AtomicLong
 
 class FlushInMemoryTreeToDiskTask(
     private val lsmTree: LSMTree,
+    private val killswitch: Killswitch,
 ) : AsyncTask {
 
     companion object {
@@ -31,18 +33,22 @@ class FlushInMemoryTreeToDiskTask(
     override val name: String
         get() = "Flushing LSM Tree to Disk [${this.index}]: ${lsmTree.path}"
 
-    override fun run(monitor: TaskMonitor)  = monitor.mainTask(this.name) {
+    override fun run(monitor: TaskMonitor) = monitor.mainTask(this.name) {
         log.ioDebug { "FLUSH TASK [${this.index}] START on ${this.lsmTree}" }
-        val flushResult = monitor.subTaskWithMonitor(1.0) { subMonitor ->
-            lsmTree.flushInMemoryDataToDisk(
-                minFlushSize = 0.Bytes,
-                monitor = subMonitor,
-            )
+        try {
+            val flushResult = monitor.subTaskWithMonitor(1.0) { subMonitor ->
+                lsmTree.flushInMemoryDataToDisk(
+                    minFlushSize = 0.Bytes,
+                    monitor = subMonitor,
+                )
+            }
+            logTaskResult(flushResult)
+            updateStatistics(flushResult)
+        } catch (t: Throwable) {
+            killswitch.panic("An unexpected error occurred during Flush of store '${lsmTree.storeId}': ${t}", t)
+            throw t
         }
-        logTaskResult(flushResult)
-        updateStatistics(flushResult)
     }
-
 
     private fun logTaskResult(flushResult: FlushResult?) {
         if (flushResult == null || flushResult.bytesWritten <= 0) {

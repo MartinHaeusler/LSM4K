@@ -19,7 +19,7 @@ import org.chronos.chronostore.lsm.cache.FileHeaderCache
 import org.chronos.chronostore.manifest.ManifestFile
 import org.chronos.chronostore.manifest.StoreMetadata
 import org.chronos.chronostore.manifest.operations.DeleteStoreOperation
-import org.chronos.chronostore.util.ListExtensions.headTail
+import org.chronos.chronostore.util.ManagerState
 import org.chronos.chronostore.util.StoreId
 import org.chronos.chronostore.util.TSN
 import org.chronos.chronostore.util.TransactionId
@@ -39,18 +39,17 @@ class StoreManagerImpl(
     private val configuration: ChronoStoreConfiguration,
     private val manifestFile: ManifestFile,
     private val getSmallestOpenReadTSN: () -> TSN?,
+    private val killswitch: Killswitch,
 ) : StoreManager, AutoCloseable {
 
     companion object {
-
-        private const val DB_ALREADY_CLOSED = "This database has already been closed."
 
         private val log = KotlinLogging.logger {}
 
     }
 
     @Transient
-    private var isOpen = true
+    private var state: ManagerState = ManagerState.OPEN
 
     private var initialized: Boolean = false
     private val storesById = mutableMapOf<StoreId, Store>()
@@ -103,6 +102,7 @@ class StoreManagerImpl(
             driverFactory = this.driverFactory,
             newFileSettings = this.newFileSettings,
             getSmallestOpenReadTSN = this.getSmallestOpenReadTSN,
+            killswitch = this.killswitch,
         )
     }
 
@@ -124,7 +124,7 @@ class StoreManagerImpl(
     }
 
     fun getStoreByIdOrNullAdmin(storeId: StoreId): StoreImpl? {
-        check(this.isOpen) { DB_ALREADY_CLOSED }
+        this.state.checkOpen()
         this.storeManagementLock.read {
             val store = this.storesById[storeId]
                 ?: return null
@@ -133,7 +133,7 @@ class StoreManagerImpl(
     }
 
     override fun getStoreByIdOrNull(transaction: ChronoStoreTransaction, name: StoreId): Store? {
-        check(this.isOpen) { DB_ALREADY_CLOSED }
+        this.state.checkOpen()
         this.storeManagementLock.read {
             assertInitialized()
             return this.storesById[name]?.takeIf { it.isVisibleFor(transaction) }
@@ -146,7 +146,7 @@ class StoreManagerImpl(
         validFromTSN: TSN,
         compactionStrategy: CompactionStrategy?,
     ): Store {
-        check(this.isOpen) { DB_ALREADY_CLOSED }
+        this.state.checkOpen()
         check(transaction.isOpen) { "Argument 'transaction' must refer to an open transaction, but the given transaction has already been closed!" }
         require(validFromTSN >= transaction.lastVisibleSerialNumber) { "Argument 'validFrom' (${validFromTSN}) must not be smaller than the transaction last visible TSN (${transaction.lastVisibleSerialNumber})!" }
         this.storeManagementLock.write {
@@ -204,7 +204,7 @@ class StoreManagerImpl(
     }
 
     override fun getSystemStore(systemStore: SystemStore): Store {
-        check(this.isOpen) { DB_ALREADY_CLOSED }
+        this.state.checkOpen()
         this.storeManagementLock.read {
             assertInitialized()
             this.manifestFile.getManifest().getStoreOrNull(systemStore.storeId)
@@ -214,7 +214,7 @@ class StoreManagerImpl(
     }
 
     private fun ensureSystemStoreExists(systemStore: SystemStore): Store {
-        check(this.isOpen) { DB_ALREADY_CLOSED }
+        this.state.checkOpen()
         this.storeManagementLock.write {
             val existingStore = this.storesById[systemStore.storeId]
             if (existingStore != null) {
@@ -230,7 +230,7 @@ class StoreManagerImpl(
     }
 
     override fun deleteStore(transaction: ChronoStoreTransaction, storeId: StoreId): Boolean {
-        check(this.isOpen) { DB_ALREADY_CLOSED }
+        this.state.checkOpen()
         this.storeManagementLock.write {
             assertInitialized()
             val store = this.getStoreByIdOrNull(transaction, storeId)
@@ -261,7 +261,7 @@ class StoreManagerImpl(
      * @return A list of all stores. The list is a snapshot copy of the current state and doesn't change when stores are added/removed.
      */
     fun getAllStoresInternal(): List<Store> {
-        check(this.isOpen) { DB_ALREADY_CLOSED }
+        this.state.checkOpen()
         this.storeManagementLock.read {
             this.assertInitialized()
             return this.storesById.values.toList()
@@ -269,16 +269,17 @@ class StoreManagerImpl(
     }
 
     fun getAllLsmTreesAdmin(): List<LSMTree> {
+        this.state.checkOpen()
         return this.getAllStoresInternal().map { (it as StoreImpl).tree }
     }
 
     override fun getAllStores(transaction: ChronoStoreTransaction): List<Store> {
-        check(this.isOpen) { DB_ALREADY_CLOSED }
+        this.state.checkOpen()
         return this.getAllStoresInternal().filter { it.isVisibleFor(transaction) }
     }
 
     override fun performGarbageCollection(monitor: TaskMonitor) = monitor.mainTask("Perform LSM Garbage Collection") {
-        if (!this.isOpen) {
+        if (this.state.isClosed()) {
             return
         }
         this.storeManagementLock.read {
@@ -306,10 +307,19 @@ class StoreManagerImpl(
     }
 
     override fun close() {
-        if (!this.isOpen) {
+        this.closeInternal(ManagerState.CLOSED)
+    }
+
+    fun closePanic() {
+        this.closeInternal(ManagerState.PANIC)
+    }
+
+    private fun closeInternal(closeState: ManagerState) {
+        if (this.state.isClosed()) {
+            this.state = closeState
             return
         }
-        this.isOpen = false
+        this.state = closeState
         try {
             this.compactionWorkerPool.shutdownNow()
         } catch (e: Exception) {

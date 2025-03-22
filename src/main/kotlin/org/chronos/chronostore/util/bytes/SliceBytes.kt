@@ -1,12 +1,17 @@
 package org.chronos.chronostore.util.bytes
 
 import com.google.common.collect.Iterators
+import com.google.common.hash.HashCode
+import com.google.common.hash.HashFunction
+import com.google.common.hash.Hasher
+import org.chronos.chronostore.impl.annotations.PersistentClass
 import org.chronos.chronostore.util.ByteArrayExtensions.hex
 import org.chronos.chronostore.util.comparator.UnsignedBytesComparator
 import org.chronos.chronostore.util.unit.BinarySize.Companion.Bytes
 import java.io.OutputStream
 import kotlin.math.min
 
+@PersistentClass(format = PersistentClass.Format.BINARY, details = "Used in many places, including LSM files and WAL files.")
 class SliceBytes(
     private val array: ByteArray,
     private val startInclusive: Int,
@@ -78,6 +83,14 @@ class SliceBytes(
             }
         }
         return false
+    }
+
+    override fun hash(hashFunction: HashFunction): HashCode {
+        return hashFunction.hashBytes(this.array, this.startInclusive, this.size)
+    }
+
+    override fun hash(hasher: Hasher): Hasher {
+        return hasher.putBytes(this.array, this.startInclusive, this.size)
     }
 
     override fun hashCode(): Int {

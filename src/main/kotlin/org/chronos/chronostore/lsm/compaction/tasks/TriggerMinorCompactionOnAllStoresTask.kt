@@ -2,19 +2,34 @@ package org.chronos.chronostore.lsm.compaction.tasks
 
 import org.chronos.chronostore.api.Store
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor
+import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.forEach
 import org.chronos.chronostore.async.tasks.AsyncTask
+import org.chronos.chronostore.impl.Killswitch
+import java.util.concurrent.CompletableFuture
 
 class TriggerMinorCompactionOnAllStoresTask(
-    val getAllStores: () -> List<Store>
-): AsyncTask {
+    private val getAllStores: () -> List<Store>,
+    private val killswitch: Killswitch,
+) : AsyncTask {
 
     override val name: String
         get() = "Trigger Minor Compaction on all Stores"
 
     override fun run(monitor: TaskMonitor) {
-        val allStores = this.getAllStores()
-        for(store in allStores){
-            store.scheduleMinorCompaction()
+        try {
+            val allStores = this.getAllStores()
+
+            val tasks = mutableListOf<CompletableFuture<*>>()
+            monitor.forEach(1.0, "Triggering Minor Compaction on all Stores", allStores) { store ->
+                tasks += store.scheduleMinorCompaction()
+            }
+
+            CompletableFuture.allOf(*tasks.toTypedArray()).exceptionally { t ->
+                killswitch.panic("An unexpected error occurred when triggering Minor Compactions on all stores: ${t}", t)
+                null
+            }
+        } catch (t: Throwable) {
+            killswitch.panic("An unexpected error occurred when triggering Minor Compactions on all stores: ${t}", t)
         }
     }
 

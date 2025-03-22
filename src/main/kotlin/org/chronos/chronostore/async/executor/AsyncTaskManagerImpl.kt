@@ -5,6 +5,7 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor
 import org.chronos.chronostore.async.tasks.AsyncTask
 import org.chronos.chronostore.impl.ChronoStoreState
+import org.chronos.chronostore.util.ManagerState
 import org.chronos.chronostore.util.cron.CronUtils.isValid
 import org.chronos.chronostore.util.cron.CronUtils.nextExecution
 import java.util.concurrent.Callable
@@ -24,11 +25,16 @@ class AsyncTaskManagerImpl(
 
     }
 
+    @Volatile
+    private var state: ManagerState = ManagerState.OPEN
+
     override fun executeAsync(task: AsyncTask): Future<TaskExecutionResult> {
+        this.state.checkOpen()
         return this.executorService.submit(createCallableForTask(task))
     }
 
     override fun scheduleRecurringWithTimeBetweenExecutions(task: AsyncTask, timeBetweenExecutions: Duration) {
+        this.state.checkOpen()
         val delayMillis = timeBetweenExecutions.inWholeMilliseconds
         this.executorService.scheduleWithFixedDelay({
             this.createCallableForTask(task).call()
@@ -36,6 +42,7 @@ class AsyncTaskManagerImpl(
     }
 
     override fun scheduleRecurringWithFixedRate(task: AsyncTask, initialDelay: Duration, delayBetweenExecutions: Duration) {
+        this.state.checkOpen()
         this.executorService.scheduleAtFixedRate(
             /* command = */ { this.createCallableForTask(task).call() },
             /* initialDelay = */ initialDelay.inWholeMilliseconds,
@@ -46,6 +53,7 @@ class AsyncTaskManagerImpl(
 
     override fun scheduleRecurringWithCron(task: AsyncTask, cron: Cron) {
         require(cron.isValid()) { "Cron expression '${cron}' is invalid!" }
+        this.state.checkOpen()
         val recurringTask = RecurringCronTask(task, cron, this.executorService)
         val nextExecution = recurringTask.cron.nextExecution()
         if (nextExecution == null) {
@@ -88,9 +96,21 @@ class AsyncTaskManagerImpl(
     }
 
     override fun close() {
-        this.executorService.shutdownNow()
+        this.closeInternal(ManagerState.CLOSED)
     }
 
+    fun closePanic() {
+        this.closeInternal(ManagerState.PANIC)
+    }
+
+    private fun closeInternal(closeState: ManagerState) {
+        if (this.state.isClosed()) {
+            this.state = closeState
+            return
+        }
+        this.state = closeState
+        this.executorService.shutdownNow()
+    }
 
     // =================================================================================================================
     // INNER CLASSES

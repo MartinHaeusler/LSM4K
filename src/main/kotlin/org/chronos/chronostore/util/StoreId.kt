@@ -13,6 +13,9 @@ import com.fasterxml.jackson.databind.annotation.JsonSerialize
 import com.google.common.cache.CacheBuilder
 import com.google.common.cache.CacheLoader
 import com.google.common.cache.LoadingCache
+import com.google.common.hash.HashCode
+import com.google.common.hash.HashFunction
+import com.google.common.hash.Hasher
 import com.google.common.util.concurrent.UncheckedExecutionException
 import org.chronos.chronostore.impl.annotations.PersistentClass
 import org.chronos.chronostore.util.bytes.BasicBytes
@@ -68,6 +71,10 @@ class StoreId : Comparable<StoreId> {
 
         fun OutputStream.write(storeId: StoreId) {
             return storeId.writeTo(this)
+        }
+
+        fun Hasher.putStoreId(storeId: StoreId): Hasher {
+            return storeId.hash(this)
         }
 
         private const val PATH_SEPARATOR_CHAR = '/'
@@ -211,6 +218,14 @@ class StoreId : Comparable<StoreId> {
 
     override fun hashCode(): Int {
         return this.hashCode
+    }
+
+    fun hash(hashFunction: HashFunction): HashCode {
+        return hashFunction.hashUnencodedChars(this.stringRepresentation)
+    }
+
+    fun hash(hasher: Hasher): Hasher {
+        return hasher.putUnencodedChars(this.stringRepresentation)
     }
 
     override fun toString(): String {
