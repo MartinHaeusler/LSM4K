@@ -339,11 +339,6 @@ class LSMTree(
             // to claim more and more RAM until we eventually run into an OutOfMemoryError.
             this.waitUntilInMemoryTreeHasCapacity(bytesToInsert)
 
-            // [C0001] it is very important that we add ALL the data from the commands iterable to
-            // the tree at once. If we don't do that, we may risk flushing partial (!!) transaction
-            // data to disk which absolutely has to be avoided; otherwise efficient startup recovery
-            // is not possible. By updating the "this.inMemoryTree" reference only with the fully
-            // updated tree, we guarantee that each flush task either reads all commands, or none.
             this.inMemoryTree = this.inMemoryTree.plusAll(keyAndTSNToCommand)
             this.inMemoryTreeSizeInBytes.getAndAdd(bytesToInsert)
 
@@ -419,8 +414,6 @@ class LSMTree(
             log.perfTrace { "Flushing LSM Tree '${this.directory}'!" }
             val highestCompletelyWrittenTSN = this.highestCompletelyWrittenTSN ?: -1
             val commands = monitor.subTask(0.1, "Collecting Entries to flush") {
-                // [C0001]: We *must* take *all* of the commits in the in-memory tree
-                // and flush them to avoid writing SST files with partial transactions in them.
                 this.inMemoryTree
             }
             val newFileIndex = this.nextFreeFileIndex.getAndIncrement()
