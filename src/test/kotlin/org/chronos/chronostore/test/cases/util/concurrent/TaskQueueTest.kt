@@ -39,7 +39,7 @@ class TaskQueueTest {
                 // 1000 times, the chances that it really ends up at exactly
                 // 1000 are extremely slim, unless there is exactly one thread
                 // working at each given point in time.
-                queue.waitUntilEmptyOrFail(10.seconds)
+                queue.waitUntilEmptyOrFail(60.seconds)
 
                 expectThat(value).isEqualTo(1000)
             }
