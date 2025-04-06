@@ -5,8 +5,8 @@ import org.chronos.chronostore.api.Store
 import org.chronos.chronostore.api.TransactionalStore.Companion.withCursor
 import org.chronos.chronostore.impl.store.StoreImpl
 import org.chronos.chronostore.lsm.LSMTree
-import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.model.command.KeyAndTSN
+import org.chronos.chronostore.model.command.OpCode
 import org.chronos.chronostore.util.StoreId
 import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.cursor.Cursor
@@ -43,8 +43,8 @@ class TransactionalStoreImpl(
         } else {
             val command = getTree().get(KeyAndTSN(key, this.transaction.lastVisibleSerialNumber))
             when (command?.opCode) {
-                Command.OpCode.DEL, null -> null
-                Command.OpCode.PUT -> command.value
+                OpCode.DEL, null -> null
+                OpCode.PUT -> command.value
             }
         }
     }
@@ -111,8 +111,8 @@ class TransactionalStoreImpl(
                 isModifiedInTransactionContext = false,
                 lastModificationTSN = command?.tsn,
                 value = when (command?.opCode) {
-                    Command.OpCode.DEL, null -> null
-                    Command.OpCode.PUT -> command.value
+                    OpCode.DEL, null -> null
+                    OpCode.PUT -> command.value
                 }
             )
         }
@@ -121,7 +121,7 @@ class TransactionalStoreImpl(
 
     override fun openCursor(): Cursor<Bytes, Bytes> {
         val treeCursor = getTree().openCursor(this.transaction)
-        val bytesToBytesCursor = treeCursor.filterValues { it != null && it.opCode != Command.OpCode.DEL }.mapValue { it.value }
+        val bytesToBytesCursor = treeCursor.filterValues { it != null && it.opCode != OpCode.DEL }.mapValue { it.value }
         val transientModifications = this.transactionContext.allModifications.entries.asSequence().mapNotNull {
             val key = it.key
             val value = it.value

@@ -1,8 +1,6 @@
 package org.chronos.chronostore.util.bytes
 
 import com.google.common.hash.BloomFilter
-import com.google.common.hash.HashCode
-import com.google.common.hash.HashFunction
 import com.google.common.hash.Hasher
 import org.chronos.chronostore.impl.annotations.PersistentClass
 import org.chronos.chronostore.io.format.CompressionAlgorithm
@@ -11,6 +9,7 @@ import org.chronos.chronostore.util.LittleEndianUtil
 import org.chronos.chronostore.util.bits.BitTricks.writeStableInt
 import org.chronos.chronostore.util.bits.BitTricks.writeStableLong
 import org.chronos.chronostore.util.bytes.Bytes.Companion.wrap
+import org.chronos.chronostore.util.hash.Hashable
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.io.OutputStream
@@ -20,17 +19,21 @@ import kotlin.math.min
 import kotlin.random.Random
 
 /**
- * A [Bytes] object contains raw binary data. It is essentially an immutable version of a [ByteArray].
+ * A [Bytes] object contains raw binary data. It is essentially an immutable version of (or an immutable part of) a [ByteArray].
  *
  * To create a [Bytes] object from a [ByteArray], use [wrap].
  *
  * [Bytes] support arbitrary zero-copy slicing via [slice].
+ *
+ * If a [Bytes] object should be kept for extended periods of time, please use [own] to
+ * avoid dependencies on large buffers which would prevent their garbage collection.
  */
 @PersistentClass(format = PersistentClass.Format.BINARY, details = "Used in many places, including LSM files and WAL files.")
 sealed interface Bytes :
     Comparable<Bytes>,
     Collection<Byte>,
-    InputSource {
+    InputSource,
+    Hashable {
 
     companion object {
 
@@ -276,24 +279,6 @@ sealed interface Bytes :
     fun hex(): String {
         return HexFormat.of().formatHex(this.toSharedArrayUnsafe())
     }
-
-    /**
-     * Hashes the content of `this` object using the given [hashFunction].
-     *
-     * @param hashFunction The hash function to use
-     *
-     * @return the computed hash code.
-     */
-    fun hash(hashFunction: HashFunction): HashCode
-
-    /**
-     * Puts the content of `this` object into the given [hasher].
-     *
-     * @param hasher The hasher to use
-     *
-     * @return the [hasher] with the data appended
-     */
-    fun hash(hasher: Hasher): Hasher
 
     /**
      * Converts the content of this [Bytes] object to a string with the given [charset].

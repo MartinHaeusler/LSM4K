@@ -10,6 +10,7 @@ import org.chronos.chronostore.lsm.cache.BlockCacheManagerImpl
 import org.chronos.chronostore.lsm.cache.LocalBlockCache
 import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.model.command.KeyAndTSN
+import org.chronos.chronostore.model.command.OpCode
 import org.chronos.chronostore.test.util.VFSMode
 import org.chronos.chronostore.test.util.VirtualFileSystemTest
 import org.chronos.chronostore.util.StoreId
@@ -127,14 +128,14 @@ class ChronoStoreFileTest {
                         get { get(KeyAndTSN(theKey, max + 1)) }.isNotNull().and {
                             get { key }.isEqualTo(theKey)
                             get { tsn }.isEqualTo(max)
-                            get { opCode }.isEqualTo(Command.OpCode.PUT)
+                            get { opCode }.isEqualTo(OpCode.PUT)
                             get { value.asString() }.isEqualTo("hello")
                         }
 
                         get { get(KeyAndTSN(theKey, min - 1)) }.isNull()
 
                         get { get(KeyAndTSN(theKey, 1000)) }.isNotNull().and {
-                            get { opCode }.isEqualTo(Command.OpCode.PUT)
+                            get { opCode }.isEqualTo(OpCode.PUT)
                             get { tsn }.isEqualTo(1000)
                             get { value.asString() }.isEqualTo("hello")
                         }
@@ -192,54 +193,54 @@ class ChronoStoreFileTest {
                         get { get(KeyAndTSN(theKey, max + 1)) }.isNotNull().and {
                             get { key }.isEqualTo(theKey)
                             get { tsn }.isEqualTo(max)
-                            get { opCode }.isEqualTo(Command.OpCode.PUT)
+                            get { opCode }.isEqualTo(OpCode.PUT)
                             get { value }.hasSize(1024)
                         }
 
                         get { get(KeyAndTSN(theKey, min - 1)) }.isNull()
 
                         get { get(KeyAndTSN(theKey, 101_000)) }.isNotNull().and {
-                            get { opCode }.isEqualTo(Command.OpCode.DEL)
+                            get { opCode }.isEqualTo(OpCode.DEL)
                             get { tsn }.isEqualTo(101_000)
                             get { value }.isEmpty()
                         }
                         get { get(KeyAndTSN(theKey, 101_001)) }.isNotNull().and {
-                            get { opCode }.isEqualTo(Command.OpCode.DEL)
+                            get { opCode }.isEqualTo(OpCode.DEL)
                             get { tsn }.isEqualTo(101_000)
                             get { value }.isEmpty()
                         }
                         get { get(KeyAndTSN(theKey, 101_002)) }.isNotNull().and {
-                            get { opCode }.isEqualTo(Command.OpCode.DEL)
+                            get { opCode }.isEqualTo(OpCode.DEL)
                             get { tsn }.isEqualTo(101_000)
                             get { value }.isEmpty()
                         }
                         get { get(KeyAndTSN(theKey, 101_010)) }.isNotNull().and {
-                            get { opCode }.isEqualTo(Command.OpCode.DEL)
+                            get { opCode }.isEqualTo(OpCode.DEL)
                             get { tsn }.isEqualTo(101_000)
                             get { value }.isEmpty()
                         }
                         get { get(KeyAndTSN(theKey, 101_100)) }.isNotNull().and {
-                            get { opCode }.isEqualTo(Command.OpCode.DEL)
+                            get { opCode }.isEqualTo(OpCode.DEL)
                             get { tsn }.isEqualTo(101_000)
                             get { value }.isEmpty()
                         }
                         get { get(KeyAndTSN(theKey, 101_990)) }.isNotNull().and {
-                            get { opCode }.isEqualTo(Command.OpCode.DEL)
+                            get { opCode }.isEqualTo(OpCode.DEL)
                             get { tsn }.isEqualTo(101_000)
                             get { value }.isEmpty()
                         }
                         get { get(KeyAndTSN(theKey, 101_999)) }.isNotNull().and {
-                            get { opCode }.isEqualTo(Command.OpCode.DEL)
+                            get { opCode }.isEqualTo(OpCode.DEL)
                             get { tsn }.isEqualTo(101_000)
                             get { value }.isEmpty()
                         }
                         get { get(KeyAndTSN(theKey, 102_000)) }.isNotNull().and {
-                            get { opCode }.isEqualTo(Command.OpCode.PUT)
+                            get { opCode }.isEqualTo(OpCode.PUT)
                             get { tsn }.isEqualTo(102_000)
                             get { value }.hasSize(1024)
                         }
                         get { get(KeyAndTSN(theKey, 102_001)) }.isNotNull().and {
-                            get { opCode }.isEqualTo(Command.OpCode.PUT)
+                            get { opCode }.isEqualTo(OpCode.PUT)
                             get { tsn }.isEqualTo(102_000)
                             get { value }.hasSize(1024)
                         }

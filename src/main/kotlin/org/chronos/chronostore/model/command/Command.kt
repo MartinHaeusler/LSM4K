@@ -12,16 +12,34 @@ import org.chronos.chronostore.util.TSN
 import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.bytes.Bytes.Companion.putBytes
 import org.chronos.chronostore.util.bytes.BytesBuffer
+import org.chronos.chronostore.util.hash.Hashable
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.io.OutputStream
 
+/**
+ * A [Command] is a single, atomic change on a key-value pair.
+ *
+ * When a transaction gets committed, a list of [Command]s gets pushed into the Write Ahead Log and
+ * subsequently applied to the LSM trees.
+ *
+ * The primary way to instantiate this class is via the static factory methods, e.g. [put] and [del].
+ *
+ * [Command]s are [Comparable] by first comparing the [key] and then by [tsn].
+ *
+ * [Command]s define a binary format which can be written via [writeToStream] and can be read
+ * via [readFromBytes] or [readFromBytesBuffer].
+ */
 class Command(
+    /** The [OpCode] of the command. Indicates the semantics of the change (Put or Delete). */
     val opCode: OpCode,
+    /** The key of the key-value pair. */
     val key: Bytes,
+    /** The [TSN] of the commit. */
     val tsn: TSN,
+    /** The value of the key-value pair. Will be empty if [opCode] is [OpCode.DEL]. */
     val value: Bytes,
-) : Comparable<Command> {
+) : Comparable<Command>, Hashable {
 
     companion object {
 
@@ -117,30 +135,6 @@ class Command(
         require(key.isNotEmpty()) { "Argument 'key' must not be empty!" }
     }
 
-    enum class OpCode(val byte: Byte) {
-
-        PUT(0b00000001),
-
-        DEL(0b00000010);
-
-        companion object {
-
-            fun fromByte(byte: Int): OpCode {
-                return fromByte(byte.toByte())
-            }
-
-            fun fromByte(byte: Byte): OpCode {
-                return when (byte) {
-                    PUT.byte -> PUT
-                    DEL.byte -> DEL
-                    else -> throw IllegalArgumentException("Unknown OpCode: $byte")
-                }
-            }
-
-        }
-
-    }
-
     val isDeletion: Boolean
         get() = this.opCode == OpCode.DEL
 
@@ -233,11 +227,7 @@ class Command(
         return result
     }
 
-    fun hash(hashFunction: HashFunction): HashCode {
-        return this.hash(hashFunction.newHasher()).hash()
-    }
-
-    fun hash(hasher: Hasher): Hasher {
+    override fun hash(hasher: Hasher): Hasher {
         return hasher
             .putByte(this.opCode.byte)
             .putBytes(this.key)

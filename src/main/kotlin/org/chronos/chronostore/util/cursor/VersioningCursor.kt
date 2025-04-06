@@ -2,6 +2,7 @@ package org.chronos.chronostore.util.cursor
 
 import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.model.command.KeyAndTSN
+import org.chronos.chronostore.model.command.OpCode
 import org.chronos.chronostore.util.Order
 import org.chronos.chronostore.util.TSN
 import org.chronos.chronostore.util.bytes.Bytes
@@ -195,7 +196,7 @@ class VersioningCursor(
     private fun valueIsDeletionMarker(): Boolean {
         val currentValue = this.innerCursor.valueOrNull
             ?: return false
-        return currentValue.opCode == Command.OpCode.DEL
+        return currentValue.opCode == OpCode.DEL
     }
 
     override fun toString(): String {

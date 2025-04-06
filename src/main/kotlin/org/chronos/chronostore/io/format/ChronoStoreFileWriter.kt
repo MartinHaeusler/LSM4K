@@ -4,6 +4,7 @@ import com.google.common.collect.Iterators
 import com.google.common.collect.PeekingIterator
 import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.model.command.KeyAndTSN
+import org.chronos.chronostore.model.command.OpCode
 import org.chronos.chronostore.util.LittleEndianExtensions.writeLittleEndianInt
 import org.chronos.chronostore.util.LittleEndianExtensions.writeLittleEndianLong
 import org.chronos.chronostore.util.PositionTrackingStream
@@ -158,7 +159,7 @@ class ChronoStoreFileWriter : AutoCloseable {
 
             if (!commandsIterator.hasNext() || commandsIterator.peek().key != command.key) {
                 // the entry has no successor on the same key
-                if (command.opCode != Command.OpCode.DEL) {
+                if (command.opCode != OpCode.DEL) {
                     // the entry belongs to the HEAD revision of the file
                     headEntries++
                 }

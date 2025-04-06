@@ -1,13 +1,14 @@
 package org.chronos.chronostore.wal.format
 
-import com.google.common.hash.HashCode
 import com.google.common.hash.HashFunction
-import com.google.common.hash.Hasher
 import com.google.common.hash.Hashing
 import org.chronos.chronostore.api.exceptions.TruncatedInputException
 import org.chronos.chronostore.api.exceptions.WriteAheadLogCorruptedException
 import org.chronos.chronostore.impl.annotations.PersistentClass
 import org.chronos.chronostore.util.TSN
+import org.chronos.chronostore.util.hash.Hashable
+import org.chronos.chronostore.wal.format.WALEntry.Companion.readStreaming
+import org.chronos.chronostore.wal.format.WALEntry.Companion.writeStreaming
 import java.io.InputStream
 import java.io.OutputStream
 
@@ -41,7 +42,7 @@ import java.io.OutputStream
  *
  */
 @PersistentClass(format = PersistentClass.Format.BINARY, details = "Used in WAL.")
-sealed interface WALEntry {
+sealed interface WALEntry: Hashable {
 
     /** The [TSN] of the commit to which this entry belongs. */
     val commitTSN: TSN
@@ -129,26 +130,6 @@ sealed interface WALEntry {
         }
 
     }
-
-    /**
-     * Hashes this entry using the given [hashFunction].
-     *
-     * @param hashFunction The hash function to use.
-     *
-     * @return the [HashCode] of this entry.
-     */
-    fun hash(hashFunction: HashFunction): HashCode {
-        return this.hash(hashFunction.newHasher()).hash()
-    }
-
-    /**
-     * Appends this entry to the given [hasher].
-     *
-     * @param hasher The hasher which should receive the data.
-     *
-     * @return The hasher, with this entry appended to it.
-     */
-    fun hash(hasher: Hasher): Hasher
 
     /**
      * Writes this entry to the given [outputStream].

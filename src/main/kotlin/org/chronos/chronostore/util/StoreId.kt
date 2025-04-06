@@ -17,16 +17,48 @@ import com.google.common.hash.HashCode
 import com.google.common.hash.HashFunction
 import com.google.common.hash.Hasher
 import com.google.common.util.concurrent.UncheckedExecutionException
+import org.chronos.chronostore.api.Store
 import org.chronos.chronostore.impl.annotations.PersistentClass
 import org.chronos.chronostore.util.bytes.BasicBytes
 import org.chronos.chronostore.util.bytes.Bytes
+import org.chronos.chronostore.util.hash.Hashable
 import java.io.InputStream
 import java.io.OutputStream
 
+/**
+ * A [StoreId] uniquely identifies a [Store].
+ *
+ * To create a [StoreId], please use the static factory method [of].
+ *
+ * [StoreId]s are strings with a certain syntax:
+ *
+ * ```
+ * <ID>/</ID>/.../<ID>
+ * ```
+ *
+ * Notably:
+ *
+ * - [StoreId]s are platform-independent and look the same across all platforms (operating systems).
+ *   If a [StoreId] would be invalid on one platform, it is invalid on *all* platforms.
+ * - every `<ID>` has a restricted amount of [allowed characters][VALID_CHAR_PATTERN].
+ * - every `<ID>` is subject to a number of [forbidden names][FORBIDDEN_PATH_NAMES].
+ * - [StoreId]s use `/` to define sub-stores on every platform, even if the native file system would normally use `\` for separation.
+ *
+ * [StoreId]s have two purposes:
+ *
+ * - They define an identity for each [Store].
+ * - They define the directory in which the data is located (relative to database the root directory).
+ *
+ * [StoreId]s are [Comparable] via the lexicographic comparison of their string representations.
+ *
+ * [StoreId]s define a binary format which can be written via [writeTo] and [readFrom].
+ *
+ * [StoreId]s also define a JSON format (via Jackson) which is equal to their string representation.
+ */
 @PersistentClass(format = PersistentClass.Format.JSON, details = "Stored as string in manifest.")
 @JsonSerialize(using = StoreId.StoreIdJsonSerializer::class)
 @JsonDeserialize(using = StoreId.StoreIdJsonDeserializer::class)
-class StoreId : Comparable<StoreId> {
+class StoreId : Comparable<StoreId>, Hashable {
 
     companion object {
 
@@ -220,11 +252,11 @@ class StoreId : Comparable<StoreId> {
         return this.hashCode
     }
 
-    fun hash(hashFunction: HashFunction): HashCode {
+    override fun hash(hashFunction: HashFunction): HashCode {
         return hashFunction.hashUnencodedChars(this.stringRepresentation)
     }
 
-    fun hash(hasher: Hasher): Hasher {
+    override fun hash(hasher: Hasher): Hasher {
         return hasher.putUnencodedChars(this.stringRepresentation)
     }
 
