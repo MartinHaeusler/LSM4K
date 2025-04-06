@@ -40,6 +40,10 @@ class DiskBasedVirtualReadWriteFile(
         }
     }
 
+    override fun deleteIfExists(): Boolean {
+        return Files.deleteIfExists(this.file.toPath())
+    }
+
     override fun <T> append(action: (OutputStream) -> T): T {
         return this.vfs.settings.fileSyncMode.writeAppend(this.file, action)
     }

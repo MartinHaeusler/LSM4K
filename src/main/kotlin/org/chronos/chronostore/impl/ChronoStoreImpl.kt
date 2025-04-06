@@ -41,6 +41,9 @@ class ChronoStoreImpl(
     @Volatile
     private var state: ChronoStoreState = ChronoStoreState.STARTING
 
+    private val lockFileManager = LockFileManager(
+        vfs.file(ChronoStoreStructure.LOCK_FILE_NAME)
+    )
     private val killswitch = Killswitch(this::panic)
 
     private val manifestFile = ManifestFile(this.vfs.file(ManifestFile.FILE_NAME))
@@ -78,6 +81,9 @@ class ChronoStoreImpl(
     private val checkpointTask: CheckpointTask
 
     init {
+        // lock the directory to prevent multiple processes to access the same directory.
+        this.lockFileManager.lock()
+
         val systemDir = this.vfs.directory(SystemStore.PATH_PREFIX)
         val walDirectory = systemDir.directory(ChronoStoreStructure.WRITE_AHEAD_LOG_DIR_NAME)
         val isEmptyDatabase = !walDirectory.exists()
@@ -85,10 +91,11 @@ class ChronoStoreImpl(
             // If there is no WAL directory, we're going to set up a completely new database.
             // To avoid any trouble with existing files, we demand that our working directory
             // must be empty.
-            if (this.vfs.listRootLevelElements().isNotEmpty()) {
+            if (this.vfs.listRootLevelElements().any { it.name != ChronoStoreStructure.LOCK_FILE_NAME }) {
                 throw IllegalArgumentException("Cannot create new database in '${vfs.rootPath}': the directory is not empty!")
             }
         }
+
         systemDir.mkdirs()
 
         this.writeAheadLog = WriteAheadLog(
@@ -240,6 +247,7 @@ class ChronoStoreImpl(
         this.transactionManager.close()
         this.asyncTaskManager.close()
         this.storeManager.close()
+        this.lockFileManager.unlock()
         log.info { "Completed shut-down of ChronoStore at '${this.vfs}'." }
     }
 
@@ -250,6 +258,7 @@ class ChronoStoreImpl(
         this.transactionManager.closePanic()
         this.asyncTaskManager.closePanic()
         this.storeManager.closePanic()
+        this.lockFileManager.unlockSafe()
         log.info(cause) { "ChronoStore has been shut down due to panic trigger." }
     }
 

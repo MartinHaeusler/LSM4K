@@ -4,12 +4,14 @@ object ChronoStoreStructure {
 
     // directory names
 
-    val WRITE_AHEAD_LOG_DIR_NAME = "writeAheadLog"
+    const val WRITE_AHEAD_LOG_DIR_NAME = "writeAheadLog"
 
     // file name parts
 
-    val WRITE_AHEAD_LOG_FILE_PREFIX = "wal"
+    const val WRITE_AHEAD_LOG_FILE_PREFIX = "wal"
 
-    val WRITE_AHEAD_LOG_FILE_SUFFIX = ".log"
+    const val WRITE_AHEAD_LOG_FILE_SUFFIX = ".log"
+
+    const val LOCK_FILE_NAME = "processLock.lck"
 
 }

@@ -201,6 +201,16 @@ class InMemoryVirtualFileSystem : VirtualFileSystem {
         }
     }
 
+    fun deleteIfExists(path: String): Boolean {
+        this.fileSystemLock.withLock {
+            if (!this.isExistingPath(path)) {
+                return false
+            }
+            this.delete(path)
+            return true
+        }
+    }
+
     private fun getParentPath(path: String): String {
         return PATH_PREFIX + path.removePrefix(PATH_PREFIX).substringBeforeLast(File.separatorChar, missingDelimiterValue = "")
     }
@@ -246,7 +256,7 @@ class InMemoryVirtualFileSystem : VirtualFileSystem {
 
     private class ObservableOutputStream(
         private val outputStream: OutputStream,
-        private val onChange: () -> Unit
+        private val onChange: () -> Unit,
     ) : OutputStream() {
 
         override fun flush() {

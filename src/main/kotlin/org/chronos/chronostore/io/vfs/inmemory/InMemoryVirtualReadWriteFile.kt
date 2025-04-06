@@ -32,10 +32,14 @@ class InMemoryVirtualReadWriteFile(
         this.fileSystem.delete(this.path)
     }
 
+    override fun deleteIfExists(): Boolean {
+        return this.fileSystem.deleteIfExists(this.path)
+    }
+
     override fun truncateAfter(bytesToKeep: Long) {
         require(bytesToKeep >= 0) { "Argument 'bytesToKeep' (${bytesToKeep}) must not be negative!" }
         check(this.exists()) { "Cannot truncate file '${this.path}' because it doesn't exist!" }
-        if(bytesToKeep >= this.length){
+        if (bytesToKeep >= this.length) {
             // nothing to truncate
             return
         }

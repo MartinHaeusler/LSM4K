@@ -1,6 +1,7 @@
 package org.chronos.chronostore.util
 
 import org.chronos.chronostore.api.exceptions.FlushException
+import org.chronos.chronostore.util.ListExtensions.headTail
 import java.io.InterruptedIOException
 import java.nio.channels.ClosedByInterruptException
 import java.util.*
@@ -41,8 +42,8 @@ object ExceptionUtils {
                 continue
             }
             visited += exception
-            for(ignoredExceptionType in EXCEPTION_CLASSES_TO_IGNORE_DURING_SHUTDOWN){
-                if(ignoredExceptionType.isInstance(exception)){
+            for (ignoredExceptionType in EXCEPTION_CLASSES_TO_IGNORE_DURING_SHUTDOWN) {
+                if (ignoredExceptionType.isInstance(exception)) {
                     return true
                 }
             }
@@ -52,6 +53,33 @@ object ExceptionUtils {
             toVisit += cause
         }
         return false
+    }
+
+    /**
+     * Runs the given tasks in the given order, even if one of them fails.
+     *
+     * All exceptions will be aggregated. The first exception (if any) will be thrown
+     * once all tasks have been executed, all other exceptions (if any) will be added
+     * to the first as "suppressed" exceptions.
+     */
+    fun runAndAggregateExceptions(vararg tasks: () -> Unit) {
+        val exceptions = mutableListOf<Exception>()
+        for (task in tasks) {
+            try {
+                task()
+            } catch (e: Exception) {
+                exceptions += e
+            }
+        }
+        if (exceptions.isEmpty()) {
+            // no exception has happened
+            return
+        }
+        val (firstException, otherExceptions) = exceptions.headTail()
+        for (otherException in otherExceptions) {
+            firstException.addSuppressed(otherException)
+        }
+        throw firstException
     }
 
 }

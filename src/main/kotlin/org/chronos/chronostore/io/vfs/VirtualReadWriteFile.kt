@@ -16,6 +16,8 @@ interface VirtualReadWriteFile : VirtualFile {
 
     fun delete()
 
+    fun deleteIfExists(): Boolean
+
     fun create(): VirtualReadWriteFile
 
     fun createOverWriter(): OverWriter
@@ -33,6 +35,7 @@ interface VirtualReadWriteFile : VirtualFile {
      *                     operation is a no-op.
      */
     fun truncateAfter(bytesToKeep: Long)
+
 
     interface OverWriter : AutoCloseable {
 
