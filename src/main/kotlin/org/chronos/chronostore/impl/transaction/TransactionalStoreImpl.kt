@@ -41,7 +41,8 @@ class TransactionalStoreImpl(
         return if (this.transactionContext.isDirty() && this.transactionContext.isKeyModified(key)) {
             this.transactionContext.getLatest(key)
         } else {
-            val command = getTree().get(KeyAndTSN(key, this.transaction.lastVisibleSerialNumber))
+            val keyAndTSN = KeyAndTSN(key, this.transaction.lastVisibleSerialNumber)
+            val command = this.getTree().getLatestVersion(keyAndTSN)
             when (command?.opCode) {
                 OpCode.DEL, null -> null
                 OpCode.PUT -> command.value
@@ -104,7 +105,7 @@ class TransactionalStoreImpl(
                 value = this.transactionContext.getLatest(key)
             )
         } else {
-            val command = getTree().get(KeyAndTSN(key, this.transaction.lastVisibleSerialNumber))
+            val command = getTree().getLatestVersion(KeyAndTSN(key, this.transaction.lastVisibleSerialNumber))
             GetResultImpl(
                 key = key,
                 isHit = command != null,

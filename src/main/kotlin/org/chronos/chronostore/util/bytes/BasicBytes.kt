@@ -70,6 +70,16 @@ class BasicBytes(
     }
 
     override fun compareTo(other: Bytes): Int {
+        if (this.isEmpty()) {
+            return if (other.isEmpty()) {
+                0
+            } else {
+                -1
+            }
+        }
+        if (other.isEmpty()) {
+            return +1
+        }
         return when (other) {
             is SliceBytes -> compareToSliceBytes(other)
             is BasicBytes -> compareToBasicBytes(other)

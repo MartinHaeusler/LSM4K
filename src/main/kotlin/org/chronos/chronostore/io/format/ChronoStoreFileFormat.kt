@@ -45,7 +45,7 @@ object ChronoStoreFileFormat {
             override fun readFileHeader(driver: RandomFileAccessDriver): FileHeader {
                 val trailer = this.readTrailer(driver)
                 val metadata = this.readMetaData(driver, trailer)
-                val indexOfBlocks = this.readIndexOfBlocks(driver, trailer)
+                val indexOfBlocks = this.readIndexOfBlocks(driver, trailer, metadata.firstKeyAndTSN, metadata.lastKeyAndTSN)
                 return FileHeader(
                     fileFormatVersion = this,
                     trailer = trailer,
@@ -67,7 +67,7 @@ object ChronoStoreFileFormat {
                 return metadataBytes.withInputStream(FileMetaData::readFrom)
             }
 
-            private fun readIndexOfBlocks(driver: RandomFileAccessDriver, trailer: FileTrailer): IndexOfBlocks {
+            private fun readIndexOfBlocks(driver: RandomFileAccessDriver, trailer: FileTrailer, firstKeyAndTSN: KeyAndTSN?, lastKeyAndTSN: KeyAndTSN?): IndexOfBlocks {
                 val lengthOfIndexOfBlocks = (trailer.beginOfMetadata - trailer.beginOfIndexOfBlocks).toInt()
                 val indexBytes = driver.readBytes(trailer.beginOfIndexOfBlocks, lengthOfIndexOfBlocks)
                 return indexBytes.withInputStream { inputStream ->
@@ -78,7 +78,7 @@ object ChronoStoreFileFormat {
                         val blockMinKeyAndTSN = KeyAndTSN.readFromStream(inputStream)
                         Triple(blockSequenceNumber, blockStartPosition, blockMinKeyAndTSN)
                     }.toList()
-                    IndexOfBlocks(entries, trailer.beginOfIndexOfBlocks)
+                    IndexOfBlocks(entries, trailer.beginOfIndexOfBlocks, firstKeyAndTSN, lastKeyAndTSN)
                 }
             }
 

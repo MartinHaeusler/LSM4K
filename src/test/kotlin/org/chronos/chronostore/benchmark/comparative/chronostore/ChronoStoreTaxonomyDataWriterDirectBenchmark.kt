@@ -1,7 +1,7 @@
 package org.chronos.chronostore.benchmark.comparative.chronostore
 
 import org.chronos.chronostore.io.format.ChronoStoreFileSettings
-import org.chronos.chronostore.io.format.ChronoStoreFileWriter
+import org.chronos.chronostore.io.format.writer.StandardChronoStoreFileWriter
 import org.chronos.chronostore.io.format.CompressionAlgorithm
 import org.chronos.chronostore.io.vfs.VirtualReadWriteFile.Companion.withOverWriter
 import org.chronos.chronostore.io.vfs.disk.DiskBasedVirtualFileSystem
@@ -34,11 +34,11 @@ object ChronoStoreTaxonomyDataWriterDirectBenchmark {
 
             val timeBefore = System.currentTimeMillis()
             outputFile.withOverWriter { overWriter ->
-                val writer = ChronoStoreFileWriter(
+                val writer = StandardChronoStoreFileWriter(
                     outputStream = overWriter.outputStream.buffered(),
                     settings = ChronoStoreFileSettings(compression = compressionAlgorithm, maxBlockSize = blockSize),
                 )
-                writer.writeFile(numberOfMerges = 0, orderedCommands = commandSequence.iterator(), commandCountEstimate = 3_500_000, maxCompletelyWrittenTSN = 1)
+                writer.write(numberOfMerges = 0, orderedCommands = commandSequence.iterator(), commandCountEstimate = 3_500_000, maxCompletelyWrittenTSN = 1)
                 overWriter.commit()
             }
             val timeAfter = System.currentTimeMillis()

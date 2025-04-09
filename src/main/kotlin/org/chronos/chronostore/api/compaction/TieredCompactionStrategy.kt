@@ -1,8 +1,6 @@
 package org.chronos.chronostore.api.compaction
 
 import org.chronos.chronostore.impl.annotations.PersistentClass
-import kotlin.time.Duration
-import kotlin.time.Duration.Companion.days
 
 /**
  * Tiered compaction uses tiers (instead of levels) and always compacts whole tiers.
@@ -52,7 +50,7 @@ import kotlin.time.Duration.Companion.days
  *
  *  1. **Data Age**
  *
- *     Highest priority trigger. Configured by [ageTolerance]. Compacts tiers with old data.
+ *     Highest priority trigger. Newer data will have a higher priority for compaction.
  *
  *  2. **Space Amplification**
  *
@@ -75,14 +73,6 @@ class TieredCompactionStrategy(
      * Otherwise, it does not trigger any compaction (no matter which of the other compaction triggers apply).
      */
     val numberOfTiers: Int = 8,
-
-    /**
-     * Configures the "Data Age Trigger" for compaction.
-     *
-     * Any files older than the age tolerance will become candidates for compaction. The compacted file will
-     * then start out with "age zero" again.
-     */
-    val ageTolerance: Duration = 30.days,
 
     /**
      * Configures the "Space Amplification Trigger" for compaction.
@@ -130,6 +120,13 @@ class TieredCompactionStrategy(
      * Size-Ratio-based compaction will only occur if at least [minMergeTiers] are affected.
      */
     val minMergeTiers: Int = 2,
+
+    /**
+     * The strategy to apply when deciding when to split an outbound data stream into multiple LSM files.
+     *
+     * Defaults to [FileSeparationStrategy.SizeBased].
+     */
+    override val fileSeparationStrategy: FileSeparationStrategy = FileSeparationStrategy.SizeBased(),
 ) : CompactionStrategy {
 
     override fun toString(): String {

@@ -1,7 +1,8 @@
-package org.chronos.chronostore.io.format
+package org.chronos.chronostore.io.format.writer
 
 import com.google.common.collect.Iterators
 import com.google.common.collect.PeekingIterator
+import org.chronos.chronostore.io.format.*
 import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.model.command.KeyAndTSN
 import org.chronos.chronostore.model.command.OpCode
@@ -20,7 +21,7 @@ import java.util.*
 /**
  * Streaming writer for a *.chronostore file.
  */
-class ChronoStoreFileWriter : AutoCloseable {
+class StandardChronoStoreFileWriter : ChronoStoreFileWriter {
 
     private var closed = false
 
@@ -48,16 +49,7 @@ class ChronoStoreFileWriter : AutoCloseable {
         this.settings = settings
     }
 
-    /**
-     * Writes the given [orderedCommands] (as well as any required additional information) to the [outputStream].
-     *
-     * @param numberOfMerges The number of merges to record in the file metadata.
-     * @param orderedCommands The sequence of commands to write. **MUST** be ordered!
-     * @param commandCountEstimate An estimate of the total number of entries in [orderedCommands]. Will be used for bloom filter sizing.
-     * @param maxCompletelyWrittenTSN The highest [TSN] which is guaranteed to be completely contained in this file (or previous already written files).
-     *                                    May be `null` if no transaction has been fully completed.
-     */
-    fun writeFile(
+    override fun write(
         numberOfMerges: Long,
         orderedCommands: Iterator<Command>,
         commandCountEstimate: Long,
@@ -103,6 +95,8 @@ class ChronoStoreFileWriter : AutoCloseable {
             fileUUID = UUID.randomUUID(),
             minTSN = blockWriteResult.minTSN,
             maxTSN = blockWriteResult.maxTSN,
+            firstKeyAndTSN = blockWriteResult.firstKeyAndTSN,
+            lastKeyAndTSN = blockWriteResult.lastKeyAndTSN,
             maxCompletelyWrittenTSN = maxCompletelyWrittenTSN,
             minKey = blockWriteResult.minKey,
             maxKey = blockWriteResult.maxKey,
@@ -149,6 +143,9 @@ class ChronoStoreFileWriter : AutoCloseable {
         var minKey: Bytes? = null
         var maxKey: Bytes? = null
 
+        var firstKeyAndTSN: KeyAndTSN? = null
+        var lastKeyAndTSN: KeyAndTSN? = null
+
         val commands = ObservingPeekingIterator(commandsIterator) { command ->
             // each command contributes towards the total entries
             totalEntries += 1
@@ -156,6 +153,11 @@ class ChronoStoreFileWriter : AutoCloseable {
             maxTSN = max(command.tsn, maxTSN)
             minKey = min(minKey ?: command.key, command.key)
             maxKey = max(maxKey ?: command.key, command.key)
+
+            if (firstKeyAndTSN == null) {
+                firstKeyAndTSN = command.keyAndTSN
+            }
+            lastKeyAndTSN = command.keyAndTSN
 
             if (!commandsIterator.hasNext() || commandsIterator.peek().key != command.key) {
                 // the entry has no successor on the same key
@@ -208,6 +210,8 @@ class ChronoStoreFileWriter : AutoCloseable {
             maxTSN = maxTSN.takeIf { it > 0 },
             minKey = minKey,
             maxKey = maxKey,
+            firstKeyAndTSN = firstKeyAndTSN,
+            lastKeyAndTSN = lastKeyAndTSN,
             numberOfBlocks = blockSequenceNumber,
             indexOfBlocks = blockIndexToStartPositionAndMinKey
         )
@@ -346,6 +350,8 @@ class ChronoStoreFileWriter : AutoCloseable {
         val maxKey: Bytes?,
         val minTSN: TSN?,
         val maxTSN: TSN?,
+        val firstKeyAndTSN: KeyAndTSN?,
+        val lastKeyAndTSN: KeyAndTSN?,
         val numberOfBlocks: Int,
         val indexOfBlocks: List<Triple<Int, Long, KeyAndTSN>>,
     )

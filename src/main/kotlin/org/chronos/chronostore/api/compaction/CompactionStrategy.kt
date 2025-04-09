@@ -27,5 +27,7 @@ sealed interface CompactionStrategy {
 
     }
 
+    val fileSeparationStrategy: FileSeparationStrategy
+
 }
 

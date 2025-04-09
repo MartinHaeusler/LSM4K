@@ -1,5 +1,6 @@
 package org.chronos.chronostore.io.format
 
+import org.chronos.chronostore.model.command.KeyAndTSN
 import org.chronos.chronostore.util.LittleEndianExtensions.readLittleEndianInt
 import org.chronos.chronostore.util.LittleEndianExtensions.readLittleEndianLong
 import org.chronos.chronostore.util.LittleEndianExtensions.writeLittleEndianInt
@@ -26,6 +27,11 @@ class FileMetaData(
     val minKey: Bytes?,
     /** The largest key in the file (independent of the TSN). May be `null` if the file is empty. */
     val maxKey: Bytes?,
+    /** The first key in the file (including the TSN). May be `null` if the file is empty. */
+    val firstKeyAndTSN: KeyAndTSN?,
+    /** The last key in the file (including the TSN). May be `null` if the file is empty. */
+    val lastKeyAndTSN: KeyAndTSN?,
+
     /** The smallest [TSN] in the file (independent of the key). May be `null` if the file is empty. */
     val minTSN: TSN?,
     /**
@@ -70,6 +76,8 @@ class FileMetaData(
             val fileUUID = readUUIDFrom(inputStream.readNBytes(Long.SIZE_BYTES * 2))
             val minKey = PrefixIO.readBytes(inputStream).takeIf { it.isNotEmpty() }
             val maxKey = PrefixIO.readBytes(inputStream).takeIf { it.isNotEmpty() }
+            val firstKeyAndTSN = PrefixIO.readBytes(inputStream).takeIf { it.isNotEmpty() }?.let(KeyAndTSN::readFromBytes)
+            val lastKeyAndTSN = PrefixIO.readBytes(inputStream).takeIf { it.isNotEmpty() }?.let(KeyAndTSN::readFromBytes)
             val minTSN = inputStream.readLittleEndianLong().takeIf { it > 0 }
             val maxTSN = inputStream.readLittleEndianLong().takeIf { it > 0 }
             val maxCompletelyWrittenTSN = inputStream.readLittleEndianLong().takeIf { it > 0 }
@@ -85,6 +93,8 @@ class FileMetaData(
                 fileUUID = fileUUID,
                 minKey = minKey,
                 maxKey = maxKey,
+                firstKeyAndTSN = firstKeyAndTSN,
+                lastKeyAndTSN = lastKeyAndTSN,
                 minTSN = minTSN,
                 maxTSN = maxTSN,
                 maxCompletelyWrittenTSN = maxCompletelyWrittenTSN,
@@ -105,6 +115,8 @@ class FileMetaData(
         outputStream.writeBytesWithoutSize(fileUUID.toBytes())
         PrefixIO.writeBytes(outputStream, this.minKey ?: Bytes.EMPTY)
         PrefixIO.writeBytes(outputStream, this.maxKey ?: Bytes.EMPTY)
+        PrefixIO.writeBytes(outputStream, this.firstKeyAndTSN?.toBytes() ?: Bytes.EMPTY)
+        PrefixIO.writeBytes(outputStream, this.lastKeyAndTSN?.toBytes() ?: Bytes.EMPTY)
         outputStream.writeLittleEndianLong(this.minTSN ?: 0)
         outputStream.writeLittleEndianLong(this.maxTSN ?: 0)
         outputStream.writeLittleEndianLong(this.maxCompletelyWrittenTSN ?: 0)
@@ -132,14 +144,14 @@ class FileMetaData(
     }
 
     fun overlaps(minKey: Bytes, maxKey: Bytes): Boolean {
-        if(this.minKey == null || this.maxKey == null){
+        if (this.minKey == null || this.maxKey == null) {
             return false
         }
-        if(maxKey < this.minKey){
+        if (maxKey < this.minKey) {
             // sst range starts after the search range
             return false
         }
-        if(minKey > this.maxKey){
+        if (minKey > this.maxKey) {
             // sst range ends before the search range
             return false
         }
@@ -174,8 +186,10 @@ class FileMetaData(
             val settingsSize = this.settings.sizeBytes
             // UUID = 128 bits = 2 x 64 bits
             val fileUUIDSize = Long.SIZE_BYTES * 2
-            val minKeySize = this.minKey?.size ?: 0
-            val maxKeySize = this.maxKey?.size ?: 0
+            val minKeySize = Int.SIZE_BYTES + (this.minKey?.size ?: 0)
+            val maxKeySize = Int.SIZE_BYTES + (this.maxKey?.size ?: 0)
+            val firstKeyAndTSNSize = Int.SIZE_BYTES + (this.firstKeyAndTSN?.byteSize ?: 0)
+            val lastKeyAndTSNSize = Int.SIZE_BYTES + (this.lastKeyAndTSN?.byteSize ?: 0)
             val minTSNSize = TSN.SIZE_BYTES
             val maxTSNSize = TSN.SIZE_BYTES
             val maxCompletelyWrittenTSNSize = TSN.SIZE_BYTES
@@ -186,6 +200,8 @@ class FileMetaData(
                 fileUUIDSize +
                 minKeySize +
                 maxKeySize +
+                firstKeyAndTSNSize +
+                lastKeyAndTSNSize +
                 minTSNSize +
                 maxTSNSize +
                 maxCompletelyWrittenTSNSize +

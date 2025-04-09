@@ -234,7 +234,11 @@ object UnsignedBytesComparator : ByteArrayComparator {
     ) {
         when {
             leftFromInclusive < 0 -> error("leftFrom (${leftFromInclusive}) < 0")
-            rightFromInclusive < 0 -> error("leftFrom (${leftFromInclusive}) < 0")
+            rightFromInclusive < 0 -> error("rightFrom (${leftFromInclusive}) < 0")
+
+            leftToInclusive < 0 -> error("leftTo (${leftToInclusive}) < 0")
+            rightToInclusive < 0 -> error("rightTo (${rightToInclusive}) < 0")
+
             leftFromInclusive > leftToInclusive -> error("leftFrom (${leftFromInclusive}) > leftTo (${leftToInclusive})")
             rightFromInclusive > rightToInclusive -> error("rightFrom (${rightFromInclusive}) > rightTo (${rightToInclusive})")
             leftToInclusive > left.lastIndex -> error("leftTo (${leftToInclusive}) > left.lastIndex (${left.lastIndex})")

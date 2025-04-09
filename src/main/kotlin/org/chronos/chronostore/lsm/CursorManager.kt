@@ -4,6 +4,7 @@ import org.chronos.chronostore.api.ChronoStoreTransaction
 import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.model.command.KeyAndTSN
 import org.chronos.chronostore.util.cursor.Cursor
+import org.chronos.chronostore.util.cursor.LevelOrTierCursor
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.concurrent.read
 import kotlin.concurrent.write
@@ -13,7 +14,43 @@ class CursorManager {
     private val fileNameToOpenCursors = mutableMapOf<String, MutableSet<CursorAndTransaction>>()
     private val lock = ReentrantReadWriteLock(true)
 
-    fun openCursorOn(transaction: ChronoStoreTransaction, lsmTreeFile: LSMTreeFile): Cursor<KeyAndTSN, Command> {
+    fun openCursorOnLevelOrTier(transaction: ChronoStoreTransaction, sortedFiles: List<LSMTreeFile>): Cursor<KeyAndTSN, Command> {
+        this.lock.write {
+            val levelOrTierCursor = LevelOrTierCursor(
+                sortedFiles = sortedFiles,
+                createNewCursor = { file ->
+                    this.openCursorOnFile(transaction, file)
+                }
+            )
+
+            // register this level/tier cursor for EVERY file in that level or tier. This will protect
+            // the files from being garbage collected while that cursor is active.
+            for (lsmTreeFile in sortedFiles) {
+                val treeFileName = lsmTreeFile.virtualFile.name
+                fileNameToOpenCursors.getOrPut(treeFileName, ::mutableSetOf) += CursorAndTransaction(levelOrTierCursor, transaction)
+            }
+
+            levelOrTierCursor.onClose { this.closeCursorOnLevelOrTier(transaction, sortedFiles, levelOrTierCursor) }
+            return levelOrTierCursor
+        }
+    }
+
+    private fun closeCursorOnLevelOrTier(transaction: ChronoStoreTransaction, files: List<LSMTreeFile>, cursor: Cursor<KeyAndTSN, Command>) {
+        val cursorAndTransaction = CursorAndTransaction(cursor, transaction)
+        this.lock.write {
+            for (file in files) {
+                val fileName = file.virtualFile.name
+                val cursorSet = fileNameToOpenCursors[fileName]
+                    ?: continue
+                cursorSet.remove(cursorAndTransaction)
+                if (cursorSet.isEmpty()) {
+                    fileNameToOpenCursors.remove(fileName)
+                }
+            }
+        }
+    }
+
+    fun openCursorOnFile(transaction: ChronoStoreTransaction, lsmTreeFile: LSMTreeFile): Cursor<KeyAndTSN, Command> {
         this.lock.write {
             val rawCursor = lsmTreeFile.cursor()
             val cursorAndTransaction = CursorAndTransaction(rawCursor, transaction)
@@ -58,7 +95,7 @@ class CursorManager {
 
     private data class CursorAndTransaction(
         val cursor: Cursor<KeyAndTSN, Command>,
-        val transaction: ChronoStoreTransaction
+        val transaction: ChronoStoreTransaction,
     )
 
 }

@@ -1,7 +1,7 @@
 package org.chronos.chronostore.lsm
 
 import com.google.common.collect.Iterators
-import org.chronos.chronostore.io.format.ChronoStoreFileWriter
+import org.chronos.chronostore.io.format.writer.ChronoStoreFileWriter
 import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.model.command.KeyAndTSN
 import org.chronos.chronostore.util.TSN
@@ -70,7 +70,7 @@ object CompactionUtil {
             latestVersionIterator.filter(Command::isInsertOrUpdate)
         }
 
-        writer.writeFile(
+        writer.write(
             numberOfMerges = maxNumberOfMergesInInputFiles + 1,
             orderedCommands = finalIterator,
             commandCountEstimate = resultingCommandCountEstimate,

@@ -10,6 +10,8 @@ sealed interface FileHeaderCache {
 
     companion object {
 
+        val NONE: FileHeaderCache = NoFileHeaderCache
+
         fun create(fileHeaderCacheSize: BinarySize?): FileHeaderCache {
             return if (fileHeaderCacheSize != null) {
                 FileHeaderCacheImpl(fileHeaderCacheSize)

@@ -10,7 +10,6 @@ import org.chronos.chronostore.util.cursor.CloseHandler
 import org.chronos.chronostore.util.cursor.Cursor
 import org.chronos.chronostore.util.cursor.CursorUtils
 import org.chronos.chronostore.util.statistics.ChronoStoreStatistics
-import java.util.concurrent.atomic.AtomicLong
 
 class ChronoStoreFileReader : AutoCloseable {
 
@@ -81,7 +80,7 @@ class ChronoStoreFileReader : AutoCloseable {
         this.blockCache = blockCache
     }
 
-    fun get(keyAndTSN: KeyAndTSN): Command? {
+    fun getLatestVersion(keyAndTSN: KeyAndTSN): Command? {
         if (!this.fileHeader.metaData.mayContainKey(keyAndTSN.key)) {
             // key is definitely not in this file, no point in searching.
             return null
@@ -91,7 +90,7 @@ class ChronoStoreFileReader : AutoCloseable {
             return null
         }
         // the key may be contained, let's check.
-        var blockIndex = this.fileHeader.indexOfBlocks.getBlockIndexForKeyAndTimestampAscending(keyAndTSN)
+        var blockIndex = this.fileHeader.indexOfBlocks.getBlockIndexForKeyAndTimestampDescending(keyAndTSN)
             ?: return null // we don't have a block for this key and timestamp.
         var matchingCommandFromPreviousBlock: Command? = null
         while (true) {
@@ -442,6 +441,7 @@ class ChronoStoreFileReader : AutoCloseable {
                 return true
             }
             this.invalidatePosition()
+
             val blockIndex = fileHeader.indexOfBlocks.getBlockIndexForKeyAndTimestampDescending(key)
                 ?: return false
             val block = getBlockForIndex(blockIndex)

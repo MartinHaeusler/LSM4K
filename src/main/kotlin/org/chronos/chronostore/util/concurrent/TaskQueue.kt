@@ -10,19 +10,43 @@ import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 import kotlin.time.Duration
 
+/**
+ * A simple task queue implementation which allows to [schedule] tasks.
+ *
+ * Only **one** task at a time will be executed. The number of tasks in the
+ * queue is unbounded.
+ *
+ * The actual execution itself is deferred to the given [executor].
+ */
 class TaskQueue(
+    /** The executor responsible for actual task execution. */
     private val executor: Executor,
 ) {
 
+    /** The waiting queue. */
     private val queue = ArrayDeque<AsyncCompletableTask>()
 
+    /** The lock we use to ensure atomicity of operations. */
     private val lock = ReentrantLock(true)
 
+    /** The currently executing task, or `null` if the task queue is idle.*/
     private var executingTask: AsyncTask? = null
+
+    /** The [TaskMonitor]  which tracks the currently executing task, or `null` if the task queue is idle.*/
     private var executingTaskMonitor: TaskMonitor? = null
 
+    /** A condition which threads can wait for. Will fire when the queue becomes empty. */
     private val queueIsEmptyCondition = lock.newCondition()
 
+    /**
+     * Schedules the given [task] for execution at the next possible point in time.
+     *
+     * Only one task will be executed at the same time.
+     *
+     * @param task The task to be executed
+     *
+     * @return a [CompletableFuture] which can be used to track the task status.
+     */
     fun schedule(task: AsyncTask): CompletableFuture<*> {
         this.lock.withLock {
             val completableTask = AsyncCompletableTask(task)
@@ -32,7 +56,11 @@ class TaskQueue(
         }
     }
 
-
+    /**
+     * Allows to atomically cancel one or more tasks waiting in the queue.
+     *
+     * @param predicate The predicate which tells us if a given task should be cancelled or not.
+     */
     fun cancelWaitingTasksIf(predicate: (AsyncTask) -> Boolean) {
         this.lock.withLock {
             if (this.queue.isEmpty()) {
@@ -58,6 +86,9 @@ class TaskQueue(
         }
     }
 
+    /**
+     * Cancels all waiting tasks unconditionally.
+     */
     fun cancelWaitingTasks() {
         this.lock.withLock {
             if (this.queue.isEmpty()) {
@@ -75,6 +106,9 @@ class TaskQueue(
         }
     }
 
+    /**
+     * Called when a task has completed its execution. Starts the next task waiting in the [queue].
+     */
     private fun deployNextTaskIfIdle() {
         this.lock.withLock {
             if (this.executingTask != null) {
@@ -109,6 +143,16 @@ class TaskQueue(
         }
     }
 
+    /**
+     * Waits until either this queue becomes empty or the given [duration] has elapsed.
+     *
+     * This is a blocking operation.
+     *
+     * @param duration the maximum duration to wait for
+     *
+     * @return `true` if the task queue became empty **before** the [duration] expired.
+     * `false` if the duration expired first (in which case, the task queue may still contain tasks).
+     */
     fun waitUntilEmpty(duration: Duration): Boolean {
         this.lock.withLock {
             val maxWait = System.currentTimeMillis() + duration.inWholeMilliseconds
@@ -123,6 +167,11 @@ class TaskQueue(
         }
     }
 
+    /**
+     * Waits until this queue becomes empty with no timeout.
+     *
+     * This is a blocking operation.
+     */
     fun waitUntilEmpty() {
         this.lock.withLock {
             while (!this.queue.isEmpty()) {

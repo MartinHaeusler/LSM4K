@@ -3,8 +3,12 @@ package org.chronos.chronostore.test.cases.io.format
 import org.chronos.chronostore.io.fileaccess.FileChannelDriver
 import org.chronos.chronostore.io.fileaccess.MemorySegmentFileDriver
 import org.chronos.chronostore.io.fileaccess.RandomFileAccessDriverFactory.Companion.withDriver
-import org.chronos.chronostore.io.format.*
+import org.chronos.chronostore.io.format.ChronoStoreFileFormat
+import org.chronos.chronostore.io.format.ChronoStoreFileReader
 import org.chronos.chronostore.io.format.ChronoStoreFileReader.Companion.withChronoStoreFileReader
+import org.chronos.chronostore.io.format.ChronoStoreFileSettings
+import org.chronos.chronostore.io.format.CompressionAlgorithm
+import org.chronos.chronostore.io.format.writer.StandardChronoStoreFileWriter
 import org.chronos.chronostore.io.vfs.VirtualReadWriteFile.Companion.withOverWriter
 import org.chronos.chronostore.lsm.cache.BlockCacheManagerImpl
 import org.chronos.chronostore.lsm.cache.LocalBlockCache
@@ -30,11 +34,11 @@ class ChronoStoreFileTest {
             val file = vfs.file("test.chronostore")
 
             file.withOverWriter { overWriter ->
-                val writer = ChronoStoreFileWriter(
+                val writer = StandardChronoStoreFileWriter(
                     outputStream = overWriter.outputStream,
                     settings = ChronoStoreFileSettings(CompressionAlgorithm.NONE, 16.MiB),
                 )
-                writer.writeFile(
+                writer.write(
                     numberOfMerges = 0,
                     orderedCommands = emptySequence<Command>().iterator(),
                     commandCountEstimate = 10,
@@ -79,7 +83,7 @@ class ChronoStoreFileTest {
                                 get { this.beginOfIndexOfBlocks == this.beginOfMetadata }.isTrue()
                             }
                         }
-                        get { this.get(KeyAndTSN(BasicBytes("bullshit"), 1234)) }.isNull()
+                        get { this.getLatestVersion(KeyAndTSN(BasicBytes("bullshit"), 1234)) }.isNull()
                     }
                 }
             }
@@ -94,12 +98,12 @@ class ChronoStoreFileTest {
 
             val theKey = BasicBytes("theKey")
             file.withOverWriter { overWriter ->
-                val writer = ChronoStoreFileWriter(
+                val writer = StandardChronoStoreFileWriter(
                     outputStream = overWriter.outputStream.buffered(),
                     settings = ChronoStoreFileSettings(CompressionAlgorithm.NONE, 16.KiB),
                 )
                 val commands = listOf(Command.put(theKey, 1000L, BasicBytes("hello")))
-                writer.writeFile(
+                writer.write(
                     numberOfMerges = 0,
                     orderedCommands = commands.iterator(),
                     commandCountEstimate = 10,
@@ -125,16 +129,16 @@ class ChronoStoreFileTest {
                         get { fileHeader.indexOfBlocks.size }.isEqualTo(1)
                         get { fileHeader.metaData.maxCompletelyWrittenTSN }.isEqualTo(42L)
 
-                        get { get(KeyAndTSN(theKey, max + 1)) }.isNotNull().and {
+                        get { getLatestVersion(KeyAndTSN(theKey, max + 1)) }.isNotNull().and {
                             get { key }.isEqualTo(theKey)
                             get { tsn }.isEqualTo(max)
                             get { opCode }.isEqualTo(OpCode.PUT)
                             get { value.asString() }.isEqualTo("hello")
                         }
 
-                        get { get(KeyAndTSN(theKey, min - 1)) }.isNull()
+                        get { getLatestVersion(KeyAndTSN(theKey, min - 1)) }.isNull()
 
-                        get { get(KeyAndTSN(theKey, 1000)) }.isNotNull().and {
+                        get { getLatestVersion(KeyAndTSN(theKey, 1000)) }.isNotNull().and {
                             get { opCode }.isEqualTo(OpCode.PUT)
                             get { tsn }.isEqualTo(1000)
                             get { value.asString() }.isEqualTo("hello")
@@ -152,7 +156,7 @@ class ChronoStoreFileTest {
 
             val theKey = BasicBytes("theKey")
             file.withOverWriter { overWriter ->
-                val writer = ChronoStoreFileWriter(
+                val writer = StandardChronoStoreFileWriter(
                     outputStream = overWriter.outputStream.buffered(),
                     settings = ChronoStoreFileSettings(CompressionAlgorithm.NONE, 16.KiB),
                 )
@@ -164,7 +168,7 @@ class ChronoStoreFileTest {
                         Command.put(theKey, (i + 1) * 1000L, Bytes.random(random, 1024))
                     }
                 }
-                writer.writeFile(
+                writer.write(
                     numberOfMerges = 0,
                     orderedCommands = commands.iterator(),
                     commandCountEstimate = 1000,
@@ -190,56 +194,56 @@ class ChronoStoreFileTest {
                         get { fileHeader.indexOfBlocks.size }.isGreaterThan(1)
                         get { fileHeader.metaData.maxCompletelyWrittenTSN }.isEqualTo(34233L)
 
-                        get { get(KeyAndTSN(theKey, max + 1)) }.isNotNull().and {
+                        get { getLatestVersion(KeyAndTSN(theKey, max + 1)) }.isNotNull().and {
                             get { key }.isEqualTo(theKey)
                             get { tsn }.isEqualTo(max)
                             get { opCode }.isEqualTo(OpCode.PUT)
                             get { value }.hasSize(1024)
                         }
 
-                        get { get(KeyAndTSN(theKey, min - 1)) }.isNull()
+                        get { getLatestVersion(KeyAndTSN(theKey, min - 1)) }.isNull()
 
-                        get { get(KeyAndTSN(theKey, 101_000)) }.isNotNull().and {
+                        get { getLatestVersion(KeyAndTSN(theKey, 101_000)) }.isNotNull().and {
                             get { opCode }.isEqualTo(OpCode.DEL)
                             get { tsn }.isEqualTo(101_000)
                             get { value }.isEmpty()
                         }
-                        get { get(KeyAndTSN(theKey, 101_001)) }.isNotNull().and {
+                        get { getLatestVersion(KeyAndTSN(theKey, 101_001)) }.isNotNull().and {
                             get { opCode }.isEqualTo(OpCode.DEL)
                             get { tsn }.isEqualTo(101_000)
                             get { value }.isEmpty()
                         }
-                        get { get(KeyAndTSN(theKey, 101_002)) }.isNotNull().and {
+                        get { getLatestVersion(KeyAndTSN(theKey, 101_002)) }.isNotNull().and {
                             get { opCode }.isEqualTo(OpCode.DEL)
                             get { tsn }.isEqualTo(101_000)
                             get { value }.isEmpty()
                         }
-                        get { get(KeyAndTSN(theKey, 101_010)) }.isNotNull().and {
+                        get { getLatestVersion(KeyAndTSN(theKey, 101_010)) }.isNotNull().and {
                             get { opCode }.isEqualTo(OpCode.DEL)
                             get { tsn }.isEqualTo(101_000)
                             get { value }.isEmpty()
                         }
-                        get { get(KeyAndTSN(theKey, 101_100)) }.isNotNull().and {
+                        get { getLatestVersion(KeyAndTSN(theKey, 101_100)) }.isNotNull().and {
                             get { opCode }.isEqualTo(OpCode.DEL)
                             get { tsn }.isEqualTo(101_000)
                             get { value }.isEmpty()
                         }
-                        get { get(KeyAndTSN(theKey, 101_990)) }.isNotNull().and {
+                        get { getLatestVersion(KeyAndTSN(theKey, 101_990)) }.isNotNull().and {
                             get { opCode }.isEqualTo(OpCode.DEL)
                             get { tsn }.isEqualTo(101_000)
                             get { value }.isEmpty()
                         }
-                        get { get(KeyAndTSN(theKey, 101_999)) }.isNotNull().and {
+                        get { getLatestVersion(KeyAndTSN(theKey, 101_999)) }.isNotNull().and {
                             get { opCode }.isEqualTo(OpCode.DEL)
                             get { tsn }.isEqualTo(101_000)
                             get { value }.isEmpty()
                         }
-                        get { get(KeyAndTSN(theKey, 102_000)) }.isNotNull().and {
+                        get { getLatestVersion(KeyAndTSN(theKey, 102_000)) }.isNotNull().and {
                             get { opCode }.isEqualTo(OpCode.PUT)
                             get { tsn }.isEqualTo(102_000)
                             get { value }.hasSize(1024)
                         }
-                        get { get(KeyAndTSN(theKey, 102_001)) }.isNotNull().and {
+                        get { getLatestVersion(KeyAndTSN(theKey, 102_001)) }.isNotNull().and {
                             get { opCode }.isEqualTo(OpCode.PUT)
                             get { tsn }.isEqualTo(102_000)
                             get { value }.hasSize(1024)
@@ -257,7 +261,7 @@ class ChronoStoreFileTest {
 
             val theKey = BasicBytes("theKey")
             file.withOverWriter { overWriter ->
-                val writer = ChronoStoreFileWriter(
+                val writer = StandardChronoStoreFileWriter(
                     outputStream = overWriter.outputStream.buffered(),
                     settings = ChronoStoreFileSettings(CompressionAlgorithm.NONE, 16.KiB),
                 )
@@ -269,7 +273,7 @@ class ChronoStoreFileTest {
                         Command.put(theKey, (i + 1) * 1000L, Bytes.random(random, 1024))
                     }
                 }
-                writer.writeFile(
+                writer.write(
                     numberOfMerges = 0,
                     orderedCommands = commands.iterator(),
                     commandCountEstimate = 1000,
@@ -315,11 +319,11 @@ class ChronoStoreFileTest {
             )
 
             file.withOverWriter { overWriter ->
-                ChronoStoreFileWriter(
+                StandardChronoStoreFileWriter(
                     outputStream = overWriter.outputStream.buffered(),
                     settings = ChronoStoreFileSettings(CompressionAlgorithm.SNAPPY, 16.KiB),
                 ).use { writer ->
-                    writer.writeFile(
+                    writer.write(
                         numberOfMerges = 0L,
                         orderedCommands = commands.iterator(),
                         commandCountEstimate = 10,
@@ -340,10 +344,10 @@ class ChronoStoreFileTest {
                         get { this.isValidBlockIndex(-1) }.isFalse()
                         get { this.getBlockIndexForKeyAndTimestampAscending(KeyAndTSN(BasicBytes("hello"), 1237)) }.isEqualTo(0)
                         get { this.getBlockIndexForKeyAndTimestampAscending(KeyAndTSN(BasicBytes("hello"), 1240)) }.isEqualTo(0)
-                        get { this.getBlockIndexForKeyAndTimestampAscending(KeyAndTSN(BasicBytes("hello"), 1241)) }.isEqualTo(0)
+                        get { this.getBlockIndexForKeyAndTimestampAscending(KeyAndTSN(BasicBytes("hello"), 1241)) }.isNull()
                         get { this.getBlockIndexForKeyAndTimestampAscending(KeyAndTSN(BasicBytes("hello"), 0)) }.isEqualTo(0)
-                        get { this.getBlockIndexForKeyAndTimestampAscending(KeyAndTSN(BasicBytes("foo"), 0)) }.isNull()
-                        get { this.getBlockIndexForKeyAndTimestampAscending(KeyAndTSN(BasicBytes("foo"), 9_999)) }.isNull()
+                        get { this.getBlockIndexForKeyAndTimestampAscending(KeyAndTSN(BasicBytes("foo"), 0)) }.isEqualTo(0)
+                        get { this.getBlockIndexForKeyAndTimestampAscending(KeyAndTSN(BasicBytes("foo"), 9_999)) }.isEqualTo(0)
                         get { this.getBlockIndexForKeyAndTimestampAscending(KeyAndTSN(BasicBytes("foo"), 10_000)) }.isEqualTo(0)
                         get { this.getBlockIndexForKeyAndTimestampAscending(KeyAndTSN(BasicBytes("foo"), 200_000)) }.isEqualTo(0)
                     }
@@ -405,11 +409,11 @@ class ChronoStoreFileTest {
             )
 
             file.withOverWriter { overWriter ->
-                ChronoStoreFileWriter(
+                StandardChronoStoreFileWriter(
                     outputStream = overWriter.outputStream.buffered(),
                     settings = ChronoStoreFileSettings(CompressionAlgorithm.SNAPPY, 16.KiB),
                 ).use { writer ->
-                    writer.writeFile(
+                    writer.write(
                         numberOfMerges = 0L,
                         orderedCommands = commands.iterator(),
                         commandCountEstimate = 10,
@@ -421,11 +425,11 @@ class ChronoStoreFileTest {
 
             val emptyFile = vfs.file("test2.chronostore")
             emptyFile.withOverWriter { overWriter ->
-                val writer = ChronoStoreFileWriter(
+                val writer = StandardChronoStoreFileWriter(
                     outputStream = overWriter.outputStream.buffered(),
                     settings = ChronoStoreFileSettings(CompressionAlgorithm.NONE, 16.MiB),
                 )
-                writer.writeFile(
+                writer.write(
                     numberOfMerges = 0,
                     orderedCommands = emptySequence<Command>().iterator(),
                     commandCountEstimate = 10,
@@ -447,10 +451,10 @@ class ChronoStoreFileTest {
                         get { this.isValidBlockIndex(-1) }.isFalse()
                         get { this.getBlockIndexForKeyAndTimestampAscending(KeyAndTSN(BasicBytes("hello"), 1237)) }.isEqualTo(0)
                         get { this.getBlockIndexForKeyAndTimestampAscending(KeyAndTSN(BasicBytes("hello"), 1240)) }.isEqualTo(0)
-                        get { this.getBlockIndexForKeyAndTimestampAscending(KeyAndTSN(BasicBytes("hello"), 1241)) }.isEqualTo(0)
+                        get { this.getBlockIndexForKeyAndTimestampAscending(KeyAndTSN(BasicBytes("hello"), 1241)) }.isNull()
                         get { this.getBlockIndexForKeyAndTimestampAscending(KeyAndTSN(BasicBytes("hello"), 0)) }.isEqualTo(0)
-                        get { this.getBlockIndexForKeyAndTimestampAscending(KeyAndTSN(BasicBytes("foo"), 0)) }.isNull()
-                        get { this.getBlockIndexForKeyAndTimestampAscending(KeyAndTSN(BasicBytes("foo"), 9_999)) }.isNull()
+                        get { this.getBlockIndexForKeyAndTimestampAscending(KeyAndTSN(BasicBytes("foo"), 0)) }.isEqualTo(0)
+                        get { this.getBlockIndexForKeyAndTimestampAscending(KeyAndTSN(BasicBytes("foo"), 9_999)) }.isEqualTo(0)
                         get { this.getBlockIndexForKeyAndTimestampAscending(KeyAndTSN(BasicBytes("foo"), 10_000)) }.isEqualTo(0)
                         get { this.getBlockIndexForKeyAndTimestampAscending(KeyAndTSN(BasicBytes("foo"), 200_000)) }.isEqualTo(0)
                     }

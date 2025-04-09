@@ -39,10 +39,17 @@ class LSMTreeFile(
         return this.driverFactory.withDriver(this.virtualFile, ChronoStoreFileReader::loadFileHeader)
     }
 
-    fun get(keyAndTSN: KeyAndTSN): Command? {
+    /**
+     * Gets the latest version of the value associated with the given [keyAndTSN] in this tree.
+     *
+     * @param keyAndTSN The [KeyAndTSN] to search for.
+     *
+     * @return The latest visible version (maximum commit TSN <= given TSN) for the given [keyAndTSN], or `null` if none was found.
+     */
+    fun getLatestVersion(keyAndTSN: KeyAndTSN): Command? {
         this.driverFactory.withDriver(this.virtualFile) { driver ->
             ChronoStoreFileReader(driver, this.header, this.blockCache).use { reader ->
-                return reader.get(keyAndTSN)
+                return reader.getLatestVersion(keyAndTSN)
             }
         }
     }
@@ -56,6 +63,8 @@ class LSMTreeFile(
             driver.close()
         }
     }
+
+
 
     override fun toString(): String {
         return "LSMTreeFile[${this.virtualFile}]"

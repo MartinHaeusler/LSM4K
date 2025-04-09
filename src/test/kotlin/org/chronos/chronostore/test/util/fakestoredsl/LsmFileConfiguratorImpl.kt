@@ -1,6 +1,7 @@
 package org.chronos.chronostore.test.util.fakestoredsl
 
 import org.chronos.chronostore.io.format.CompressionAlgorithm
+import org.chronos.chronostore.model.command.KeyAndTSN
 import org.chronos.chronostore.util.FileIndex
 import org.chronos.chronostore.util.TSN
 import org.chronos.chronostore.util.Timestamp
@@ -61,6 +62,30 @@ class LsmFileConfiguratorImpl(
                 when {
                     min != null && value < min -> this.minTSN = value
                     min == null -> this.minTSN = value
+                }
+            }
+        }
+
+    override var firstKeyAndTSN: KeyAndTSN? = null
+        set(value) {
+            field = value
+            val last = this.lastKeyAndTSN
+            if (value != null) {
+                when {
+                    last != null && value > last -> this.lastKeyAndTSN = value
+                    last == null -> this.lastKeyAndTSN = value
+                }
+            }
+        }
+
+    override var lastKeyAndTSN: KeyAndTSN? = null
+        set(value) {
+            field = value
+            val first = this.firstKeyAndTSN
+            if (value != null) {
+                when {
+                    first != null && value < first -> this.firstKeyAndTSN = value
+                    first == null -> this.firstKeyAndTSN = value
                 }
             }
         }

@@ -9,11 +9,16 @@ class IndexOfBlocks {
     private val endOfLastBlock: Long
     private val minKeyAndTSNToBlockIndex: TreeMap<KeyAndTSN, Int>
 
+    private val firstKeyAndTSN: KeyAndTSN?
+    private val lastKeyAndTSN: KeyAndTSN?
+
     @Suppress("ConvertSecondaryConstructorToPrimary")
-    constructor(entries: List<Triple<Int, Long, KeyAndTSN>>, endOfLastBlock: Long) {
+    constructor(entries: List<Triple<Int, Long, KeyAndTSN>>, endOfLastBlock: Long, firstKeyAndTSN: KeyAndTSN?, lastKeyAndTSN: KeyAndTSN?) {
         val sortedEntries = entries.sortedBy { it.first }
         this.startPositions = LongArray(sortedEntries.size)
         this.endOfLastBlock = endOfLastBlock
+        this.firstKeyAndTSN = firstKeyAndTSN
+        this.lastKeyAndTSN = lastKeyAndTSN
         this.minKeyAndTSNToBlockIndex = TreeMap()
         for (i in entries.indices) {
             val entry = sortedEntries[i]
@@ -37,9 +42,9 @@ class IndexOfBlocks {
     private var binarySizeCached: Long? = null
 
     val sizeInBytes: Long
-        get(){
+        get() {
             val cached = binarySizeCached
-            if(cached != null){
+            if (cached != null) {
                 return cached
             }
             val computedSize = computeBinarySizeUncached()
@@ -47,7 +52,7 @@ class IndexOfBlocks {
             return computedSize
         }
 
-    private fun computeBinarySizeUncached(): Long{
+    private fun computeBinarySizeUncached(): Long {
         val startPositionsSize = startPositions.size * Long.SIZE_BYTES
         val treeSize = minKeyAndTSNToBlockIndex.entries.sumOf { (it.key.byteSize + Int.SIZE_BYTES).toLong() }
         return treeSize + startPositionsSize + Long.SIZE_BYTES
@@ -79,15 +84,34 @@ class IndexOfBlocks {
     }
 
     fun getBlockIndexForKeyAndTimestampAscending(keyAndTSN: KeyAndTSN): Int? {
-        val floorEntry = this.minKeyAndTSNToBlockIndex.floorEntry(keyAndTSN)
-            ?: return null // the key is too small to exist in this file
-        return floorEntry.value
+        val ceilEntry = this.minKeyAndTSNToBlockIndex.ceilingEntry(keyAndTSN)
+        if (ceilEntry != null) {
+            return ceilEntry.value
+        }
+
+        if (this.lastKeyAndTSN != null && keyAndTSN <= this.lastKeyAndTSN) {
+            // the key may be contained in the last block
+            return this.minKeyAndTSNToBlockIndex.lastEntry().value
+        }
+
+        // key is too big to be contained
+        return null
     }
 
     fun getBlockIndexForKeyAndTimestampDescending(keyAndTSN: KeyAndTSN): Int? {
-        val ceilEntry = this.minKeyAndTSNToBlockIndex.ceilingEntry(keyAndTSN)
-            ?: return null // the key is too large to exist in this file
-        return ceilEntry.value
+        val floorEntry = this.minKeyAndTSNToBlockIndex.floorEntry(keyAndTSN)
+        if (floorEntry != null) {
+            return floorEntry.value
+        }
+
+        if (this.firstKeyAndTSN != null && keyAndTSN >= this.firstKeyAndTSN) {
+            // the key may be contained in the first block
+            return this.minKeyAndTSNToBlockIndex.firstEntry().value
+        }
+
+        // the key is too small to exist in this file
+        return null
     }
+
 
 }

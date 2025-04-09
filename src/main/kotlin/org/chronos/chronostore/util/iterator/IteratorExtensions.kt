@@ -39,6 +39,10 @@ object IteratorExtensions {
         return this.asSequence().toList()
     }
 
+    fun <T> Iterator<T>.toMutableList() : MutableList<T> {
+        return this.asSequence().toMutableList()
+    }
+
     fun <T> Iterator<T>.toPeekingIterator(): PeekingIterator<T> {
         return Iterators.peekingIterator(this)
     }

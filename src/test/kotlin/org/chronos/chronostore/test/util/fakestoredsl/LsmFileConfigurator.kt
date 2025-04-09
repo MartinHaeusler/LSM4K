@@ -1,6 +1,7 @@
 package org.chronos.chronostore.test.util.fakestoredsl
 
 import org.chronos.chronostore.io.format.CompressionAlgorithm
+import org.chronos.chronostore.model.command.KeyAndTSN
 import org.chronos.chronostore.util.TSN
 import org.chronos.chronostore.util.Timestamp
 import org.chronos.chronostore.util.bloom.BytesBloomFilter
@@ -26,6 +27,10 @@ interface LsmFileConfigurator {
     var minKey: Bytes?
 
     var maxKey: Bytes?
+
+    var firstKeyAndTSN: KeyAndTSN?
+
+    var lastKeyAndTSN: KeyAndTSN?
 
     var minTSN: TSN?
 

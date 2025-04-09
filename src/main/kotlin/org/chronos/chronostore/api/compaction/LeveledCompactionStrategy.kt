@@ -88,11 +88,43 @@ import org.chronos.chronostore.util.unit.BinarySize.Companion.MiB
  */
 @PersistentClass(format = PersistentClass.Format.JSON, details = "Used in Manifest.")
 class LeveledCompactionStrategy(
+    /**
+     * Controls the target size of levels relative to each other.
+     *
+     * The target size of the next-higher level is [levelSizeMultiplier] times the
+     * target size of the current level.
+     */
     val levelSizeMultiplier: Double = 10.0,
+
+    /**
+     * The number of files allowed in level 0.
+     *
+     * Any further insertion will trigger a compaction.
+     */
     val level0FileNumberCompactionTrigger: Int = 5,
+
+    /**
+     * The maximum number of levels to use in the LSM tree.
+     */
     val maxLevels: Int = 8,
+
+    /**
+     * The minimum size of the highest level of the LSM tree which needs to be reached before
+     * the relative level size compaction triggers are used.
+     */
     val baseLevelMinSize: BinarySize = 200.MiB,
+
+    /**
+     * The strategy to apply when selecting which files from within a level should be compacted first.
+     */
     val fileSelectionStrategy: FileSelectionStrategy = FileSelectionStrategy.DEFAULT,
+
+    /**
+     * The strategy to apply when deciding when to split an outbound data stream into multiple LSM files.
+     *
+     * Defaults to [FileSeparationStrategy.SizeBased].
+     */
+    override val fileSeparationStrategy: FileSeparationStrategy = FileSeparationStrategy.SizeBased(),
 ) : CompactionStrategy {
 
     enum class FileSelectionStrategy {
@@ -173,6 +205,7 @@ class LeveledCompactionStrategy(
 
         }
 
+        /** Creates a file comparator that corresponds with this strategy. */
         abstract val comparator: Comparator<CompactableFile>
 
     }

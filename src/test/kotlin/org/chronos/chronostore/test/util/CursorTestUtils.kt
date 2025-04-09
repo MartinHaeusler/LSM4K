@@ -1,7 +1,13 @@
 package org.chronos.chronostore.test.util
 
+import org.chronos.chronostore.model.command.Command
+import org.chronos.chronostore.model.command.KeyAndTSN
+import org.chronos.chronostore.model.command.OpCode
 import org.chronos.chronostore.util.cursor.Cursor
 import org.chronos.chronostore.util.cursor.IndexBasedCursor
+import strikt.api.Assertion
+import strikt.assertions.isEqualTo
+import java.nio.charset.Charset
 
 object CursorTestUtils {
 
@@ -40,6 +46,22 @@ object CursorTestUtils {
             getEntryAtIndex = list::get,
             name = name,
         )
+    }
+
+    fun KeyAndTSN.asString(charset: Charset = Charsets.UTF_8): String {
+        return "${this.key.asString()}@${this.tsn}"
+    }
+
+    fun Command.asString(charset: Charset = Charsets.UTF_8): String {
+        return when (this.opCode) {
+            OpCode.PUT -> "${this.key.asString(charset)}@${this.tsn}->${this.value.asString(charset)}"
+            OpCode.DEL -> "${this.key.asString(charset)}@${this.tsn}--"
+        }
+    }
+
+    fun Assertion.Builder<Pair<KeyAndTSN, Command>>.isEqualToKeyValuePair(key: String, value: String) {
+        get { this.first.asString() }.isEqualTo(key)
+        get { this.second.asString() }.isEqualTo(value)
     }
 
 }

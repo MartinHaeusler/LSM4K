@@ -37,6 +37,8 @@ class LevelOrTierConfiguratorImpl(
                     fileUUID = fileBuilder.fileUUID,
                     minKey = fileBuilder.minKey,
                     maxKey = fileBuilder.maxKey,
+                    firstKeyAndTSN = fileBuilder.firstKeyAndTSN,
+                    lastKeyAndTSN = fileBuilder.lastKeyAndTSN,
                     minTSN = fileBuilder.minTSN,
                     maxTSN = fileBuilder.maxTSN,
                     headEntries = fileBuilder.headEntries,

@@ -1,0 +1,164 @@
+package org.chronos.chronostore.test.util.lsm
+
+import org.chronos.chronostore.io.fileaccess.FileChannelDriver
+import org.chronos.chronostore.io.fileaccess.InMemoryFileDriver
+import org.chronos.chronostore.io.format.ChronoStoreFileSettings
+import org.chronos.chronostore.io.format.CompressionAlgorithm
+import org.chronos.chronostore.io.format.writer.StandardChronoStoreFileWriter
+import org.chronos.chronostore.io.vfs.VirtualDirectory
+import org.chronos.chronostore.io.vfs.VirtualFileSystem
+import org.chronos.chronostore.io.vfs.VirtualReadWriteFile
+import org.chronos.chronostore.io.vfs.inmemory.InMemoryVirtualFile
+import org.chronos.chronostore.lsm.LSMTree
+import org.chronos.chronostore.lsm.LSMTreeFile
+import org.chronos.chronostore.lsm.cache.FileHeaderCache
+import org.chronos.chronostore.lsm.cache.LocalBlockCache
+import org.chronos.chronostore.model.command.Command
+import org.chronos.chronostore.util.FileIndex
+import org.chronos.chronostore.util.TSN
+import org.chronos.chronostore.util.iterator.IteratorExtensions.toMutableList
+import org.chronos.chronostore.util.unit.BinarySize.Companion.MiB
+
+object LsmFileFactory {
+
+    fun VirtualFileSystem.createLsmTreeFile(
+        index: FileIndex,
+        content: Iterable<Command>,
+        fileSettings: ChronoStoreFileSettings = ChronoStoreFileSettings(
+            compression = CompressionAlgorithm.SNAPPY,
+            maxBlockSize = 8.MiB
+        ),
+        numberOfMerges: Long = 0,
+        maxCompletelyWrittenTSN: TSN? = null,
+        blockCache: LocalBlockCache = LocalBlockCache.NONE,
+        fileHeaderCache: FileHeaderCache = FileHeaderCache.NONE,
+    ): LSMTreeFile {
+        val file = this.file(LSMTree.createFileNameForIndex(index))
+        return createLsmTreeFileFromVirtualFile(
+            file = file,
+            fileSettings = fileSettings,
+            content = content.iterator(),
+            numberOfMerges = numberOfMerges,
+            maxCompletelyWrittenTSN = maxCompletelyWrittenTSN,
+            index = index,
+            blockCache = blockCache,
+            fileHeaderCache = fileHeaderCache
+        )
+    }
+
+    fun VirtualFileSystem.createLsmTreeFile(
+        index: FileIndex,
+        content: Iterator<Command>,
+        fileSettings: ChronoStoreFileSettings = ChronoStoreFileSettings(
+            compression = CompressionAlgorithm.SNAPPY,
+            maxBlockSize = 8.MiB
+        ),
+        numberOfMerges: Long = 0,
+        maxCompletelyWrittenTSN: TSN? = null,
+        blockCache: LocalBlockCache = LocalBlockCache.NONE,
+        fileHeaderCache: FileHeaderCache = FileHeaderCache.NONE,
+    ): LSMTreeFile {
+        val file = this.file(LSMTree.createFileNameForIndex(index))
+        return createLsmTreeFileFromVirtualFile(
+            file = file,
+            fileSettings = fileSettings,
+            content = content,
+            numberOfMerges = numberOfMerges,
+            maxCompletelyWrittenTSN = maxCompletelyWrittenTSN,
+            index = index,
+            blockCache = blockCache,
+            fileHeaderCache = fileHeaderCache
+        )
+    }
+
+    fun VirtualDirectory.createLsmTreeFile(
+        index: FileIndex,
+        content: Iterable<Command>,
+        fileSettings: ChronoStoreFileSettings = ChronoStoreFileSettings(
+            compression = CompressionAlgorithm.SNAPPY,
+            maxBlockSize = 8.MiB
+        ),
+        numberOfMerges: Long = 0,
+        maxCompletelyWrittenTSN: TSN? = null,
+        blockCache: LocalBlockCache = LocalBlockCache.NONE,
+        fileHeaderCache: FileHeaderCache = FileHeaderCache.NONE,
+    ): LSMTreeFile {
+        return this.createLsmTreeFile(
+            index = index,
+            content = content.iterator(),
+            fileSettings = fileSettings,
+            numberOfMerges = numberOfMerges,
+            maxCompletelyWrittenTSN = maxCompletelyWrittenTSN,
+            blockCache = blockCache,
+            fileHeaderCache = fileHeaderCache,
+        )
+    }
+
+    fun VirtualDirectory.createLsmTreeFile(
+        index: FileIndex,
+        content: Iterator<Command>,
+        fileSettings: ChronoStoreFileSettings = ChronoStoreFileSettings(
+            compression = CompressionAlgorithm.SNAPPY,
+            maxBlockSize = 8.MiB
+        ),
+        numberOfMerges: Long = 0,
+        maxCompletelyWrittenTSN: TSN? = null,
+        blockCache: LocalBlockCache = LocalBlockCache.NONE,
+        fileHeaderCache: FileHeaderCache = FileHeaderCache.NONE,
+    ): LSMTreeFile {
+        val file = this.file(LSMTree.createFileNameForIndex(index))
+        return createLsmTreeFileFromVirtualFile(
+            file = file,
+            fileSettings = fileSettings,
+            content = content,
+            numberOfMerges = numberOfMerges,
+            maxCompletelyWrittenTSN = maxCompletelyWrittenTSN,
+            index = index,
+            blockCache = blockCache,
+            fileHeaderCache = fileHeaderCache
+        )
+    }
+
+    private fun createLsmTreeFileFromVirtualFile(
+        file: VirtualReadWriteFile,
+        fileSettings: ChronoStoreFileSettings,
+        content: Iterator<Command>,
+        numberOfMerges: Long,
+        maxCompletelyWrittenTSN: TSN?,
+        index: FileIndex,
+        blockCache: LocalBlockCache,
+        fileHeaderCache: FileHeaderCache,
+    ): LSMTreeFile {
+        val driverFactory = when (file) {
+            is InMemoryVirtualFile -> InMemoryFileDriver.Factory
+            else -> FileChannelDriver.Factory
+        }
+
+        // write the contents
+        file.deleteIfExists()
+        file.deleteOverWriterFileIfExists()
+        file.createOverWriter().use { overWriter ->
+            StandardChronoStoreFileWriter(overWriter.outputStream, fileSettings).use { fileWriter ->
+                // for unit tests, we expect small data sets, so it's ok to sort them explicitly here
+                val contentList = content.toMutableList()
+                contentList.sorted()
+                fileWriter.write(
+                    numberOfMerges = numberOfMerges,
+                    orderedCommands = contentList.iterator(),
+                    commandCountEstimate = contentList.size.toLong(),
+                    maxCompletelyWrittenTSN = maxCompletelyWrittenTSN,
+                )
+            }
+            overWriter.commit()
+        }
+
+        return LSMTreeFile(
+            virtualFile = file,
+            index = index,
+            driverFactory = driverFactory,
+            blockCache = blockCache,
+            fileHeaderCache = fileHeaderCache,
+        )
+    }
+
+}
