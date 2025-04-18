@@ -1,11 +1,13 @@
 package org.chronos.chronostore.io.format
 
+import org.chronos.chronostore.api.exceptions.BlockReadException
 import org.chronos.chronostore.io.fileaccess.RandomFileAccessDriver
+import org.chronos.chronostore.io.format.datablock.DataBlock
+import org.chronos.chronostore.io.vfs.VirtualFile
+import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.model.command.KeyAndTSN
-import org.chronos.chronostore.util.IOExtensions.withInputStream
-import org.chronos.chronostore.util.LittleEndianExtensions.readLittleEndianIntOrNull
-import org.chronos.chronostore.util.LittleEndianExtensions.readLittleEndianLong
 import org.chronos.chronostore.util.bytes.Bytes
+import org.chronos.chronostore.util.statistics.ChronoStoreStatistics
 
 object ChronoStoreFileFormat {
 
@@ -35,87 +37,92 @@ object ChronoStoreFileFormat {
         )               // blockbgn = block begin
     )
 
-    enum class Version(
-        val versionString: String,
-        val versionInt: Int,
-    ) {
+    @JvmStatic
+    fun loadFileHeader(driver: RandomFileAccessDriver): FileHeader {
+        // read and validate the magic bytes
+        val magicBytesAndVersion = driver.readBytes(0, FILE_MAGIC_BYTES.size + Int.SIZE_BYTES)
+        val magicBytes = magicBytesAndVersion.slice(0, FILE_MAGIC_BYTES.size)
 
-        V_1_0_0("1.0.0", 1_000_000) {
-
-            override fun readFileHeader(driver: RandomFileAccessDriver): FileHeader {
-                val trailer = this.readTrailer(driver)
-                val metadata = this.readMetaData(driver, trailer)
-                val indexOfBlocks = this.readIndexOfBlocks(driver, trailer, metadata.firstKeyAndTSN, metadata.lastKeyAndTSN)
-                return FileHeader(
-                    fileFormatVersion = this,
-                    trailer = trailer,
-                    metaData = metadata,
-                    indexOfBlocks = indexOfBlocks,
-                )
-            }
-
-            private fun readTrailer(driver: RandomFileAccessDriver): FileTrailer {
-                val fileLength = driver.fileSize
-                val trailerSizeInBytes = FileTrailer.SIZE_BYTES
-                val trailerBytes = driver.readBytes(fileLength - trailerSizeInBytes, trailerSizeInBytes)
-                return FileTrailer.readFrom(trailerBytes)
-            }
-
-            private fun readMetaData(driver: RandomFileAccessDriver, fileTrailer: FileTrailer): FileMetaData {
-                val lengthOfMetadata = (driver.fileSize - FileTrailer.SIZE_BYTES - fileTrailer.beginOfMetadata).toInt()
-                val metadataBytes = driver.readBytes(fileTrailer.beginOfMetadata, lengthOfMetadata)
-                return metadataBytes.withInputStream(FileMetaData::readFrom)
-            }
-
-            private fun readIndexOfBlocks(driver: RandomFileAccessDriver, trailer: FileTrailer, firstKeyAndTSN: KeyAndTSN?, lastKeyAndTSN: KeyAndTSN?): IndexOfBlocks {
-                val lengthOfIndexOfBlocks = (trailer.beginOfMetadata - trailer.beginOfIndexOfBlocks).toInt()
-                val indexBytes = driver.readBytes(trailer.beginOfIndexOfBlocks, lengthOfIndexOfBlocks)
-                return indexBytes.withInputStream { inputStream ->
-                    val entries = generateSequence {
-                        val blockSequenceNumber = inputStream.readLittleEndianIntOrNull()
-                            ?: return@generateSequence null // we're done
-                        val blockStartPosition = inputStream.readLittleEndianLong()
-                        val blockMinKeyAndTSN = KeyAndTSN.readFromStream(inputStream)
-                        Triple(blockSequenceNumber, blockStartPosition, blockMinKeyAndTSN)
-                    }.toList()
-                    IndexOfBlocks(entries, trailer.beginOfIndexOfBlocks, firstKeyAndTSN, lastKeyAndTSN)
-                }
-            }
-
+        if (magicBytes != FILE_MAGIC_BYTES) {
+            throw IllegalStateException("The file '${driver.filePath}' has an unknown file format. Expected ${FILE_MAGIC_BYTES.hex()} but got ${magicBytes.hex()}!")
         }
+        val versionInt = magicBytesAndVersion.readLittleEndianInt(FILE_MAGIC_BYTES.size)
+        val fileFormatVersion = FileFormatVersion.fromInt(versionInt)
+        return fileFormatVersion.readFileHeader(driver)
+    }
 
-        ;
+    @JvmStatic
+    fun loadBlockFromFileOrNull(driver: RandomFileAccessDriver, fileHeader: FileHeader, blockIndex: Int): DataBlock? {
+        val timeBefore = System.currentTimeMillis()
+        val (startPosition, length) = fileHeader.indexOfBlocks.getBlockStartPositionAndLengthOrNull(blockIndex)
+            ?: return null
 
-        companion object {
+        return loadBlockInternal(driver, startPosition, length, fileHeader, timeBefore, blockIndex)
+    }
 
-            fun fromString(string: String): Version {
-                val trim = string.trim()
-                for (literal in Version.entries) {
-                    if (literal.versionString.equals(trim, ignoreCase = true)) {
-                        return literal
-                    }
-                }
-                throw IllegalArgumentException("Unknown ChronoStore file format version: '${string}'!")
-            }
+    @JvmStatic
+    fun loadBlockFromFile(driver: RandomFileAccessDriver, fileHeader: FileHeader, blockIndex: Int): DataBlock {
+        val timeBefore = System.currentTimeMillis()
+        val (startPosition, length) = fileHeader.indexOfBlocks.getBlockStartPositionAndLengthOrNull(blockIndex)
+            ?: throw IllegalStateException(
+                "Could not fetch block #${blockIndex} in file: '${driver.filePath}')!" +
+                    " The block index contains ${fileHeader.indexOfBlocks.size} entries."
+            )
+        return loadBlockInternal(driver, startPosition, length, fileHeader, timeBefore, blockIndex)
+    }
 
-            fun fromInt(int: Int): Version {
-                for (literal in Version.entries) {
-                    if (literal.versionInt == int) {
-                        return literal
-                    }
-                }
-                throw IllegalArgumentException("Unknown ChronoStore file format version: '${int}'!")
-            }
-
+    private fun loadBlockInternal(
+        driver: RandomFileAccessDriver,
+        startPosition: Long,
+        length: Int,
+        fileHeader: FileHeader,
+        timeBefore: Long,
+        blockIndex: Int,
+    ): DataBlock {
+        val blockBytes = driver.readBytes(startPosition, length)
+        val compressionAlgorithm = fileHeader.metaData.settings.compression
+        try {
+            val dataBlock = DataBlock.loadBlock(blockBytes, compressionAlgorithm)
+            val timeAfter = System.currentTimeMillis()
+            ChronoStoreStatistics.BLOCK_LOAD_TIME.addAndGet(timeAfter - timeBefore)
+            return dataBlock
+        } catch (e: Exception) {
+            throw BlockReadException(
+                message = "Failed to read block #${blockIndex} of file '${driver.filePath}'." +
+                    " This file is potentially corrupted! Cause: ${e}",
+                cause = e
+            )
         }
+    }
 
-        abstract fun readFileHeader(driver: RandomFileAccessDriver): FileHeader
-
-
-        override fun toString(): String {
-            return this.versionString
+    @JvmStatic
+    fun getLatestVersion(file: VirtualFile, fileHeader: FileHeader, keyAndTSN: KeyAndTSN, blockLoader: BlockLoader): Command? {
+        if (!fileHeader.metaData.mayContainKey(keyAndTSN.key)) {
+            // key is definitely not in this file, no point in searching.
+            return null
         }
-
+        if (!fileHeader.metaData.mayContainDataRelevantForTSN(keyAndTSN.tsn)) {
+            // the data in this file is too new and doesn't contain anything relevant for the request timestamp.
+            return null
+        }
+        // the key may be contained, let's check.
+        var blockIndex = fileHeader.indexOfBlocks.getBlockIndexForKeyAndTimestampDescending(keyAndTSN)
+            ?: return null // we don't have a block for this key and timestamp.
+        var matchingCommandFromPreviousBlock: Command? = null
+        while (true) {
+            val dataBlock = blockLoader.getBlockOrNull(file, blockIndex)
+                ?: return matchingCommandFromPreviousBlock
+            val (command, isLastInBlock) = dataBlock.get(keyAndTSN)
+                ?: return matchingCommandFromPreviousBlock
+            if (!isLastInBlock) {
+                return command
+            }
+            // we've hit the last key in the block, so we need to consult the next block
+            // in order to see if we find a newer entry which matches the key-and-timestamp.
+            matchingCommandFromPreviousBlock = command
+            // check the next block
+            blockIndex++
+        }
     }
 
 }

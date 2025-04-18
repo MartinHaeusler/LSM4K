@@ -7,8 +7,8 @@ import org.chronos.chronostore.io.format.ChronoStoreFileSettings
 import org.chronos.chronostore.io.vfs.VirtualDirectory
 import org.chronos.chronostore.lsm.LSMForestMemoryManager
 import org.chronos.chronostore.lsm.LSMTree
+import org.chronos.chronostore.lsm.cache.BlockCache
 import org.chronos.chronostore.lsm.cache.FileHeaderCache
-import org.chronos.chronostore.lsm.cache.LocalBlockCache
 import org.chronos.chronostore.manifest.ManifestFile
 import org.chronos.chronostore.manifest.StoreMetadata
 import org.chronos.chronostore.util.StoreId
@@ -16,7 +16,6 @@ import org.chronos.chronostore.util.TSN
 import org.chronos.chronostore.util.TransactionId
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.Executor
-import java.util.concurrent.ExecutorService
 
 class StoreImpl(
     override val directory: VirtualDirectory,
@@ -25,7 +24,7 @@ class StoreImpl(
     manifestFile: ManifestFile,
     initialStoreMetadata: StoreMetadata,
     forest: LSMForestMemoryManager,
-    blockCache: LocalBlockCache,
+    blockCache: BlockCache,
     fileHeaderCache: FileHeaderCache,
     driverFactory: RandomFileAccessDriverFactory,
     newFileSettings: ChronoStoreFileSettings,
@@ -56,11 +55,11 @@ class StoreImpl(
     )
 
 
-    override fun scheduleMajorCompaction(): CompletableFuture<*>{
+    override fun scheduleMajorCompaction(): CompletableFuture<*> {
         return this.tree.scheduleMajorCompaction()
     }
 
-    override fun scheduleMinorCompaction(): CompletableFuture<*>{
+    override fun scheduleMinorCompaction(): CompletableFuture<*> {
         return this.tree.scheduleMinorCompaction()
     }
 

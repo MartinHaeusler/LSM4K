@@ -107,13 +107,20 @@ class TieredCompactionProcess(
             return Pair(heightReductionTriggerFiles, CompactionTrigger.TIER_HEIGHT_REDUCTION)
         }
 
+        val tierZeroReductionTriggerFiles = selectFilesForTierZeroReductionTrigger()
+        if (tierZeroReductionTriggerFiles.size > 1) {
+            return Pair(tierZeroReductionTriggerFiles, CompactionTrigger.TIER_TIER0)
+        }
+
         // none of the triggers produced any outcome
         return Pair(emptyList(), null)
     }
 
     private fun areEnoughTiersOnDisk(): Boolean {
         // check how many tiers we have in the store
-        val nonEmptyTiers = this.store.metadata.getNumberOfNonEmptyTiers()
+        val tier0Files = this.store.metadata.getFileIndicesAtTierOrLevel(0).size
+        val nonEmptyTiers = this.store.metadata.getNumberOfNonEmptyTiers() - 1 + tier0Files
+
         // we don't have enough files on disk yet to make compaction worth the effort.
         return nonEmptyTiers >= this.configuration.numberOfTiers
     }
@@ -215,6 +222,15 @@ class TieredCompactionProcess(
             // maxTier is inclusive, so we need the -1 in the end
             maxTier = numberOfTiersToMerge - 1
         )
+    }
+
+    private fun selectFilesForTierZeroReductionTrigger(): List<LSMFileInfo> {
+        val tierZeroFiles = this.store.metadata.getFileInfosAtTierOrLevel(0)
+        if (tierZeroFiles.size <= 1) {
+            return emptyList()
+        }
+        // compact ALL tier zero files
+        return tierZeroFiles.toList()
     }
 
 

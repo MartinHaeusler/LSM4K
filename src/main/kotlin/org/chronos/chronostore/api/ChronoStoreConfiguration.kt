@@ -2,8 +2,7 @@ package org.chronos.chronostore.api
 
 import com.cronutils.model.Cron
 import org.chronos.chronostore.api.compaction.CompactionStrategy
-import org.chronos.chronostore.io.fileaccess.FileChannelDriver
-import org.chronos.chronostore.io.fileaccess.RandomFileAccessDriverFactory
+import org.chronos.chronostore.io.fileaccess.*
 import org.chronos.chronostore.io.format.CompressionAlgorithm
 import org.chronos.chronostore.io.vfs.disk.DiskBasedVirtualFileSystemSettings
 import org.chronos.chronostore.io.vfs.disk.FileSyncMode
@@ -12,6 +11,9 @@ import org.chronos.chronostore.util.cron.CronUtils.isValid
 import org.chronos.chronostore.util.unit.BinarySize
 import org.chronos.chronostore.util.unit.BinarySize.Companion.Bytes
 import org.chronos.chronostore.util.unit.BinarySize.Companion.MiB
+import java.lang.foreign.MemorySegment
+import java.nio.channels.FileChannel
+import kotlin.math.max
 
 class ChronoStoreConfiguration(
 
@@ -54,6 +56,23 @@ class ChronoStoreConfiguration(
      */
     val maxBlockSize: BinarySize = 8.MiB,
 
+    /**
+     * The factory which produces the [RandomFileAccessDriver]s.
+     *
+     * This primarily decides the access pattern for random-access files.
+     *
+     * You can find the driver factory for a driver class using `<DriverClass>.Factory`.
+     *
+     * Currently supported driver classes include:
+     *
+     * - [FileChannelDriver.Factory] uses a [FileChannel] to fetch data from disk. This is the default driver for on-disk files.
+     * - [InMemoryFileDriver.Factory] is always used when ChronoStore is started in in-memory mode (even when this setting is set to something else).
+     *
+     * In addition, the following options are supported for advanced use cases:
+     *
+     * - [MemoryMappedFileDriver.Factory] uses memory-mapped files (`mmap`) for fast access.
+     * - [MemorySegmentFileDriver.Factory] uses the [MemorySegment] API (part of the Java Foreign Memory API) for memory-mapped access.
+     */
     val randomFileAccessDriverFactory: RandomFileAccessDriverFactory = FileChannelDriver.Factory,
 
     /**
@@ -132,6 +151,7 @@ class ChronoStoreConfiguration(
      * This value must be greater than or equal to 1. Keeping multiple checkpoint files
      * can help with recovery in case that the newer checkpoint files have been corrupted.
      */
+    // TODO [CORRECTNESS] Is this really unused? Should it be used?
     val maxCheckpointFiles: Int = 5,
 
     /**
@@ -186,6 +206,20 @@ class ChronoStoreConfiguration(
     val fileHeaderCacheSize: BinarySize? = (Runtime.getRuntime().maxMemory() / 100).toInt().Bytes,
 
     /**
+     * Determines how many threads are used for prefeching data from the persistence into the block cache.
+     *
+     * More prefetchers generally mean faster read access in cursors, but this gain will
+     * eventually be capped by the maximum parallelism supported by the hardware of the
+     * hard drive. SSDs generally allow for higher parallelism than HDDs. If this number
+     * exceeds the hardware capabilities, performance may drop.
+     *
+     * By default, half the available processors are used (but at least 1).
+     *
+     * Minimum is 1.
+     */
+    val prefetchingThreads: Int = max((Runtime.getRuntime().availableProcessors() / 2), 1),
+
+    /**
      * The maximum disk footprint of a single Write-Ahead-Log file.
      *
      * Please note that this is a **soft limit**. No more data may be written
@@ -238,7 +272,7 @@ class ChronoStoreConfiguration(
      * Please note that this is a **soft** limit. If a single key-value pair is very large,
      * this limit may be temporarily exceeded.
      */
-    val walBufferSize: BinarySize = 128.MiB
+    val walBufferSize: BinarySize = 128.MiB,
 ) {
 
     init {

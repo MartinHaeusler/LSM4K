@@ -1,11 +1,14 @@
 package org.chronos.chronostore.benchmark.comparative.chronostore
 
 import org.chronos.chronostore.io.fileaccess.FileChannelDriver
-import org.chronos.chronostore.io.format.ChronoStoreFileReader
+import org.chronos.chronostore.io.format.BlockLoader
+import org.chronos.chronostore.io.format.ChronoStoreFileFormat
+import org.chronos.chronostore.io.format.cursor.ChronoStoreFileCursor
 import org.chronos.chronostore.io.vfs.disk.DiskBasedVirtualFileSystem
 import org.chronos.chronostore.io.vfs.disk.DiskBasedVirtualFileSystemSettings
-import org.chronos.chronostore.lsm.cache.LocalBlockCache
+import org.chronos.chronostore.lsm.cache.FileHeaderCache
 import org.chronos.chronostore.util.statistics.ChronoStoreStatistics
+import org.chronos.chronostore.util.unit.BinarySize.Companion.MiB
 import org.xerial.snappy.Snappy
 import java.io.File
 
@@ -31,26 +34,28 @@ object ChronoStoreTaxonomyDataReaderDirectBenchmark {
         val inputFile = vfs.file(inputFileName)
 
 
-        ChronoStoreFileReader(driverFactory.createDriver(inputFile), LocalBlockCache.NONE).use { reader ->
-            val timeBeforeRead = System.currentTimeMillis()
-            val commands = countCommands(reader)
-            val timeAfterRead = System.currentTimeMillis()
-            println("Read all ${commands} in file '${inputFile.path}' in ${timeAfterRead - timeBeforeRead}ms.")
-            val statistics = ChronoStoreStatistics.snapshot()
-            println(statistics.prettyPrint())
+        this.driverFactory.createDriver(inputFile).use { driver ->
+            val fileHeaderCache = FileHeaderCache.create(100.MiB)
+            val header = fileHeaderCache.getFileHeader(inputFile) { ChronoStoreFileFormat.loadFileHeader(driver) }
+            ChronoStoreFileCursor(inputFile, header, BlockLoader.basic(this.driverFactory, fileHeaderCache)).use { cursor ->
+                val timeBeforeRead = System.currentTimeMillis()
+                val commands = countCommands(cursor)
+                val timeAfterRead = System.currentTimeMillis()
+                println("Read all ${commands} in file '${inputFile.path}' in ${timeAfterRead - timeBeforeRead}ms.")
+                val statistics = ChronoStoreStatistics.snapshot()
+                println(statistics.prettyPrint())
+            }
         }
     }
 
-    private fun countCommands(reader: ChronoStoreFileReader): Long {
+    private fun countCommands(cursor: ChronoStoreFileCursor): Long {
         var commands = 0L
-        reader.openCursor().use { cursor ->
-            cursor.first()
-            val iterator = cursor.ascendingEntrySequenceFromHere().iterator()
-            while (iterator.hasNext()) {
-                iterator.next()
-                // we ignore the actual data here
-                commands++
-            }
+        cursor.first()
+        val iterator = cursor.ascendingEntrySequenceFromHere().iterator()
+        while (iterator.hasNext()) {
+            iterator.next()
+            // we ignore the actual data here
+            commands++
         }
         return commands
     }

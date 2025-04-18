@@ -1,19 +1,19 @@
 package org.chronos.chronostore.lsm.cache
 
+import org.chronos.chronostore.io.format.BlockLoader
 import org.chronos.chronostore.io.format.datablock.DataBlock
-import org.chronos.chronostore.util.StoreId
-import org.chronos.chronostore.util.statistics.ChronoStoreStatistics
-import java.util.*
+import org.chronos.chronostore.io.vfs.VirtualFile
+import java.util.concurrent.CompletableFuture
 
-data object NoBlockCache: LocalBlockCache {
+class NoBlockCache(
+    private val loader: BlockLoader,
+) : BlockCache {
 
-    override val storeId: StoreId?
-        get() = null
-
-    override fun getBlock(fileId: UUID, blockIndex: Int, loader: (Int) -> DataBlock?): DataBlock? {
-        ChronoStoreStatistics.BLOCK_CACHE_REQUESTS.incrementAndGet()
-        ChronoStoreStatistics.BLOCK_CACHE_MISSES.incrementAndGet()
-        return loader(blockIndex)
+    override fun getBlockAsync(file: VirtualFile, blockIndex: Int): CompletableFuture<DataBlock?> {
+        return this.loader.getBlockAsync(file, blockIndex)
     }
+
+    override val isAsyncSupported: Boolean
+        get() = this.loader.isAsyncSupported
 
 }

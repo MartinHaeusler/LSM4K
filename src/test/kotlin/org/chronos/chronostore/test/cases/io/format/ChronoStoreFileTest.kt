@@ -2,26 +2,21 @@ package org.chronos.chronostore.test.cases.io.format
 
 import org.chronos.chronostore.io.fileaccess.FileChannelDriver
 import org.chronos.chronostore.io.fileaccess.MemorySegmentFileDriver
-import org.chronos.chronostore.io.fileaccess.RandomFileAccessDriverFactory.Companion.withDriver
-import org.chronos.chronostore.io.format.ChronoStoreFileFormat
-import org.chronos.chronostore.io.format.ChronoStoreFileReader
-import org.chronos.chronostore.io.format.ChronoStoreFileReader.Companion.withChronoStoreFileReader
-import org.chronos.chronostore.io.format.ChronoStoreFileSettings
-import org.chronos.chronostore.io.format.CompressionAlgorithm
+import org.chronos.chronostore.io.format.*
+import org.chronos.chronostore.io.format.ChronoStoreFileFormat.getLatestVersion
+import org.chronos.chronostore.io.format.cursor.ChronoStoreFileCursor
 import org.chronos.chronostore.io.format.writer.StandardChronoStoreFileWriter
 import org.chronos.chronostore.io.vfs.VirtualReadWriteFile.Companion.withOverWriter
-import org.chronos.chronostore.lsm.cache.BlockCacheManagerImpl
-import org.chronos.chronostore.lsm.cache.LocalBlockCache
 import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.model.command.KeyAndTSN
 import org.chronos.chronostore.model.command.OpCode
 import org.chronos.chronostore.test.util.VFSMode
 import org.chronos.chronostore.test.util.VirtualFileSystemTest
-import org.chronos.chronostore.util.StoreId
 import org.chronos.chronostore.util.bytes.BasicBytes
 import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.unit.BinarySize.Companion.KiB
 import org.chronos.chronostore.util.unit.BinarySize.Companion.MiB
+import strikt.api.expect
 import strikt.api.expectThat
 import strikt.assertions.*
 import kotlin.random.Random
@@ -52,39 +47,44 @@ class ChronoStoreFileTest {
                 get { this.length }.isGreaterThan(0L)
             }
 
-            val blockCache = BlockCacheManagerImpl(10.MiB)
-
             val factory = MemorySegmentFileDriver.Factory
+            val blockLoader = BlockLoader.basic(factory)
+
             factory.createDriver(file).use { driver ->
-                ChronoStoreFileReader(driver, blockCache.getBlockCache(StoreId.of("doesnt-matter"))).use { reader ->
-                    expectThat(reader) {
-                        get { fileHeader }.and {
-                            get { this.indexOfBlocks.isEmpty }.isTrue()
-                            get { this.fileFormatVersion }.isEqualTo(ChronoStoreFileFormat.Version.V_1_0_0)
-                            get { this.metaData }.and {
-                                get { this.minKey }.isNull()
-                                get { this.maxKey }.isNull()
-                                get { this.minTSN }.isNull()
-                                get { this.maxTSN }.isNull()
-                                get { this.maxCompletelyWrittenTSN }.isEqualTo(1L)
-                                get { this.headEntries }.isEqualTo(0L)
-                                get { this.historyEntries }.isEqualTo(0L)
-                                get { this.totalEntries }.isEqualTo(0)
-                                get { this.headHistoryRatio }.isEqualTo(1.0)
-                                get { this.createdAt }.isGreaterThan(0L)
-                                get { this.settings }.and {
-                                    get { this.compression }.isEqualTo(CompressionAlgorithm.NONE)
-                                    get { this.maxBlockSize }.isEqualTo(16.MiB)
-                                }
-                            }
-                            get { this.trailer }.and {
-                                get { this.beginOfBlocks }.isEqualTo(ChronoStoreFileFormat.FILE_MAGIC_BYTES.size.toLong() + Int.SIZE_BYTES /* format version */)
-                                get { this.beginOfMetadata == this.beginOfIndexOfBlocks }.isTrue()
-                                get { this.beginOfIndexOfBlocks == this.beginOfMetadata }.isTrue()
+                val fileHeader = ChronoStoreFileFormat.loadFileHeader(driver)
+                val latestVersion = getLatestVersion(
+                    file = file,
+                    fileHeader = fileHeader,
+                    keyAndTSN = KeyAndTSN(BasicBytes("bullshit"), 1234),
+                    blockLoader = blockLoader,
+                )
+                expect {
+                    that(fileHeader) {
+                        get { this.indexOfBlocks.isEmpty }.isTrue()
+                        get { this.fileFormatVersion }.isEqualTo(FileFormatVersion.V_1_0_0)
+                        get { this.metaData }.and {
+                            get { this.minKey }.isNull()
+                            get { this.maxKey }.isNull()
+                            get { this.minTSN }.isNull()
+                            get { this.maxTSN }.isNull()
+                            get { this.maxCompletelyWrittenTSN }.isEqualTo(1L)
+                            get { this.headEntries }.isEqualTo(0L)
+                            get { this.historyEntries }.isEqualTo(0L)
+                            get { this.totalEntries }.isEqualTo(0)
+                            get { this.headHistoryRatio }.isEqualTo(1.0)
+                            get { this.createdAt }.isGreaterThan(0L)
+                            get { this.settings }.and {
+                                get { this.compression }.isEqualTo(CompressionAlgorithm.NONE)
+                                get { this.maxBlockSize }.isEqualTo(16.MiB)
                             }
                         }
-                        get { this.getLatestVersion(KeyAndTSN(BasicBytes("bullshit"), 1234)) }.isNull()
+                        get { this.trailer }.and {
+                            get { this.beginOfBlocks }.isEqualTo(ChronoStoreFileFormat.FILE_MAGIC_BYTES.size.toLong() + Int.SIZE_BYTES /* format version */)
+                            get { this.beginOfMetadata == this.beginOfIndexOfBlocks }.isTrue()
+                            get { this.beginOfIndexOfBlocks == this.beginOfMetadata }.isTrue()
+                        }
                     }
+                    that(latestVersion).isNull()
                 }
             }
         }
@@ -117,32 +117,31 @@ class ChronoStoreFileTest {
                 get { length }.isGreaterThan(0L)
             }
 
-            val blockCache = BlockCacheManagerImpl(250.MiB)
-
             val factory = FileChannelDriver.Factory
+            val blockLoader = BlockLoader.basic(factory)
+
             factory.createDriver(file).use { driver ->
-                ChronoStoreFileReader(driver, blockCache.getBlockCache(StoreId.of("doesnt-matter"))).use { reader ->
-                    val min = reader.fileHeader.metaData.minTSN!!
-                    val max = reader.fileHeader.metaData.maxTSN!!
+                val header = ChronoStoreFileFormat.loadFileHeader(driver)
 
-                    expectThat(reader) {
-                        get { fileHeader.indexOfBlocks.size }.isEqualTo(1)
-                        get { fileHeader.metaData.maxCompletelyWrittenTSN }.isEqualTo(42L)
+                val min = header.metaData.minTSN!!
+                val max = header.metaData.maxTSN!!
 
-                        get { getLatestVersion(KeyAndTSN(theKey, max + 1)) }.isNotNull().and {
-                            get { key }.isEqualTo(theKey)
-                            get { tsn }.isEqualTo(max)
-                            get { opCode }.isEqualTo(OpCode.PUT)
-                            get { value.asString() }.isEqualTo("hello")
-                        }
-
-                        get { getLatestVersion(KeyAndTSN(theKey, min - 1)) }.isNull()
-
-                        get { getLatestVersion(KeyAndTSN(theKey, 1000)) }.isNotNull().and {
-                            get { opCode }.isEqualTo(OpCode.PUT)
-                            get { tsn }.isEqualTo(1000)
-                            get { value.asString() }.isEqualTo("hello")
-                        }
+                expect {
+                    that(header) {
+                        get { indexOfBlocks.size }.isEqualTo(1)
+                        get { metaData.maxCompletelyWrittenTSN }.isEqualTo(42L)
+                    }
+                    that(getLatestVersion(file, header, KeyAndTSN(theKey, max + 1), blockLoader)).isNotNull().and {
+                        get { key }.isEqualTo(theKey)
+                        get { tsn }.isEqualTo(max)
+                        get { opCode }.isEqualTo(OpCode.PUT)
+                        get { value.asString() }.isEqualTo("hello")
+                    }
+                    that(getLatestVersion(file, header, KeyAndTSN(theKey, min - 1), blockLoader)).isNull()
+                    that(getLatestVersion(file, header, KeyAndTSN(theKey, 1000), blockLoader)).isNotNull().and {
+                        get { opCode }.isEqualTo(OpCode.PUT)
+                        get { tsn }.isEqualTo(1000)
+                        get { value.asString() }.isEqualTo("hello")
                     }
                 }
             }
@@ -182,72 +181,72 @@ class ChronoStoreFileTest {
                 get { length }.isGreaterThan(0L)
             }
 
-            val blockCache = BlockCacheManagerImpl(250.MiB)
-
             val factory = FileChannelDriver.Factory
+            val blockLoader = BlockLoader.basic(factory)
+
             factory.createDriver(file).use { driver ->
-                ChronoStoreFileReader(driver, blockCache.getBlockCache(StoreId.of("doesnt-matter"))).use { reader ->
-                    val min = reader.fileHeader.metaData.minTSN!!
-                    val max = reader.fileHeader.metaData.maxTSN!!
+                val header = ChronoStoreFileFormat.loadFileHeader(driver)
+                val min = header.metaData.minTSN!!
+                val max = header.metaData.maxTSN!!
 
-                    expectThat(reader) {
-                        get { fileHeader.indexOfBlocks.size }.isGreaterThan(1)
-                        get { fileHeader.metaData.maxCompletelyWrittenTSN }.isEqualTo(34233L)
+                expect {
+                    that(header) {
+                        get { this.indexOfBlocks.size }.isGreaterThan(1)
+                        get { this.metaData.maxCompletelyWrittenTSN }.isEqualTo(34233L)
+                    }
+                    that(getLatestVersion(file, header, KeyAndTSN(theKey, max + 1), blockLoader)).isNotNull().and {
+                        get { this.key }.isEqualTo(theKey)
+                        get { this.tsn }.isEqualTo(max)
+                        get { this.opCode }.isEqualTo(OpCode.PUT)
+                        get { this.value }.hasSize(1024)
+                    }
 
-                        get { getLatestVersion(KeyAndTSN(theKey, max + 1)) }.isNotNull().and {
-                            get { key }.isEqualTo(theKey)
-                            get { tsn }.isEqualTo(max)
-                            get { opCode }.isEqualTo(OpCode.PUT)
-                            get { value }.hasSize(1024)
-                        }
+                    that(getLatestVersion(file, header, KeyAndTSN(theKey, min - 1), blockLoader)).isNull()
 
-                        get { getLatestVersion(KeyAndTSN(theKey, min - 1)) }.isNull()
-
-                        get { getLatestVersion(KeyAndTSN(theKey, 101_000)) }.isNotNull().and {
-                            get { opCode }.isEqualTo(OpCode.DEL)
-                            get { tsn }.isEqualTo(101_000)
-                            get { value }.isEmpty()
-                        }
-                        get { getLatestVersion(KeyAndTSN(theKey, 101_001)) }.isNotNull().and {
-                            get { opCode }.isEqualTo(OpCode.DEL)
-                            get { tsn }.isEqualTo(101_000)
-                            get { value }.isEmpty()
-                        }
-                        get { getLatestVersion(KeyAndTSN(theKey, 101_002)) }.isNotNull().and {
-                            get { opCode }.isEqualTo(OpCode.DEL)
-                            get { tsn }.isEqualTo(101_000)
-                            get { value }.isEmpty()
-                        }
-                        get { getLatestVersion(KeyAndTSN(theKey, 101_010)) }.isNotNull().and {
-                            get { opCode }.isEqualTo(OpCode.DEL)
-                            get { tsn }.isEqualTo(101_000)
-                            get { value }.isEmpty()
-                        }
-                        get { getLatestVersion(KeyAndTSN(theKey, 101_100)) }.isNotNull().and {
-                            get { opCode }.isEqualTo(OpCode.DEL)
-                            get { tsn }.isEqualTo(101_000)
-                            get { value }.isEmpty()
-                        }
-                        get { getLatestVersion(KeyAndTSN(theKey, 101_990)) }.isNotNull().and {
-                            get { opCode }.isEqualTo(OpCode.DEL)
-                            get { tsn }.isEqualTo(101_000)
-                            get { value }.isEmpty()
-                        }
-                        get { getLatestVersion(KeyAndTSN(theKey, 101_999)) }.isNotNull().and {
-                            get { opCode }.isEqualTo(OpCode.DEL)
-                            get { tsn }.isEqualTo(101_000)
-                            get { value }.isEmpty()
-                        }
-                        get { getLatestVersion(KeyAndTSN(theKey, 102_000)) }.isNotNull().and {
-                            get { opCode }.isEqualTo(OpCode.PUT)
-                            get { tsn }.isEqualTo(102_000)
-                            get { value }.hasSize(1024)
-                        }
-                        get { getLatestVersion(KeyAndTSN(theKey, 102_001)) }.isNotNull().and {
-                            get { opCode }.isEqualTo(OpCode.PUT)
-                            get { tsn }.isEqualTo(102_000)
-                            get { value }.hasSize(1024)
-                        }
+                    that(getLatestVersion(file, header, KeyAndTSN(theKey, 101_000), blockLoader)).isNotNull().and {
+                        get { this.opCode }.isEqualTo(OpCode.DEL)
+                        get { this.tsn }.isEqualTo(101_000)
+                        get { this.value }.isEmpty()
+                    }
+                    that(getLatestVersion(file, header, KeyAndTSN(theKey, 101_001), blockLoader)).isNotNull().and {
+                        get { this.opCode }.isEqualTo(OpCode.DEL)
+                        get { this.tsn }.isEqualTo(101_000)
+                        get { this.value }.isEmpty()
+                    }
+                    that(getLatestVersion(file, header, KeyAndTSN(theKey, 101_002), blockLoader)).isNotNull().and {
+                        get { this.opCode }.isEqualTo(OpCode.DEL)
+                        get { this.tsn }.isEqualTo(101_000)
+                        get { this.value }.isEmpty()
+                    }
+                    that(getLatestVersion(file, header, KeyAndTSN(theKey, 101_010), blockLoader)).isNotNull().and {
+                        get { this.opCode }.isEqualTo(OpCode.DEL)
+                        get { this.tsn }.isEqualTo(101_000)
+                        get { this.value }.isEmpty()
+                    }
+                    that(getLatestVersion(file, header, KeyAndTSN(theKey, 101_100), blockLoader)).isNotNull().and {
+                        get { this.opCode }.isEqualTo(OpCode.DEL)
+                        get { this.tsn }.isEqualTo(101_000)
+                        get { this.value }.isEmpty()
+                    }
+                    that(getLatestVersion(file, header, KeyAndTSN(theKey, 101_990), blockLoader)).isNotNull().and {
+                        get { this.opCode }.isEqualTo(OpCode.DEL)
+                        get { this.tsn }.isEqualTo(101_000)
+                        get { this.value }.isEmpty()
+                    }
+                    that(getLatestVersion(file, header, KeyAndTSN(theKey, 101_999), blockLoader)).isNotNull().and {
+                        get { this.opCode }.isEqualTo(OpCode.DEL)
+                        get { this.tsn }.isEqualTo(101_000)
+                        get { this.value }.isEmpty()
+                    }
+                    that(getLatestVersion(file, header, KeyAndTSN(theKey, 102_000), blockLoader)).isNotNull().and {
+                        get { this.opCode }.isEqualTo(OpCode.PUT)
+                        get { this.tsn }.isEqualTo(102_000)
+                        get { this.value }.hasSize(1024)
+                    }
+                    that(getLatestVersion(file, header, KeyAndTSN(theKey, 102_001), blockLoader)).isNotNull().and {
+                        get { this.opCode }.isEqualTo(OpCode.PUT)
+                        get { this.tsn }.isEqualTo(102_000)
+                        get { this.value }.hasSize(1024)
                     }
                 }
             }
@@ -288,17 +287,19 @@ class ChronoStoreFileTest {
             }
 
             val factory = FileChannelDriver.Factory
-            factory.createDriver(file).use { driver ->
-                ChronoStoreFileReader(driver, LocalBlockCache.NONE).use { reader ->
-                    reader.openCursor().use { cursor ->
-                        assert(!cursor.isValidPosition) { "cursor.isValidPosition returned TRUE after initialization!" }
-                        assert(cursor.first()) { "cursor.first returned FALSE!" }
-                        assert(cursor.isValidPosition) { "cursor.isValidPosition returned FALSE after first()!" }
-                        assert(!cursor.previous()) { "could navigate to previous() from first()!" }
-                        val entries = cursor.ascendingEntrySequenceFromHere().toList()
-                        expectThat(entries).hasSize(1000)
-                    }
-                }
+            val blockLoader = BlockLoader.basic(factory)
+
+            val header = factory.createDriver(file).use { driver ->
+                ChronoStoreFileFormat.loadFileHeader(driver)
+            }
+
+            ChronoStoreFileCursor(file, header, blockLoader).use { cursor ->
+                assert(!cursor.isValidPosition) { "cursor.isValidPosition returned TRUE after initialization!" }
+                assert(cursor.first()) { "cursor.first returned FALSE!" }
+                assert(cursor.isValidPosition) { "cursor.isValidPosition returned FALSE after first()!" }
+                assert(!cursor.previous()) { "could navigate to previous() from first()!" }
+                val entries = cursor.ascendingEntrySequenceFromHere().toList()
+                expectThat(entries).hasSize(1000)
             }
         }
     }
@@ -333,8 +334,11 @@ class ChronoStoreFileTest {
                 overWriter.commit()
             }
 
-            FileChannelDriver.Factory.withDriver(file) { driver ->
-                val header = ChronoStoreFileReader.loadFileHeader(driver)
+            val driverFactory = FileChannelDriver.Factory
+            val blockLoader = BlockLoader.basic(driverFactory)
+
+            driverFactory.createDriver(file).use { driver ->
+                val header = ChronoStoreFileFormat.loadFileHeader(driver)
                 expectThat(header) {
                     get { this.indexOfBlocks }.and {
                         get { this.size }.isEqualTo(1)
@@ -356,7 +360,7 @@ class ChronoStoreFileTest {
                         get { this.beginOfBlocks }.isLessThan(header.trailer.beginOfIndexOfBlocks)
                         get { this.beginOfIndexOfBlocks }.isLessThan(header.trailer.beginOfMetadata)
                     }
-                    get { this.fileFormatVersion }.isGreaterThanOrEqualTo(ChronoStoreFileFormat.Version.V_1_0_0)
+                    get { this.fileFormatVersion }.isGreaterThanOrEqualTo(FileFormatVersion.V_1_0_0)
                     get { this.metaData }.and {
                         get { this.createdAt }.isGreaterThanOrEqualTo(beginOfTest).isLessThanOrEqualTo(System.currentTimeMillis())
                         get { this.totalEntries }.isEqualTo(5)
@@ -376,19 +380,19 @@ class ChronoStoreFileTest {
                         }
                     }
                 }
-                driver.withChronoStoreFileReader(LocalBlockCache.NONE) { reader ->
-                    val entries = reader.withCursor { cursor ->
-                        cursor.firstOrThrow()
-                        cursor.ascendingEntrySequenceFromHere().toList()
-                    }
-                    expectThat(entries).containsExactly(
-                        KeyAndTSN(BasicBytes("foo"), 10_000) to Command.put("foo", 10_000, "bar"),
-                        KeyAndTSN(BasicBytes("foo"), 100_000) to Command.put("foo", 100_000, "baz"),
-                        KeyAndTSN(BasicBytes("hello"), 1234) to Command.put("hello", 1234, "world"),
-                        KeyAndTSN(BasicBytes("hello"), 1235) to Command.put("hello", 1235, "foo"),
-                        KeyAndTSN(BasicBytes("hello"), 1240) to Command.put(BasicBytes("hello"), 1240, Bytes.EMPTY),
-                    )
+
+                val entries = ChronoStoreFileCursor(file, header, blockLoader).use { cursor ->
+                    cursor.firstOrThrow()
+                    cursor.ascendingEntrySequenceFromHere().toList()
                 }
+
+                expectThat(entries).containsExactly(
+                    KeyAndTSN(BasicBytes("foo"), 10_000) to Command.put("foo", 10_000, "bar"),
+                    KeyAndTSN(BasicBytes("foo"), 100_000) to Command.put("foo", 100_000, "baz"),
+                    KeyAndTSN(BasicBytes("hello"), 1234) to Command.put("hello", 1234, "world"),
+                    KeyAndTSN(BasicBytes("hello"), 1235) to Command.put("hello", 1235, "foo"),
+                    KeyAndTSN(BasicBytes("hello"), 1240) to Command.put(BasicBytes("hello"), 1240, Bytes.EMPTY),
+                )
             }
         }
     }
@@ -438,10 +442,11 @@ class ChronoStoreFileTest {
                 overWriter.commit()
             }
 
+            val driverFactory = FileChannelDriver.Factory
+            val blockLoader = BlockLoader.basic(driverFactory)
 
-
-            FileChannelDriver.Factory.withDriver(file) { driver ->
-                val header = ChronoStoreFileReader.loadFileHeader(driver)
+            driverFactory.createDriver(file).use { driver ->
+                val header = ChronoStoreFileFormat.loadFileHeader(driver)
                 expectThat(header) {
                     get { this.indexOfBlocks }.and {
                         get { this.size }.isEqualTo(1)
@@ -463,7 +468,7 @@ class ChronoStoreFileTest {
                         get { this.beginOfBlocks }.isLessThan(header.trailer.beginOfIndexOfBlocks)
                         get { this.beginOfIndexOfBlocks }.isLessThan(header.trailer.beginOfMetadata)
                     }
-                    get { this.fileFormatVersion }.isGreaterThanOrEqualTo(ChronoStoreFileFormat.Version.V_1_0_0)
+                    get { this.fileFormatVersion }.isGreaterThanOrEqualTo(FileFormatVersion.V_1_0_0)
                     get { this.metaData }.and {
                         get { this.createdAt }.isGreaterThanOrEqualTo(beginOfTest).isLessThanOrEqualTo(System.currentTimeMillis())
                         get { this.totalEntries }.isEqualTo(5)
@@ -483,19 +488,20 @@ class ChronoStoreFileTest {
                         }
                     }
                 }
-                driver.withChronoStoreFileReader(LocalBlockCache.NONE) { reader ->
-                    val entries = reader.withCursor { cursor ->
-                        cursor.firstOrThrow()
-                        cursor.ascendingEntrySequenceFromHere().toList()
-                    }
-                    expectThat(entries).containsExactly(
-                        KeyAndTSN(BasicBytes("foo"), 10_000) to Command.put("foo", 10_000, "bar"),
-                        KeyAndTSN(BasicBytes("foo"), 100_000) to Command.put("foo", 100_000, "baz"),
-                        KeyAndTSN(BasicBytes("hello"), 1234) to Command.put("hello", 1234, "world"),
-                        KeyAndTSN(BasicBytes("hello"), 1235) to Command.put("hello", 1235, "foo"),
-                        KeyAndTSN(BasicBytes("hello"), 1240) to Command.put(BasicBytes("hello"), 1240, Bytes.EMPTY),
-                    )
+
+
+                val entries = ChronoStoreFileCursor(file, header, blockLoader).use { cursor ->
+                    cursor.firstOrThrow()
+                    cursor.ascendingEntrySequenceFromHere().toList()
                 }
+
+                expectThat(entries).containsExactly(
+                    KeyAndTSN(BasicBytes("foo"), 10_000) to Command.put("foo", 10_000, "bar"),
+                    KeyAndTSN(BasicBytes("foo"), 100_000) to Command.put("foo", 100_000, "baz"),
+                    KeyAndTSN(BasicBytes("hello"), 1234) to Command.put("hello", 1234, "world"),
+                    KeyAndTSN(BasicBytes("hello"), 1235) to Command.put("hello", 1235, "foo"),
+                    KeyAndTSN(BasicBytes("hello"), 1240) to Command.put(BasicBytes("hello"), 1240, Bytes.EMPTY),
+                )
             }
         }
     }

@@ -1,19 +1,18 @@
 package org.chronos.chronostore.benchmark.comparative.chronostore
 
-import org.chronos.chronostore.api.exceptions.BlockReadException
 import org.chronos.chronostore.benchmark.util.NumberUtils.format
 import org.chronos.chronostore.io.fileaccess.FileChannelDriver
-import org.chronos.chronostore.io.fileaccess.RandomFileAccessDriver
 import org.chronos.chronostore.io.fileaccess.RandomFileAccessDriverFactory.Companion.withDriver
-import org.chronos.chronostore.io.format.ChronoStoreFileReader
-import org.chronos.chronostore.io.format.ChronoStoreFileReader.Companion.withChronoStoreFileReader
+import org.chronos.chronostore.io.format.BlockLoader
+import org.chronos.chronostore.io.format.ChronoStoreFileFormat
 import org.chronos.chronostore.io.format.FileHeader
-import org.chronos.chronostore.io.format.datablock.DataBlock
+import org.chronos.chronostore.io.format.cursor.ChronoStoreFileCursor
 import org.chronos.chronostore.io.vfs.VirtualReadWriteFile
 import org.chronos.chronostore.io.vfs.disk.DiskBasedVirtualFileSystem
 import org.chronos.chronostore.io.vfs.disk.DiskBasedVirtualFileSystemSettings
-import org.chronos.chronostore.lsm.cache.LocalBlockCache
+import org.chronos.chronostore.lsm.cache.FileHeaderCache
 import org.chronos.chronostore.util.unit.BinarySize.Companion.Bytes
+import org.chronos.chronostore.util.unit.BinarySize.Companion.MiB
 import java.io.File
 import java.util.*
 
@@ -68,7 +67,7 @@ object StoreFileDebug {
             println("File '${file.name}' blocks:")
             for (blockIndex in 0..<header.metaData.numberOfBlocks) {
                 FileChannelDriver.Factory.withDriver(file) { driver ->
-                    val dataBlock = readBlock(driver, header, blockIndex)
+                    val dataBlock = ChronoStoreFileFormat.loadBlockFromFile(driver, header, blockIndex)
                     println("  - Block #${blockIndex}")
                     println("    - Size (compressed): ${dataBlock.metaData.compressedDataSize.Bytes.toHumanReadableString()}")
                     println("    - Size (uncompressed): ${dataBlock.metaData.uncompressedDataSize.Bytes.toHumanReadableString()}")
@@ -111,46 +110,22 @@ object StoreFileDebug {
     }
 
     private fun countEntriesInFile(file: VirtualReadWriteFile): Long {
-        FileChannelDriver.Factory.withDriver(file) { driver ->
-            val entries = driver.withChronoStoreFileReader(LocalBlockCache.NONE) { reader ->
-                reader.withCursor { cursor ->
-                    cursor.firstOrThrow()
-                    cursor.ascendingKeySequenceFromHere().fold(0L) { acc, _ -> acc + 1 }
-                }
+        val driverFactory = FileChannelDriver.Factory
+        driverFactory.createDriver(file).use { driver ->
+            val fileHeaderCache = FileHeaderCache.create(100.MiB)
+            val header = fileHeaderCache.getFileHeader(file) { ChronoStoreFileFormat.loadFileHeader(driver) }
+            val entries = ChronoStoreFileCursor(file, header, BlockLoader.basic(driverFactory, fileHeaderCache)).use { cursor ->
+                cursor.firstOrThrow()
+                cursor.ascendingKeySequenceFromHere().fold(0L) { acc, _ -> acc + 1 }
             }
+
             return entries
         }
     }
 
     private fun loadHeader(file: VirtualReadWriteFile): FileHeader {
         FileChannelDriver.Factory.withDriver(file) { driver ->
-            return ChronoStoreFileReader.loadFileHeader(driver)
-        }
-    }
-
-    private inline fun <T> VirtualReadWriteFile.withReader(action: (ChronoStoreFileReader) -> T): T {
-        FileChannelDriver.Factory.withDriver(this) { driver ->
-            return driver.withChronoStoreFileReader(LocalBlockCache.NONE, action)
-        }
-    }
-
-    private fun readBlock(
-        driver: RandomFileAccessDriver,
-        fileHeader: FileHeader,
-        blockIndex: Int,
-    ): DataBlock {
-        val (startPosition, length) = fileHeader.indexOfBlocks.getBlockStartPositionAndLengthOrNull(blockIndex)
-            ?: throw IllegalStateException("Block Index ${blockIndex} is in range but no block was found for it!")
-        val blockBytes = driver.readBytes(startPosition, length)
-        val compressionAlgorithm = fileHeader.metaData.settings.compression
-        try {
-            return DataBlock.loadBlock(blockBytes, compressionAlgorithm)
-        } catch (e: Exception) {
-            throw BlockReadException(
-                message = "Failed to read block #${blockIndex} of file '${driver.filePath}'." +
-                    " This file is potentially corrupted! Cause: ${e}",
-                cause = e
-            )
+            return ChronoStoreFileFormat.loadFileHeader(driver)
         }
     }
 

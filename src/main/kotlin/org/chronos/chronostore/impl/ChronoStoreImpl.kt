@@ -5,16 +5,22 @@ import org.chronos.chronostore.api.*
 import org.chronos.chronostore.async.executor.AsyncTaskManagerImpl
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor
 import org.chronos.chronostore.impl.store.StoreImpl
+import org.chronos.chronostore.io.format.BlockLoader
 import org.chronos.chronostore.io.format.ChronoStoreFileSettings
+import org.chronos.chronostore.io.format.FileHeader
+import org.chronos.chronostore.io.prefetcher.BlockPrefetchingManager
 import org.chronos.chronostore.io.structure.ChronoStoreStructure
 import org.chronos.chronostore.io.vfs.VirtualFileSystem
 import org.chronos.chronostore.lsm.LSMForestMemoryManager
-import org.chronos.chronostore.lsm.cache.BlockCacheManager
+import org.chronos.chronostore.lsm.LSMTree
+import org.chronos.chronostore.lsm.cache.BlockCache
 import org.chronos.chronostore.lsm.cache.FileHeaderCache
+import org.chronos.chronostore.lsm.cache.NoBlockCache
 import org.chronos.chronostore.lsm.compaction.tasks.CheckpointTask
 import org.chronos.chronostore.lsm.compaction.tasks.TriggerMajorCompactionOnAllStoresTask
 import org.chronos.chronostore.lsm.compaction.tasks.TriggerMinorCompactionOnAllStoresTask
 import org.chronos.chronostore.lsm.garbagecollector.tasks.GarbageCollectorTask
+import org.chronos.chronostore.manifest.Manifest
 import org.chronos.chronostore.manifest.ManifestFile
 import org.chronos.chronostore.util.StoreId
 import org.chronos.chronostore.util.TSN
@@ -35,31 +41,97 @@ class ChronoStoreImpl(
 
     }
 
+    /** Tells if the engine is currently open and ready for requests. */
     @Volatile
     private var isOpen = true
 
+    /** The state of the entire engine. */
     @Volatile
     private var state: ChronoStoreState = ChronoStoreState.STARTING
 
+    /**
+     * Manages the lock file which ensures that only one process in the operating system accesses the engine directory.
+     */
     private val lockFileManager = LockFileManager(
         vfs.file(ChronoStoreStructure.LOCK_FILE_NAME)
     )
+
+    /**
+     * The [Killswitch] is a central point which allows to immediately shut down the engine in case of critical errors.
+     */
     private val killswitch = Killswitch(this::panic)
 
+    /**
+     * The manifest file reads and writes the [Manifest] and caches the latest version.
+     */
     private val manifestFile = ManifestFile(this.vfs.file(ManifestFile.FILE_NAME))
 
+    /**
+     * Manages the latest [TSN].
+     */
     private val tsnManager: TSNManager
-    private val blockCacheManager = BlockCacheManager.create(configuration.blockCacheSize)
+
+    /**
+     * Caches [FileHeader] instances for quick access.
+     */
     private val fileHeaderCache = FileHeaderCache.create(configuration.fileHeaderCacheSize)
 
+    /**
+     * The prefetching manager to use for block loading operations.
+     *
+     * May be `null` if prefetching is disabled.
+     *
+     * Needs to be closed explicitly on shutdown (may contain a thread pool).
+     */
+    private val prefetchingManager: BlockPrefetchingManager? = BlockPrefetchingManager.createIfNecessary(
+        fileHeaderCache = this.fileHeaderCache,
+        driverFactory = this.configuration.randomFileAccessDriverFactory,
+        prefetchingThreads = this.configuration.prefetchingThreads,
+    )
+
+    /**
+     * The [BlockLoader] to be used by the engine.
+     *
+     * The block loader fetches blocks from disk. Some block loaders also support asynchronous loading.
+     */
+    private val blockLoader: BlockLoader = this.prefetchingManager
+        ?: BlockLoader.basic(
+            driverFactory = this.configuration.randomFileAccessDriverFactory,
+            headerCache = this.fileHeaderCache
+        )
+
+    /**
+     * The [BlockCache] contains the data blocks which have been loaded for future reference.
+     *
+     * Notably, the [BlockCache] implements the [BlockLoader] interface itself. It therefore
+     * qualifies as a "loading cache": if a cache miss would occur, the loader is triggered
+     * instead.
+     *
+     * If the [ChronoStoreConfiguration.blockCacheSize] is set to a non-positive value,
+     * an instance of [NoBlockCache] is used instead, which implements the same interface
+     * but does not cache any of the results.
+     */
+    private val blockCache: BlockCache = BlockCache.create(
+        maxSize = this.configuration.blockCacheSize,
+        loader = this.blockLoader,
+    )
+
+    /**
+     * Memory manager for the in-memory portions of [LSMTree]s (a.k.a. "memtables").
+     *
+     * Balances memory between trees and flushes data to disk as necessary.
+     */
     val forest: LSMForestMemoryManager = LSMForestMemoryManager(
         maxForestSize = this.configuration.maxForestSize.bytes,
         flushThresholdSize = (this.configuration.maxForestSize.bytes * this.configuration.forestFlushThreshold).toLong(),
     )
 
-    private val storeManager = StoreManagerImpl(
+    /**
+     * Manages the different [Store]s. Allows to add, remove, list and retrieve stores.
+     */
+    private val storeManager: StoreManagerImpl = StoreManagerImpl(
         vfs = this.vfs,
-        blockCacheManager = this.blockCacheManager,
+        blockCache = this.blockCache,
         fileHeaderCache = this.fileHeaderCache,
         forest = this.forest,
         driverFactory = this.configuration.randomFileAccessDriverFactory,
@@ -70,14 +142,27 @@ class ChronoStoreImpl(
         killswitch = this.killswitch,
     )
 
+    /**
+     * General-purpose asynchronous task manager with support for scheduling and recurrence.
+     *
+     * Used e.g. for scheduling the checkpoint task, the compaction tasks and the garbage collector task.
+     */
     private val asyncTaskManager = AsyncTaskManagerImpl(
         executorService = Executors.newSingleThreadScheduledExecutor(),
         getChronoStoreState = this::state,
     )
 
+    /** The Write-Ahead-Log (WAL) of the engine. Manages all WAL files. */
     private val writeAheadLog: WriteAheadLog
+
+    /** Opens new transactions, tracks them, and closes them upon request. */
     private val transactionManager: TransactionManager
 
+    /**
+     * An async task which creates a checkpoint.
+     *
+     * A successfully created checkpoint helps to improve the next startup time.
+     */
     private val checkpointTask: CheckpointTask
 
     init {
@@ -247,6 +332,7 @@ class ChronoStoreImpl(
         this.transactionManager.close()
         this.asyncTaskManager.close()
         this.storeManager.close()
+        this.prefetchingManager?.close()
         this.lockFileManager.unlock()
         log.info { "Completed shut-down of ChronoStore at '${this.vfs}'." }
     }
@@ -258,6 +344,7 @@ class ChronoStoreImpl(
         this.transactionManager.closePanic()
         this.asyncTaskManager.closePanic()
         this.storeManager.closePanic()
+        this.prefetchingManager?.closePanic()
         this.lockFileManager.unlockSafe()
         log.info(cause) { "ChronoStore has been shut down due to panic trigger." }
     }

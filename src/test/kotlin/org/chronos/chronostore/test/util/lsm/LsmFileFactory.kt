@@ -2,6 +2,8 @@ package org.chronos.chronostore.test.util.lsm
 
 import org.chronos.chronostore.io.fileaccess.FileChannelDriver
 import org.chronos.chronostore.io.fileaccess.InMemoryFileDriver
+import org.chronos.chronostore.io.fileaccess.RandomFileAccessDriverFactory
+import org.chronos.chronostore.io.format.BlockLoader
 import org.chronos.chronostore.io.format.ChronoStoreFileSettings
 import org.chronos.chronostore.io.format.CompressionAlgorithm
 import org.chronos.chronostore.io.format.writer.StandardChronoStoreFileWriter
@@ -11,8 +13,8 @@ import org.chronos.chronostore.io.vfs.VirtualReadWriteFile
 import org.chronos.chronostore.io.vfs.inmemory.InMemoryVirtualFile
 import org.chronos.chronostore.lsm.LSMTree
 import org.chronos.chronostore.lsm.LSMTreeFile
+import org.chronos.chronostore.lsm.cache.BlockCache
 import org.chronos.chronostore.lsm.cache.FileHeaderCache
-import org.chronos.chronostore.lsm.cache.LocalBlockCache
 import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.util.FileIndex
 import org.chronos.chronostore.util.TSN
@@ -30,8 +32,10 @@ object LsmFileFactory {
         ),
         numberOfMerges: Long = 0,
         maxCompletelyWrittenTSN: TSN? = null,
-        blockCache: LocalBlockCache = LocalBlockCache.NONE,
+        driverFactory: RandomFileAccessDriverFactory = FileChannelDriver.Factory,
         fileHeaderCache: FileHeaderCache = FileHeaderCache.NONE,
+        blockLoader: BlockLoader = BlockLoader.basic(driverFactory, fileHeaderCache),
+        blockCache: BlockCache = BlockCache.none(blockLoader),
     ): LSMTreeFile {
         val file = this.file(LSMTree.createFileNameForIndex(index))
         return createLsmTreeFileFromVirtualFile(
@@ -41,8 +45,10 @@ object LsmFileFactory {
             numberOfMerges = numberOfMerges,
             maxCompletelyWrittenTSN = maxCompletelyWrittenTSN,
             index = index,
+            driverFactory = driverFactory,
+            blockLoader = blockLoader,
             blockCache = blockCache,
-            fileHeaderCache = fileHeaderCache
+            fileHeaderCache = fileHeaderCache,
         )
     }
 
@@ -55,8 +61,10 @@ object LsmFileFactory {
         ),
         numberOfMerges: Long = 0,
         maxCompletelyWrittenTSN: TSN? = null,
-        blockCache: LocalBlockCache = LocalBlockCache.NONE,
+        driverFactory: RandomFileAccessDriverFactory = FileChannelDriver.Factory,
         fileHeaderCache: FileHeaderCache = FileHeaderCache.NONE,
+        blockLoader: BlockLoader = BlockLoader.basic(driverFactory, fileHeaderCache),
+        blockCache: BlockCache = BlockCache.none(blockLoader),
     ): LSMTreeFile {
         val file = this.file(LSMTree.createFileNameForIndex(index))
         return createLsmTreeFileFromVirtualFile(
@@ -66,8 +74,10 @@ object LsmFileFactory {
             numberOfMerges = numberOfMerges,
             maxCompletelyWrittenTSN = maxCompletelyWrittenTSN,
             index = index,
+            driverFactory = driverFactory,
+            blockLoader = blockLoader,
             blockCache = blockCache,
-            fileHeaderCache = fileHeaderCache
+            fileHeaderCache = fileHeaderCache,
         )
     }
 
@@ -80,8 +90,10 @@ object LsmFileFactory {
         ),
         numberOfMerges: Long = 0,
         maxCompletelyWrittenTSN: TSN? = null,
-        blockCache: LocalBlockCache = LocalBlockCache.NONE,
+        driverFactory: RandomFileAccessDriverFactory = FileChannelDriver.Factory,
         fileHeaderCache: FileHeaderCache = FileHeaderCache.NONE,
+        blockLoader: BlockLoader = BlockLoader.basic(driverFactory, fileHeaderCache),
+        blockCache: BlockCache = BlockCache.none(blockLoader),
     ): LSMTreeFile {
         return this.createLsmTreeFile(
             index = index,
@@ -89,6 +101,8 @@ object LsmFileFactory {
             fileSettings = fileSettings,
             numberOfMerges = numberOfMerges,
             maxCompletelyWrittenTSN = maxCompletelyWrittenTSN,
+            driverFactory = driverFactory,
+            blockLoader = blockLoader,
             blockCache = blockCache,
             fileHeaderCache = fileHeaderCache,
         )
@@ -103,8 +117,10 @@ object LsmFileFactory {
         ),
         numberOfMerges: Long = 0,
         maxCompletelyWrittenTSN: TSN? = null,
-        blockCache: LocalBlockCache = LocalBlockCache.NONE,
+        driverFactory: RandomFileAccessDriverFactory = FileChannelDriver.Factory,
         fileHeaderCache: FileHeaderCache = FileHeaderCache.NONE,
+        blockLoader: BlockLoader = BlockLoader.basic(driverFactory, fileHeaderCache),
+        blockCache: BlockCache = BlockCache.none(blockLoader),
     ): LSMTreeFile {
         val file = this.file(LSMTree.createFileNameForIndex(index))
         return createLsmTreeFileFromVirtualFile(
@@ -114,8 +130,10 @@ object LsmFileFactory {
             numberOfMerges = numberOfMerges,
             maxCompletelyWrittenTSN = maxCompletelyWrittenTSN,
             index = index,
+            driverFactory = driverFactory,
+            blockLoader = blockLoader,
             blockCache = blockCache,
-            fileHeaderCache = fileHeaderCache
+            fileHeaderCache = fileHeaderCache,
         )
     }
 
@@ -126,8 +144,10 @@ object LsmFileFactory {
         numberOfMerges: Long,
         maxCompletelyWrittenTSN: TSN?,
         index: FileIndex,
-        blockCache: LocalBlockCache,
-        fileHeaderCache: FileHeaderCache,
+        driverFactory: RandomFileAccessDriverFactory = FileChannelDriver.Factory,
+        fileHeaderCache: FileHeaderCache = FileHeaderCache.NONE,
+        blockLoader: BlockLoader = BlockLoader.basic(driverFactory, fileHeaderCache),
+        blockCache: BlockCache = BlockCache.none(blockLoader),
     ): LSMTreeFile {
         val driverFactory = when (file) {
             is InMemoryVirtualFile -> InMemoryFileDriver.Factory

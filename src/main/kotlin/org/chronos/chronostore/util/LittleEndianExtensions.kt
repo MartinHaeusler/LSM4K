@@ -2,10 +2,19 @@ package org.chronos.chronostore.util
 
 import org.chronos.chronostore.api.exceptions.TruncatedInputException
 import org.chronos.chronostore.util.IOExtensions.readByte
+import org.chronos.chronostore.util.bytes.Bytes
+import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.io.OutputStream
 
 object LittleEndianExtensions {
+
+    fun littleEndianIntAsBytes(int: Int): Bytes {
+        return ByteArrayOutputStream().use { baos ->
+            baos.writeLittleEndianInt(int)
+            Bytes.wrap(baos.toByteArray())
+        }
+    }
 
     @JvmStatic
     fun OutputStream.writeLittleEndianInt(int: Int): OutputStream {

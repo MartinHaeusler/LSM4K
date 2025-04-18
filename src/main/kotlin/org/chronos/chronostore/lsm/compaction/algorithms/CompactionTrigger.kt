@@ -8,6 +8,8 @@ enum class CompactionTrigger {
 
     TIER_HEIGHT_REDUCTION,
 
+    TIER_TIER0,
+
     LEVELED_LEVEL0,
 
     LEVELED_TARGET_SIZE_RATIO,

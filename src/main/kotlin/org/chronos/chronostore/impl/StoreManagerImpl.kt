@@ -14,7 +14,7 @@ import org.chronos.chronostore.io.vfs.VirtualDirectory
 import org.chronos.chronostore.io.vfs.VirtualFileSystem
 import org.chronos.chronostore.lsm.LSMForestMemoryManager
 import org.chronos.chronostore.lsm.LSMTree
-import org.chronos.chronostore.lsm.cache.BlockCacheManager
+import org.chronos.chronostore.lsm.cache.BlockCache
 import org.chronos.chronostore.lsm.cache.FileHeaderCache
 import org.chronos.chronostore.manifest.ManifestFile
 import org.chronos.chronostore.manifest.StoreMetadata
@@ -31,7 +31,7 @@ import kotlin.concurrent.write
 
 class StoreManagerImpl(
     private val vfs: VirtualFileSystem,
-    private val blockCacheManager: BlockCacheManager,
+    private val blockCache: BlockCache,
     private val fileHeaderCache: FileHeaderCache,
     private val forest: LSMForestMemoryManager,
     private val driverFactory: RandomFileAccessDriverFactory,
@@ -97,7 +97,7 @@ class StoreManagerImpl(
             compactionExecutor = this.compactionWorkerPool,
             memtableFlushExecutor = this.memtableFlushWorkerPool,
             forest = this.forest,
-            blockCache = this.blockCacheManager.getBlockCache(storeMetadata.storeId),
+            blockCache = this.blockCache,
             fileHeaderCache = this.fileHeaderCache,
             driverFactory = this.driverFactory,
             newFileSettings = this.newFileSettings,

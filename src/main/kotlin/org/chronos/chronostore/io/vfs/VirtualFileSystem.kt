@@ -14,6 +14,18 @@ interface VirtualFileSystem {
         return subPath.fold(rootDir, VirtualDirectory::directory)
     }
 
+    fun file(path: List<String>): VirtualReadWriteFile {
+        val (rootDirName, subPath) = path.headTail()
+        val rootDir = this.directory(rootDirName)
+        val intermediatePath = subPath.dropLast(1)
+        val parentDir = if (intermediatePath.isEmpty()) {
+            rootDir
+        } else {
+            intermediatePath.fold(rootDir, VirtualDirectory::directory)
+        }
+        return parentDir.file(path.last())
+    }
+
     fun file(name: String): VirtualReadWriteFile
 
     fun listRootLevelElements(): List<VirtualFileSystemElement>

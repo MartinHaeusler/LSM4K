@@ -109,7 +109,7 @@ class LeveledCompactionProcess(
 
     }
 
-    fun runCompaction(monitor: TaskMonitor)  = monitor.mainTask("Executing Leveled Compaction") {
+    fun runCompaction(monitor: TaskMonitor) = monitor.mainTask("Executing Leveled Compaction") {
         val storeMetadata = this.store.metadata
         val realLevelSizes = monitor.subTask(0.1, "Collecting current disk footprints") {
             this.getOnDiskSizesOfLevels(storeMetadata)
@@ -124,13 +124,15 @@ class LeveledCompactionProcess(
         }
         val minLevelWithTargetSize = targetLevelSizes.indexOfFirst { it > 0 }
 
+        val highestNonEmptyLevel = realLevelSizes.indexOfLast { it > 0 }
+
         // trigger #1: Check if there are too many level 0 SSTs and compact them if necessary.
         val level0FileIndicesToMerge = monitor.subTask(0.1, "Checking if Level 0 compaction is necessary") {
             this.selectLevel0FilesToMerge(storeMetadata)
         }
         if (level0FileIndicesToMerge.isNotEmpty()) {
             monitor.subTaskWithMonitor(0.7) { subMonitor ->
-                this.compactLevel0Files(level0FileIndicesToMerge, minLevelWithTargetSize, subMonitor)
+                this.compactLevel0Files(level0FileIndicesToMerge, minLevelWithTargetSize, highestNonEmptyLevel, subMonitor)
             }
             return
         }
@@ -143,7 +145,6 @@ class LeveledCompactionProcess(
 
         if (levelWithHighestSizeToTargetRatio != null) {
             monitor.subTaskWithMonitor(0.6) { subMonitor ->
-                val highestNonEmptyLevel = realLevelSizes.indexOfLast { it > 0 }
                 compactBasedOnTargetSizeRatio(levelWithHighestSizeToTargetRatio, highestNonEmptyLevel, subMonitor)
             }
             return
@@ -175,13 +176,21 @@ class LeveledCompactionProcess(
         )
     }
 
-    private fun compactLevel0Files(filesToMerge: Set<FileIndex>, minLevelWithTargetSize: Int, monitor: TaskMonitor) {
+    private fun compactLevel0Files(filesToMerge: Set<FileIndex>, minLevelWithTargetSize: Int, highestNonEmptyLevel: Int, monitor: TaskMonitor) {
         val overlappingSSTFilesInTargetLevel = findOverlappingSSTFiles(filesToMerge, minLevelWithTargetSize)
+
+        val keepTombstones = if (highestNonEmptyLevel == 0) {
+            // if the highest non-empty level *is* zero, then there is no data at all in the higher ranks and we can drop
+            // the tombstones immediately.
+            false
+        } else {
+            // if we do not merge to the highest level, we have to keep the tombstones during the merge.
+            minLevelWithTargetSize != configuration.maxLevels
+        }
 
         this.store.mergeFiles(
             fileIndices = filesToMerge + overlappingSSTFilesInTargetLevel,
-            // if we do not merge to the highest level, we have to keep the tombstones during the merge.
-            keepTombstones = minLevelWithTargetSize != configuration.maxLevels,
+            keepTombstones = keepTombstones,
             trigger = CompactionTrigger.LEVELED_LEVEL0,
             monitor = monitor
         )

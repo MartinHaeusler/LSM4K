@@ -21,8 +21,8 @@ import org.chronos.chronostore.io.vfs.VirtualFile
 import org.chronos.chronostore.io.vfs.VirtualReadWriteFile
 import org.chronos.chronostore.io.vfs.VirtualReadWriteFile.Companion.withOverWriter
 import org.chronos.chronostore.lsm.LSMTreeFile.Companion.FILE_EXTENSION
+import org.chronos.chronostore.lsm.cache.BlockCache
 import org.chronos.chronostore.lsm.cache.FileHeaderCache
-import org.chronos.chronostore.lsm.cache.LocalBlockCache
 import org.chronos.chronostore.lsm.compaction.algorithms.CompactionTrigger
 import org.chronos.chronostore.lsm.compaction.tasks.FlushInMemoryTreeToDiskTask
 import org.chronos.chronostore.lsm.compaction.tasks.SingleStoreMajorCompactionTask
@@ -57,6 +57,7 @@ import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.concurrent.read
 import kotlin.concurrent.write
+import kotlin.math.max
 import kotlin.system.measureTimeMillis
 
 class LSMTree(
@@ -67,7 +68,7 @@ class LSMTree(
     memtableFlushExecutor: Executor,
     private val manifestFile: ManifestFile,
     private val directory: VirtualDirectory,
-    private val blockCache: LocalBlockCache,
+    private val blockCache: BlockCache,
     private val fileHeaderCache: FileHeaderCache,
     private val driverFactory: RandomFileAccessDriverFactory,
     private val newFileSettings: ChronoStoreFileSettings,
@@ -661,6 +662,7 @@ class LSMTree(
             CompactionTrigger.TIER_SPACE_AMPLIFICATION,
             CompactionTrigger.TIER_SIZE_RATIO,
             CompactionTrigger.TIER_HEIGHT_REDUCTION,
+            CompactionTrigger.TIER_TIER0,
                 -> createTieredCompactionManifestOperation(
                 filesToMerge = filesToMerge,
                 operationSequenceNumber = operationSequenceNumber,
@@ -725,14 +727,14 @@ class LSMTree(
         // - the lower level, from which we merge (potentially level 0)
         // - the upper level which receives the merge (potentially the highest level
 
-        check(levelToInputFiles.size == 2) {
-            "Expected exactly two levels to be affected by a minor compaction, but got ${levelToInputFiles.keys.size}: ${levelToInputFiles.keys}"
-        }
-
         val lowerLevelIndex = levelToInputFiles.keys.min()
-        val upperLevelIndex = levelToInputFiles.keys.max()
+        // if we "merge upwards" and the upper level has no files yet, we may run
+        // into the case where "min()" == "max()". For that reason, we fall back
+        // to "min+1" to ensure that we always "climb" at least one level, even if
+        // there are no target files in the upper level.
+        val upperLevelIndex = max(levelToInputFiles.keys.max(), lowerLevelIndex + 1)
         val lowerLevelFileIndices = levelToInputFiles.getValue(lowerLevelIndex)
-        val upperLevelFileIndices = levelToInputFiles.getValue(upperLevelIndex)
+        val upperLevelFileIndices = levelToInputFiles[upperLevelIndex] ?: emptySet()
         val outputFileIndices = mergedLsmTreeFiles.asSequence()
             .map { it.index }
             .toSet()

@@ -300,6 +300,77 @@ class LeveledCompactionProcessTest {
         }
     }
 
+    @ParameterizedTest
+    @VirtualFileSystemTest
+    fun canMergeFilesUpwards(mode: VFSMode) {
+        mode.withVFS { vfs ->
+            // set up a fake store with some files
+            vfs.createManifestFile()
+            val store = vfs.createFakeLeveledStore {
+                level(0) {
+                    file(0) {
+                        sizeOnDisk = 100.MiB
+                        minKey = Bytes.of("e")
+                        maxKey = Bytes.of("t")
+                    }
+                    file(1) {
+                        sizeOnDisk = 100.MiB
+                        minKey = Bytes.of("e")
+                        maxKey = Bytes.of("t")
+                    }
+                    file(2) {
+                        sizeOnDisk = 100.MiB
+                        minKey = Bytes.of("e")
+                        maxKey = Bytes.of("t")
+                    }
+                    file(3) {
+                        sizeOnDisk = 100.MiB
+                        minKey = Bytes.of("e")
+                        maxKey = Bytes.of("t")
+                    }
+                    file(4) {
+                        sizeOnDisk = 100.MiB
+                        minKey = Bytes.of("e")
+                        maxKey = Bytes.of("t")
+                    }
+                    file(5) {
+                        sizeOnDisk = 100.MiB
+                        minKey = Bytes.of("e")
+                        maxKey = Bytes.of("t")
+                    }
+                    file(6) {
+                        sizeOnDisk = 100.MiB
+                        minKey = Bytes.of("e")
+                        maxKey = Bytes.of("t")
+                    }
+                    file(7) {
+                        sizeOnDisk = 100.MiB
+                        minKey = Bytes.of("e")
+                        maxKey = Bytes.of("t")
+                    }
+                }
+            }
+
+            // run the compaction
+            store.executeLeveledCompactionSynchronously(
+                strategy = LeveledCompactionStrategy(
+                    maxLevels = 3,
+                    level0FileNumberCompactionTrigger = 2,
+                    levelSizeMultiplier = 10.0,
+                    fileSelectionStrategy = BY_MOST_DELETIONS,
+                    baseLevelMinSize = 100.MiB,
+                )
+            )
+
+            // inspect the merges which have been executed by the compaction
+            expectThat(store.executedMerges).single().and {
+                get { this.keepTombstones }.isFalse()
+                get { this.fileIndices }.containsExactlyInAnyOrder(0, 1, 2, 3, 4, 5, 6, 7)
+                get { this.trigger }.isEqualTo(CompactionTrigger.LEVELED_LEVEL0)
+            }
+        }
+    }
+
     // =================================================================================================================
     // HELPER FUNCTIONS
     // =================================================================================================================

@@ -247,13 +247,16 @@ class WriteAheadLog(
                 fileToKeep = this.walFiles.asSequence().filter { it.sequenceNumber <= sequenceNumber }.maxByOrNull { it.sequenceNumber }
                 earlierFiles = this.walFiles.filter { it.sequenceNumber < (fileToKeep?.sequenceNumber ?: sequenceNumber) }
             }
+            log.debug { "Checkpoint: WAL file to keep: ${fileToKeep?.sequenceNumber}, earlier files: ${earlierFiles.joinToString { it.sequenceNumber.toString() }}" }
             if (fileToKeep == null) {
                 // the desired file doesn't exist -> nothing we can do...
+                log.debug { "Checkpoint: No file to keep, can't shorten WAL." }
                 return
             }
 
             if (earlierFiles.isEmpty()) {
                 // there ARE no earlier files -> we're done.
+                log.debug { "Checkpoint: No earlier files, can't shorten WAL." }
                 return
             }
 
@@ -273,6 +276,8 @@ class WriteAheadLog(
             if (partialCommitTsn == null) {
                 this.lock.write {
                     // delete all earlier files, we don't need them anymore.
+                    log.debug { "Checkpoint: No partial commit TSN found in WAL ${fileToKeep.sequenceNumber}, proceeding to delete files ${earlierFiles.joinToString { it.sequenceNumber.toString() }}" }
+
                     this.walSummaryFile.setHighestDroppedWalSequenceNumber(earlierFiles.maxOf { it.sequenceNumber })
                     this.walFiles.removeAll(earlierFiles)
                     earlierFiles.forEach(WALFile::delete)
@@ -295,10 +300,14 @@ class WriteAheadLog(
                 // want to keep the file with that index.
                 toIndex = partialCommitStartWALFileIndex
             )
-            this.lock.write {
-                this.walSummaryFile.setHighestDroppedWalSequenceNumber(filesToDelete.maxOf { it.sequenceNumber })
-                this.walFiles.removeAll(filesToDelete)
-                filesToDelete.forEach(WALFile::delete)
+            log.debug { "Checkpoint: Due to partial commit in WAL ${fileToKeep.sequenceNumber}, only the following files will be deleted: ${filesToDelete.joinToString { it.sequenceNumber.toString() }}" }
+
+            if (filesToDelete.isNotEmpty()) {
+                this.lock.write {
+                    this.walSummaryFile.setHighestDroppedWalSequenceNumber(filesToDelete.maxOf { it.sequenceNumber })
+                    this.walFiles.removeAll(filesToDelete)
+                    filesToDelete.forEach(WALFile::delete)
+                }
             }
         }
     }

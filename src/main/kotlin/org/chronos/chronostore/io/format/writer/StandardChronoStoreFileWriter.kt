@@ -32,7 +32,7 @@ class StandardChronoStoreFileWriter : ChronoStoreFileWriter {
     companion object {
 
         /** The format version of the file. */
-        val FILE_FORMAT_VERSION: ChronoStoreFileFormat.Version = ChronoStoreFileFormat.Version.V_1_0_0
+        val FILE_FORMAT_VERSION: FileFormatVersion = FileFormatVersion.V_1_0_0
 
         /** We allow 1% of false positives in the bloom filters. */
         private const val BLOOM_FILTER_FALSE_POSITIVE_PROBABILITY = 0.01
