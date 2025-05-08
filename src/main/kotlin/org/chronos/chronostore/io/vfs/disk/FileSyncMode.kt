@@ -48,7 +48,7 @@ enum class FileSyncMode {
     /** Uses [StandardOpenOption.SYNC] to flush writes to disk. Faster than [FULL_FSYNC], but may not be available on all file systems. */
     CHANNEL_SYNC {
 
-        private val writeSettings = arrayOf(StandardOpenOption.CREATE, StandardOpenOption.WRITE, StandardOpenOption.SYNC)
+        private val writeSettings = arrayOf(StandardOpenOption.CREATE, StandardOpenOption.WRITE)
         private val appendSettings = arrayOf(*writeSettings, StandardOpenOption.APPEND)
 
         override fun createOutputStream(target: File, append: Boolean): OutputStream {
@@ -59,7 +59,7 @@ enum class FileSyncMode {
             }
 
             val channel = FileChannel.open(target.toPath(), *settings)
-            return Channels.newOutputStream(channel).buffered()
+            return Channels.newOutputStream(channel).onClose { channel.force(true) }.buffered()
         }
 
     },
@@ -68,7 +68,7 @@ enum class FileSyncMode {
     CHANNEL_DATASYNC {
 
 
-        private val writeSettings = arrayOf(StandardOpenOption.CREATE, StandardOpenOption.WRITE, StandardOpenOption.DSYNC)
+        private val writeSettings = arrayOf(StandardOpenOption.CREATE, StandardOpenOption.WRITE)
         private val appendSettings = arrayOf(*writeSettings, StandardOpenOption.APPEND)
 
         override fun createOutputStream(target: File, append: Boolean): OutputStream {
@@ -79,7 +79,7 @@ enum class FileSyncMode {
             }
 
             val channel = FileChannel.open(target.toPath(), *settings)
-            return Channels.newOutputStream(channel).buffered()
+            return Channels.newOutputStream(channel).onClose { channel.force(false) }.buffered()
         }
 
     },

@@ -33,11 +33,6 @@ object PrefetchingBenchmark {
     // + prefetcher claims to work 100% of the time and we had zero I/O wait time in the cursors (need to investigate -> that's a little too good to be true)
     //
     // Bad:
-    // - WAL writing is EXTREMELY slow. This is even more unfortunate because all other operations seem to be really fast!
-    //     - Maybe we're syncing too often?
-    //     - Maybe we sync after every byte or so instead of once at the end?
-    //     - Maybe using an output stream instead of the raw channel is not a good idea?
-    //     - Maybe we should periodically fsync() the WAL (like MongoDB and PostgreSQL do it) instead of on-write?
     // - For some weird reason, leveled compaction finds no overlap with level 1 files when it grabs level 0 files... like... what the fuck?
 
     @JvmStatic
