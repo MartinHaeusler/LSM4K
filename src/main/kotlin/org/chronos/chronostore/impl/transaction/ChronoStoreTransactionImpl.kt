@@ -10,6 +10,7 @@ import org.chronos.chronostore.impl.TransactionManager
 import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.util.StoreId
 import org.chronos.chronostore.util.TSN
+import org.chronos.chronostore.util.Timestamp
 import org.chronos.chronostore.util.TransactionId
 import org.chronos.chronostore.util.statistics.ChronoStoreStatistics
 
@@ -18,6 +19,7 @@ class ChronoStoreTransactionImpl(
     override val lastVisibleSerialNumber: TSN,
     val transactionManager: TransactionManager,
     val storeManager: StoreManager,
+    val createdAtWallClockTime: Timestamp,
 ) : ChronoStoreTransaction {
 
     private companion object {
@@ -105,8 +107,7 @@ class ChronoStoreTransactionImpl(
             return
         }
         this.isOpen = false
-        log.trace { "Rolled back transaction ${this.id}." }
-        ChronoStoreStatistics.TRANSACTION_ROLLBACKS.incrementAndGet()
+        this.transactionManager.performRollback(this)
     }
 
     private fun bindStore(store: Store): TransactionalStoreImpl {

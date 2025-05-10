@@ -3,13 +3,11 @@ package org.chronos.chronostore.lsm.compaction.tasks
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.mainTask
-import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.subTask
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.subTaskWithMonitor
 import org.chronos.chronostore.async.tasks.AsyncTask
 import org.chronos.chronostore.impl.Killswitch
 import org.chronos.chronostore.lsm.FlushResult
 import org.chronos.chronostore.lsm.LSMTree
-import org.chronos.chronostore.manifest.ManifestFile
 import org.chronos.chronostore.util.logging.LogExtensions.ioDebug
 import org.chronos.chronostore.util.statistics.ChronoStoreStatistics
 import org.chronos.chronostore.util.unit.BinarySize.Companion.Bytes
@@ -18,6 +16,7 @@ import java.util.concurrent.atomic.AtomicLong
 class FlushInMemoryTreeToDiskTask(
     private val lsmTree: LSMTree,
     private val killswitch: Killswitch,
+    private val scheduleMinorCompactionOnCompletion: Boolean,
 ) : AsyncTask {
 
     companion object {
@@ -44,6 +43,19 @@ class FlushInMemoryTreeToDiskTask(
             }
             logTaskResult(flushResult)
             updateStatistics(flushResult)
+            if (scheduleMinorCompactionOnCompletion) {
+                // we've just flushed data to disk; schedule a minor
+                // compaction that allows the tree to re-organize itself.
+                // In the worst case, this will be a no-op and we wasted
+                // a couple of CPU cycles, but in the best case, this
+                // helps to reduce read amplification. Note that we SCHEDULE
+                // the minor compaction, we do not execute it synchronously
+                // here because we want the flush task to finish as quickly
+                // as possible since we may be blocking writers waiting for
+                // memtable space to become available.
+                this.lsmTree.scheduleMinorCompaction()
+            }
+            Unit
         } catch (t: Throwable) {
             killswitch.panic("An unexpected error occurred during Flush of store '${lsmTree.storeId}': ${t}", t)
             throw t

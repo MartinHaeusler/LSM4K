@@ -63,8 +63,8 @@ class StoreImpl(
         return this.tree.scheduleMinorCompaction()
     }
 
-    override fun scheduleMemtableFlush(): CompletableFuture<*> {
-        return this.tree.scheduleMemtableFlush()
+    override fun scheduleMemtableFlush(scheduleMinorCompactionOnCompletion: Boolean): CompletableFuture<*> {
+        return this.tree.scheduleMemtableFlush(scheduleMinorCompactionOnCompletion)
     }
 
     override val highWatermarkTSN: TSN?

@@ -1,7 +1,5 @@
 package org.chronos.chronostore.lsm
 
-import org.chronos.chronostore.io.vfs.VirtualReadWriteFile
-import org.chronos.chronostore.util.IOExtensions.withInputStream
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.concurrent.read
 import kotlin.concurrent.write
@@ -33,6 +31,12 @@ class GarbageFileManager {
     fun removeAll(deleted: Iterable<String>) {
         this.lock.write {
             this._garbageFiles -= deleted.toSet()
+        }
+    }
+
+    fun isGarbage(fileName: String): Boolean {
+        this.lock.read {
+            return this._garbageFiles.contains(fileName)
         }
     }
 

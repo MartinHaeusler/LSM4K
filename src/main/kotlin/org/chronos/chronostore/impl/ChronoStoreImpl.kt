@@ -24,6 +24,8 @@ import org.chronos.chronostore.manifest.Manifest
 import org.chronos.chronostore.manifest.ManifestFile
 import org.chronos.chronostore.util.StoreId
 import org.chronos.chronostore.util.TSN
+import org.chronos.chronostore.util.report.ChronoStoreReport
+import org.chronos.chronostore.util.sequence.SequenceExtensions.toTreeMap
 import org.chronos.chronostore.wal.WALReadBuffer
 import org.chronos.chronostore.wal.WriteAheadLog
 import java.util.concurrent.CompletableFuture
@@ -350,6 +352,27 @@ class ChronoStoreImpl(
     }
 
     // =================================================================================================================
+    // LAYOUT REPORTING
+    // Reports the current layout of this ChronoStore instance as a read-only snapshot.
+    // =================================================================================================================
+
+    override fun statusReport(): ChronoStoreReport {
+        val allLsmTrees = this.storeManager.getAllLsmTreesAdmin()
+        return ChronoStoreReport(
+            rootPath = this.rootPath,
+            storeReports = allLsmTrees.asSequence()
+                .map { it.storeId to it.report() }
+                .toTreeMap(),
+            walReport = this.writeAheadLog.report(),
+            currentTSN = this.tsnManager.getLastReturnedTSN(),
+            maxPersistedTSN = allLsmTrees.asSequence()
+                .mapNotNull { it.getMaxPersistedTSN() }
+                .maxOrNull(),
+            transactionReport = this.transactionManager.report()
+        )
+    }
+
+    // =================================================================================================================
     // FLUSHING, COMPACTING & GARBAGE COLLECTION
     // These methods are not exposed in the public API (interface) and primarily serve for automated testing purposes.
     // =================================================================================================================
@@ -358,29 +381,32 @@ class ChronoStoreImpl(
         this.storeManager.performGarbageCollection(monitor)
     }
 
-    fun flushAllStoresAsync(): CompletableFuture<*> {
+    fun flushAllStoresAsync(scheduleMinorCompactionOnCompletion: Boolean): CompletableFuture<*> {
         val futures = this.storeManager
             .getAllLsmTreesAdmin()
-            .map { it.scheduleMemtableFlush() }
+            .map { it.scheduleMemtableFlush(scheduleMinorCompactionOnCompletion) }
         return CompletableFuture.allOf(*futures.toTypedArray())
     }
 
     fun flushAllStoresSynchronous() {
-        this.flushAllStoresAsync().join()
+        this.flushAllStoresAsync(scheduleMinorCompactionOnCompletion = false).join()
     }
 
-    fun flushAsync(storeId: StoreId): CompletableFuture<*> {
+    fun flushAsync(storeId: StoreId, scheduleMinorCompactionOnCompletion: Boolean): CompletableFuture<*> {
         return this.storeManager
             .getStoreByIdAdmin(storeId)
-            .scheduleMemtableFlush()
+            .scheduleMemtableFlush(scheduleMinorCompactionOnCompletion)
     }
 
-    fun flushAsync(storeId: String): CompletableFuture<*> {
-        return this.flushAsync(StoreId.of(storeId))
+    fun flushAsync(storeId: String, scheduleMinorCompactionOnCompletion: Boolean): CompletableFuture<*> {
+        return this.flushAsync(
+            storeId = StoreId.of(storeId),
+            scheduleMinorCompactionOnCompletion = scheduleMinorCompactionOnCompletion
+        )
     }
 
     fun flushSynchronous(storeId: StoreId) {
-        this.flushAsync(storeId).join()
+        this.flushAsync(storeId, false).join()
     }
 
     fun flushSynchronous(storeId: String) {

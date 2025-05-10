@@ -6,6 +6,7 @@ import org.chronos.chronostore.util.IOExtensions.size
 import org.chronos.chronostore.util.UUIDExtensions.toBytes
 import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.cron.CronUtils
+import org.chronos.chronostore.util.json.JsonUtil
 import org.chronos.chronostore.util.unit.BinarySize.Companion.Bytes
 import org.chronos.chronostore.util.unit.BinarySize.Companion.GiB
 import org.chronos.chronostore.util.unit.BinarySize.Companion.KiB
@@ -33,7 +34,10 @@ object PrefetchingBenchmark {
     // + prefetcher claims to work 100% of the time and we had zero I/O wait time in the cursors (need to investigate -> that's a little too good to be true)
     //
     // Bad:
-    // - For some weird reason, leveled compaction finds no overlap with level 1 files when it grabs level 0 files... like... what the fuck?
+    // - We have seemingly random slowdown "hiccups" in the write process. Stalling going on? Maybe the memory manager needs to start flushing data sooner?
+    // - When there's a compaction going on while the store is shutting down, we fail with a PANIC and:
+    //   "An unexpected error occurred during Minor Compaction of store 'benchmark': java.nio.channels.ClosedByInterruptException', cause: java.nio.channels.ClosedByInterruptException".
+    //   Try to make this more graceful.
 
     @JvmStatic
     fun main(args: Array<String>) {
@@ -72,17 +76,7 @@ object PrefetchingBenchmark {
 
                         repeat(NUMBER_OF_CHANGES_PER_COMMIT) {
                             val key = keys.random()
-
-//                            val existingValue = store.get(key)
-
                             val data = createRandomData()
-//                            val newValue = if (existingValue == null) {
-//                                LittleEndianExtensions.littleEndianIntAsBytes(0)
-//                            } else {
-//                                val existingInt = existingValue.readLittleEndianInt(0)
-//                                LittleEndianExtensions.littleEndianIntAsBytes(existingInt + 1)
-//                            }
-
                             store.put(key, data)
                         }
 
@@ -91,9 +85,21 @@ object PrefetchingBenchmark {
                     }
                 }
 
+                println()
+                println()
+                println("==========================================================")
+                println("STATUS REPORT")
+                println("----------------------------------------------------------")
+                println()
+                println(JsonUtil.writeJson(chronoStore.statusReport(), prettyPrint = true))
+                println()
+                println("==========================================================")
+                println()
+                println()
                 println("Closing ChronoStore...")
             }
             println("ChronoStore closed. Benchmark dir size: ${tempDir.size.Bytes.toHumanReadableString()}")
+            println()
         } finally {
 //            println("Erasing benchmark files in '${tempDir.absolutePath}'...")
 //            tempDir.deleteRecursively()

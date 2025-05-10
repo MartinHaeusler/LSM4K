@@ -56,6 +56,7 @@ class ManifestTest {
                     upperLevelIndex = 1,
                     upperLevelFileIndices = emptySet(),
                     outputFileIndices = setOf(3),
+                    outputLevelIndex = 1,
                 )
             }
             manifest.appendOperation {
@@ -167,6 +168,7 @@ class ManifestTest {
         upperLevelIndex: LevelIndex,
         upperLevelFileIndices: Set<FileIndex>,
         outputFileIndices: Set<FileIndex>,
+        outputLevelIndex: LevelIndex,
     ): LeveledCompactionOperation {
         return LeveledCompactionOperation(
             sequenceNumber = sequenceNumber,
@@ -176,6 +178,7 @@ class ManifestTest {
             upperLevelIndex = upperLevelIndex,
             upperLevelFileIndices = upperLevelFileIndices,
             outputFileIndices = outputFileIndices,
+            outputLevelIndex = outputLevelIndex
         )
     }
 

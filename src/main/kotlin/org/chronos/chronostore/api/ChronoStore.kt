@@ -6,6 +6,7 @@ import org.chronos.chronostore.impl.ChronoStoreImpl
 import org.chronos.chronostore.io.vfs.VirtualFileSystem
 import org.chronos.chronostore.io.vfs.disk.DiskBasedVirtualFileSystem
 import org.chronos.chronostore.io.vfs.inmemory.InMemoryVirtualFileSystem
+import org.chronos.chronostore.util.report.ChronoStoreReport
 import java.io.File
 
 /**
@@ -58,6 +59,10 @@ interface ChronoStore : AutoCloseable {
 
     }
 
+    // TODO [FEATURE]: We should support and distinguish between read-only transactions, read-write transactions, and exclusive transactions.
+    //   Read-Only: commit throws an exception. Optionally allow to configure if transient changes are allowed or not.
+    //   Read-Write: allows commits, but is not exclusive.
+    //   Exclusive: allows commits and blocks all concurrent read-write and exclusive transactions from being executed while it's active (read-only transactions may still execute)
     fun beginTransaction(): ChronoStoreTransaction
 
     fun <T> transaction(action: (ChronoStoreTransaction) -> T): T {
@@ -65,5 +70,8 @@ interface ChronoStore : AutoCloseable {
     }
 
     val rootPath: String
+
+    /** Creates a read-only snapshot report about the structure of the store. */
+    fun statusReport(): ChronoStoreReport
 
 }

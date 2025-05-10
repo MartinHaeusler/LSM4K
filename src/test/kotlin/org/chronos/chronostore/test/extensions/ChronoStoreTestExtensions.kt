@@ -3,9 +3,6 @@ package org.chronos.chronostore.test.extensions
 import org.chronos.chronostore.api.ChronoStore
 import org.chronos.chronostore.api.Store
 import org.chronos.chronostore.impl.ChronoStoreImpl
-import org.chronos.chronostore.test.extensions.ChronoStoreTestExtensions.majorCompactionOnAllStoresSynchronous
-import org.chronos.chronostore.test.extensions.ChronoStoreTestExtensions.majorCompactionOnStoreAsync
-import org.chronos.chronostore.test.extensions.ChronoStoreTestExtensions.majorCompactionOnStoreSynchronous
 import org.chronos.chronostore.util.StoreId
 import java.util.concurrent.CompletableFuture
 
@@ -74,4 +71,5 @@ object ChronoStoreTestExtensions {
     fun ChronoStore.minorCompactionOnStoreSynchronous(storeId: String) {
         return (this as ChronoStoreImpl).minorCompactionOnStoreSynchronous(storeId)
     }
+
 }

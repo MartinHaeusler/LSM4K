@@ -48,11 +48,18 @@ class TieredCompactionProcess(
             return
         }
 
+        val highestTierInCompaction = filesToCompact.maxOfOrNull { it.levelOrTier } ?: 0
+        // we always merge "upwards", so the target tier is our current highest one +1
+        // (there is one exception to the rule, that is if we reach the maximum allowed tiers according to
+        // the store config. But in that case, we're guaranteed to merge into the highest tier)
+        val outputTier = highestTierInCompaction + 1
+
         // squash the files together and write a new file to disk at the highest input tier
         monitor.subTaskWithMonitor(0.6) { mergeMonitor: TaskMonitor ->
             this.store.mergeFiles(
                 fileIndices = filesToCompact.map { it.fileIndex }.toSet(),
-                keepTombstones = shouldKeepTombstonesInMerge(filesToCompact),
+                outputLevelOrTier = outputTier,
+                keepTombstones = shouldKeepTombstonesInMerge(filesToCompact, outputTier),
                 monitor = mergeMonitor,
                 trigger = compactionTrigger,
             )
@@ -66,14 +73,10 @@ class TieredCompactionProcess(
         this.executed = true
     }
 
-    private fun shouldKeepTombstonesInMerge(filesToCompact: List<LSMFileInfo>): Boolean {
+    private fun shouldKeepTombstonesInMerge(filesToCompact: List<LSMFileInfo>, outputTier: TierIndex): Boolean {
         // determine if we're merging to the highest tier (i.e. will there be LSM files "above" us after the merge?)
         val highestTierWithFiles = this.store.metadata.getHighestNonEmptyLevelOrTier() ?: 0
-        val highestTierInCompaction = filesToCompact.maxOfOrNull { it.levelOrTier } ?: 0
-        // we always merge "upwards", so the target tier is our current highest one +1
-        // (there is one exception to the rule, that is if we reach the maximum allowed tiers according to
-        // the store config. But in that case, we're guaranteed to merge into the highest tier)
-        val outputTier = highestTierInCompaction + 1
+
 
         // to we merge into the highest tier as the target?
         val mergesToHighestTier = outputTier >= highestTierWithFiles

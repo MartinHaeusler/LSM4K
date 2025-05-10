@@ -30,8 +30,13 @@ object JsonUtil {
         // enable support for some miscellaneous classes
         .registerModule(ChronoStoreJacksonModule)
 
-    fun writeJson(obj: Any): String {
-        return OBJECT_MAPPER.writeValueAsString(obj)
+    fun writeJson(obj: Any, prettyPrint: Boolean = false): String {
+        val writer = if (prettyPrint) {
+            OBJECT_MAPPER.writerWithDefaultPrettyPrinter()
+        } else {
+            OBJECT_MAPPER.writer()
+        }
+        return writer.writeValueAsString(obj)
     }
 
     fun writeJson(obj: Any, outputStream: OutputStream) {

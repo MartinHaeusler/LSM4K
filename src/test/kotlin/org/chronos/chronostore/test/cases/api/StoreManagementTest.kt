@@ -268,7 +268,7 @@ class StoreManagementTest {
                 }
 
                 // ensure that repeatable reads isolation was not violated
-                expectThat(entryMap.entries).containsExactlyInAnyOrder(entryMap2.entries)
+                expectThat(entryMap2.entries).containsExactlyInAnyOrder(entryMap.entries)
             }
         }
 

@@ -121,7 +121,7 @@ class TransactionalStoreImpl(
 
 
     override fun openCursor(): Cursor<Bytes, Bytes> {
-        val treeCursor = getTree().openCursor(this.transaction)
+        val treeCursor = this.getTree().openCursor(this.transaction)
         val bytesToBytesCursor = treeCursor.filterValues { it != null && it.opCode != OpCode.DEL }.mapValue { it.value }
         val transientModifications = this.transactionContext.allModifications.entries.asSequence().mapNotNull {
             val key = it.key

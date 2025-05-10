@@ -5,7 +5,6 @@ import org.chronos.chronostore.api.compaction.TieredCompactionStrategy
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor
 import org.chronos.chronostore.lsm.compaction.model.CompactableStore
 import org.chronos.chronostore.manifest.ManifestFile
-import org.chronos.chronostore.manifest.operations.FullCompactionOperation
 
 class FullCompactionTask(
     val manifestFile: ManifestFile,
@@ -36,6 +35,7 @@ class FullCompactionTask(
         val fileIndices = store.metadata.getAllFileIndices()
         this.store.mergeFiles(
             fileIndices = fileIndices,
+            outputLevelOrTier = maxLevelOrTierIndex,
             keepTombstones = false,
             trigger = CompactionTrigger.FULL_COMPACTION,
             monitor = monitor

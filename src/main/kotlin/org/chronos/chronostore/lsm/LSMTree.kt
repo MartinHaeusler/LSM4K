@@ -45,6 +45,11 @@ import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.concurrent.TaskQueue
 import org.chronos.chronostore.util.cursor.*
 import org.chronos.chronostore.util.logging.LogExtensions.perfTrace
+import org.chronos.chronostore.util.report.LayerReport
+import org.chronos.chronostore.util.report.MemtableReport
+import org.chronos.chronostore.util.report.StoreFileReport
+import org.chronos.chronostore.util.report.StoreReport
+import org.chronos.chronostore.util.sequence.SequenceExtensions.toTreeMap
 import org.chronos.chronostore.util.unit.BinarySize
 import org.chronos.chronostore.util.unit.BinarySize.Companion.Bytes
 import org.pcollections.TreePMap
@@ -71,7 +76,7 @@ class LSMTree(
     private val blockCache: BlockCache,
     private val fileHeaderCache: FileHeaderCache,
     private val driverFactory: RandomFileAccessDriverFactory,
-    private val newFileSettings: ChronoStoreFileSettings,
+    val newFileSettings: ChronoStoreFileSettings,
     private val getSmallestOpenReadTSN: () -> TSN?,
     private val killswitch: Killswitch,
 ) {
@@ -434,6 +439,17 @@ class LSMTree(
             .maxOrNull()
     }
 
+    /**
+     * Checks if the file with the given [fileName] is marked for garbage collection.
+     *
+     * @param fileName The name of the LSM file. Must belong to this tree.
+     *
+     * @return `true` if the file exists and belongs to this tree and is marked for garbage collection, otherwise `false`.
+     */
+    fun isGarbage(fileName: String): Boolean {
+        return this.garbageFileManager.isGarbage(fileName)
+    }
+
     fun scheduleMajorCompaction(): CompletableFuture<*> {
         // when we do a major compaction anyway, all open minor compaction tasks become useless
         // because their results will be superseded by the major compaction anyway. Remove them from the queue.
@@ -456,11 +472,12 @@ class LSMTree(
         )
     }
 
-    fun scheduleMemtableFlush(): CompletableFuture<*> {
+    fun scheduleMemtableFlush(scheduleMinorCompactionOnCompletion: Boolean): CompletableFuture<*> {
         val completableTask = CompletableAsyncTask(
             FlushInMemoryTreeToDiskTask(
                 lsmTree = this,
                 killswitch = this.killswitch,
+                scheduleMinorCompactionOnCompletion = scheduleMinorCompactionOnCompletion,
             )
         )
         this.flushTaskQueue.schedule(completableTask)
@@ -561,7 +578,13 @@ class LSMTree(
         this.garbageFileManager.removeAll(deleted)
     }
 
-    fun mergeFiles(fileIndices: Set<Int>, keepTombstones: Boolean, trigger: CompactionTrigger, monitor: TaskMonitor): Set<FileIndex> {
+    fun mergeFiles(
+        fileIndices: Set<Int>,
+        outputLevelOrTier: LevelOrTierIndex,
+        keepTombstones: Boolean,
+        trigger: CompactionTrigger,
+        monitor: TaskMonitor,
+    ): Set<FileIndex> {
         log.debug { "TASK [${this.storeId}] merge files due to trigger ${trigger}: ${fileIndices.sorted().joinToString(prefix = "[", separator = ", ", postfix = "]")}" }
         monitor.mainTask("Merging ${fileIndices.size} files") {
             val timeBefore = System.currentTimeMillis()
@@ -623,6 +646,7 @@ class LSMTree(
                     createManifestOperationForCompaction(
                         trigger = trigger,
                         filesToMerge = filesToMerge,
+                        outputLevelOrTier = outputLevelOrTier,
                         operationSequenceNumber = operationSequenceNumber,
                         mergedLsmTreeFiles = mergedLsmTreeFiles,
                         fileIndices = fileIndices,
@@ -654,6 +678,7 @@ class LSMTree(
     private fun createManifestOperationForCompaction(
         trigger: CompactionTrigger,
         filesToMerge: Set<LSMTreeFile>,
+        outputLevelOrTier: LevelOrTierIndex,
         operationSequenceNumber: Int,
         mergedLsmTreeFiles: Set<LSMTreeFile>,
         fileIndices: Set<Int>,
@@ -665,6 +690,7 @@ class LSMTree(
             CompactionTrigger.TIER_TIER0,
                 -> createTieredCompactionManifestOperation(
                 filesToMerge = filesToMerge,
+                outputLevelOrTier = outputLevelOrTier,
                 operationSequenceNumber = operationSequenceNumber,
                 mergedLsmTreeFiles = mergedLsmTreeFiles,
             )
@@ -673,6 +699,7 @@ class LSMTree(
             CompactionTrigger.LEVELED_TARGET_SIZE_RATIO,
                 -> createLeveledCompactionManifestOperation(
                 filesToMerge = filesToMerge,
+                outputLevelOrTier = outputLevelOrTier,
                 operationSequenceNumber = operationSequenceNumber,
                 mergedLsmTreeFiles = mergedLsmTreeFiles,
             )
@@ -687,6 +714,7 @@ class LSMTree(
 
     private fun createTieredCompactionManifestOperation(
         filesToMerge: Set<LSMTreeFile>,
+        outputLevelOrTier: LevelOrTierIndex,
         operationSequenceNumber: Int,
         mergedLsmTreeFiles: Set<LSMTreeFile>,
     ): TieredCompactionOperation {
@@ -712,6 +740,7 @@ class LSMTree(
 
     private fun createLeveledCompactionManifestOperation(
         filesToMerge: Set<LSMTreeFile>,
+        outputLevelOrTier: LevelOrTierIndex,
         operationSequenceNumber: Int,
         mergedLsmTreeFiles: Set<LSMTreeFile>,
     ): LeveledCompactionOperation {
@@ -742,6 +771,7 @@ class LSMTree(
             sequenceNumber = operationSequenceNumber,
             storeId = this.storeId,
             outputFileIndices = outputFileIndices,
+            outputLevelIndex = outputLevelOrTier,
             upperLevelIndex = upperLevelIndex,
             upperLevelFileIndices = upperLevelFileIndices,
             lowerLevelFileIndices = lowerLevelFileIndices,
@@ -797,9 +827,94 @@ class LSMTree(
         return filesToMerge
     }
 
+    fun report(): StoreReport {
+        val storeMetadata = this.getStoreMetadata()
+        return StoreReport(
+            storeId = this.storeId,
+            path = this.path,
+            compactionStrategy = storeMetadata.compactionStrategy,
+            compressionAlgorithm = this.newFileSettings.compression,
+            layers = generateLayerReports(storeMetadata),
+            memTable = this.memtableReport(),
+            currentTSN = this.latestReceivedCommitTSN,
+            maxPersistedTSN = this.getMaxPersistedTSN()
+        )
+    }
+
+    private fun generateLayerReports(metadata: StoreMetadata): Map<LevelOrTierIndex, LayerReport> {
+        val fileToLayerIndex = this.allFiles.associateWith { lsmFile ->
+            metadata.lsmFiles[lsmFile.index]?.levelOrTier ?: -1
+        }
+
+        val layerToFiles = fileToLayerIndex.asSequence()
+            .groupingBy { it.value }
+            .toSets { it.key }
+            .asSequence()
+            .toTreeMap()
+
+        return layerToFiles.mapValues { (layerIndex, files) ->
+            generateLayerReport(layerIndex, files)
+        }
+    }
+
+    private fun generateLayerReport(
+        layerIndex: LevelOrTierIndex,
+        files: Collection<LSMTreeFile>,
+    ): LayerReport {
+        return LayerReport(
+            layerIndex = layerIndex,
+            files = files.map { lsmFile ->
+                generateStoreFileReport(lsmFile)
+            },
+        )
+    }
+
+    private fun generateStoreFileReport(
+        lsmFile: LSMTreeFile,
+    ): StoreFileReport {
+        val header = lsmFile.header
+        val metadata = header.metaData
+        val virtualFile = lsmFile.virtualFile
+        return StoreFileReport(
+            path = virtualFile.path,
+            name = virtualFile.name,
+            sizeInBytes = virtualFile.length,
+            minKey = metadata.minKey?.hex(),
+            maxKey = metadata.maxKey?.hex(),
+            minTsn = metadata.minTSN,
+            maxTsn = metadata.maxTSN,
+            minKeyAndTSN = metadata.firstKeyAndTSN?.hex(),
+            maxKeyAndTSN = metadata.lastKeyAndTSN?.hex(),
+            isGarbage = this.isGarbage(virtualFile.name),
+            formatVersion = header.fileFormatVersion.versionString,
+            fileIndex = lsmFile.index,
+            uuid = metadata.fileUUID,
+            numberOfBlocks = metadata.numberOfBlocks,
+            numberOfCompactions = metadata.numberOfMerges,
+            compressionAlgorithm = metadata.settings.compression,
+            createdAt = metadata.createdAt,
+            totalEntries = metadata.totalEntries,
+            headEntries = metadata.headEntries,
+            historyEntries = metadata.historyEntries,
+        )
+    }
+
+    private fun memtableReport(): MemtableReport {
+        this.lock.read {
+            return MemtableReport(
+                sizeInBytes = this.inMemorySize.bytes,
+                minKey = this.inMemoryTree.keys.minOfOrNull { it.key }?.hex(),
+                maxKey = this.inMemoryTree.keys.maxOfOrNull { it.key }?.hex(),
+                minTsn = this.inMemoryTree.keys.minOfOrNull { it.tsn },
+                maxTsn = this.inMemoryTree.keys.maxOfOrNull { it.tsn },
+                minKeyAndTSN = inMemoryTree.firstKey()?.hex(),
+                maxKeyAndTSN = this.inMemoryTree.lastKey()?.hex(),
+            )
+        }
+    }
+
     override fun toString(): String {
         return "LSMTree[${this.storeId}]"
     }
-
 
 }

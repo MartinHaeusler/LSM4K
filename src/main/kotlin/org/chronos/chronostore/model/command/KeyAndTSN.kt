@@ -1,5 +1,6 @@
 package org.chronos.chronostore.model.command
 
+import org.chronos.chronostore.impl.annotations.PersistentClass
 import org.chronos.chronostore.util.IOExtensions.withInputStream
 import org.chronos.chronostore.util.LittleEndianExtensions.readLittleEndianInt
 import org.chronos.chronostore.util.LittleEndianExtensions.readLittleEndianIntOrNull
@@ -9,11 +10,13 @@ import org.chronos.chronostore.util.LittleEndianExtensions.writeLittleEndianLong
 import org.chronos.chronostore.util.TSN
 import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.bytes.Bytes.Companion.writeBytesWithoutSize
+import org.chronos.chronostore.util.report.HexKeyAndTSN
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
 
+@PersistentClass(format = PersistentClass.Format.BINARY, "Used in LSM file headers.")
 data class KeyAndTSN(
     val key: Bytes,
     val tsn: TSN,
@@ -72,7 +75,7 @@ data class KeyAndTSN(
         return Bytes.wrap(baos.toByteArray())
     }
 
-    fun writeTo(outputStream: OutputStream){
+    fun writeTo(outputStream: OutputStream) {
         outputStream.writeLittleEndianInt(this.key.size)
         outputStream.writeBytesWithoutSize(this.key)
         outputStream.writeLittleEndianLong(this.tsn)
@@ -84,6 +87,10 @@ data class KeyAndTSN(
                 key.size + // bytes of the key
                 8 // tsn bytes
         }
+
+    fun hex(): HexKeyAndTSN {
+        return HexKeyAndTSN(this.key.hex(), this.tsn)
+    }
 
     override fun toString(): String {
         return "${this.key.hex()}@${this.tsn}"

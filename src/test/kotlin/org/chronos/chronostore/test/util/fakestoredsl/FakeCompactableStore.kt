@@ -6,6 +6,7 @@ import org.chronos.chronostore.lsm.compaction.model.CompactableFile
 import org.chronos.chronostore.lsm.compaction.model.CompactableStore
 import org.chronos.chronostore.manifest.StoreMetadata
 import org.chronos.chronostore.util.FileIndex
+import org.chronos.chronostore.util.LevelOrTierIndex
 
 class FakeCompactableStore(
     override val metadata: StoreMetadata,
@@ -14,10 +15,11 @@ class FakeCompactableStore(
 
     val executedMerges = mutableListOf<ExecutedMerge>()
 
-    override fun mergeFiles(fileIndices: Set<FileIndex>, keepTombstones: Boolean, trigger: CompactionTrigger, monitor: TaskMonitor) {
+    override fun mergeFiles(fileIndices: Set<FileIndex>, keepTombstones: Boolean, trigger: CompactionTrigger, outputLevelOrTier: LevelOrTierIndex, monitor: TaskMonitor) {
         this.executedMerges += ExecutedMerge(
             fileIndices = fileIndices.toSet(),
             keepTombstones = keepTombstones,
+            outputLevelOrTier = outputLevelOrTier,
             trigger = trigger,
         )
     }
@@ -25,6 +27,7 @@ class FakeCompactableStore(
     class ExecutedMerge(
         val fileIndices: Set<FileIndex>,
         val keepTombstones: Boolean,
+        val outputLevelOrTier: LevelOrTierIndex,
         val trigger: CompactionTrigger,
     )
 }

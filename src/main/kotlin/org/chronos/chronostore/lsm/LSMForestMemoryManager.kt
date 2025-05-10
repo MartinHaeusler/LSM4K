@@ -1,18 +1,13 @@
 package org.chronos.chronostore.lsm
 
 import io.github.oshai.kotlinlogging.KotlinLogging
-import org.chronos.chronostore.async.executor.AsyncTaskManager
-import org.chronos.chronostore.async.executor.TaskExecutionResult
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.forEach
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.mainTask
-import org.chronos.chronostore.lsm.compaction.tasks.FlushInMemoryTreeToDiskTask
-import org.chronos.chronostore.manifest.ManifestFile
 import org.chronos.chronostore.util.logging.LogExtensions.perfTrace
 import org.chronos.chronostore.util.statistics.ChronoStoreStatistics
 import org.chronos.chronostore.util.unit.BinarySize.Companion.Bytes
 import java.util.concurrent.CompletableFuture
-import java.util.concurrent.Future
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.concurrent.write
 import kotlin.math.min
@@ -76,7 +71,7 @@ class LSMForestMemoryManager(
 
     fun addTree(tree: LSMTree) {
         this.lock.write {
-            treeStats.computeIfAbsent(tree, ::TreeStats)
+            this.treeStats.computeIfAbsent(tree, ::TreeStats)
             val virtualTreeSize = treeStats.getValue(tree).virtualTreeSize
             val actualTreeStats = treeStats.getValue(tree).actualTreeSize
             this.actualForestSize += actualTreeStats
@@ -127,11 +122,11 @@ class LSMForestMemoryManager(
             while (this.virtualForestSize >= this.flushThresholdSize) {
                 // schedule a flush task for the largest tree
                 val (largestTree, largestTreeStats) = this.treeStats.entries.maxBy { it.key.inMemorySize }
-                if(largestTreeStats.virtualTreeSize <= 0){
+                if (largestTreeStats.virtualTreeSize <= 0) {
                     // all trees have a flush task scheduled, we just have to wait
                     break
                 }
-                largestTree.scheduleMemtableFlush()
+                largestTree.scheduleMemtableFlush(scheduleMinorCompactionOnCompletion = true)
                 // we assume here that the tree will have 0 bytes in-memory after the flush.
                 val bytesVirtuallyFreed = largestTreeStats.virtualTreeSize
                 largestTreeStats.virtualTreeSize = 0
@@ -174,7 +169,7 @@ class LSMForestMemoryManager(
                 this.treeStats.mapNotNull { (tree, treeStats) ->
                     if (treeStats.virtualTreeSize > 0) {
                         treeStats.virtualTreeSize = 0
-                        tree.scheduleMemtableFlush()
+                        tree.scheduleMemtableFlush(scheduleMinorCompactionOnCompletion = false)
                     } else {
                         log.trace { "SKIP FLUSH; NO DATA in tree '${tree.path}'" }
                         null

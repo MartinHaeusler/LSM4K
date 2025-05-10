@@ -51,6 +51,6 @@ interface Store {
 
     fun scheduleMinorCompaction(): CompletableFuture<*>
 
-    fun scheduleMemtableFlush(): CompletableFuture<*>
+    fun scheduleMemtableFlush(scheduleMinorCompactionOnCompletion: Boolean): CompletableFuture<*>
 
 }

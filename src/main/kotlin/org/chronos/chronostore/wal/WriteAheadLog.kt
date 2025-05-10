@@ -12,6 +12,8 @@ import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.util.StoreId
 import org.chronos.chronostore.util.StreamExtensions.byteCounting
 import org.chronos.chronostore.util.TSN
+import org.chronos.chronostore.util.report.WalFileReport
+import org.chronos.chronostore.util.report.WalReport
 import org.chronos.chronostore.util.unit.BinarySize.Companion.Bytes
 import org.chronos.chronostore.util.unit.BinarySize.Companion.MiB
 import org.chronos.chronostore.wal.format.TransactionCommandEntry
@@ -585,6 +587,20 @@ class WriteAheadLog(
                 commandTSNs = commandTSNs,
             )
         }
+    }
+
+    fun report(): WalReport {
+        this.lock.read {
+            return WalReport(this.walFiles.map { this.generateWalFileReport(it) })
+        }
+    }
+
+    private fun generateWalFileReport(walFile: WALFile): WalFileReport {
+        return WalFileReport(
+            path = walFile.file.path,
+            name = walFile.file.name,
+            sizeInBytes = walFile.file.length,
+        )
     }
 
     private data class WALTransactionInfo(

@@ -68,7 +68,7 @@ class CheckpointTask(
             monitor.subTask(0.4, "Flush in-memory changes to disk") {
                 val lsmTrees = (this.storeManager as StoreManagerImpl).getAllLsmTreesAdmin()
                 CompletableFuture.allOf(
-                    *lsmTrees.map { it.scheduleMemtableFlush() }.toTypedArray()
+                    *lsmTrees.map { it.scheduleMemtableFlush(scheduleMinorCompactionOnCompletion = true) }.toTypedArray()
                 ).join()
             }
 

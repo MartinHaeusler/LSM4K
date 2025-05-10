@@ -22,6 +22,8 @@ class LeveledCompactionOperation(
     override val storeId: StoreId,
     /** The output file indices of the compaction. */
     val outputFileIndices: Set<FileIndex>,
+    /** The level at which the output files will be placed. */
+    val outputLevelIndex: LevelIndex,
     /** The upper (higher) level which is targeted by the compaction. */
     val upperLevelIndex: LevelIndex,
     /** The file indices in the upper (higher) level which will be affected by the compaction. */
@@ -35,35 +37,43 @@ class LeveledCompactionOperation(
 
     companion object {
 
-        private fun verifyLevelsArePositive(lowerLevelIndex: Int, upperLevelIndex: Int) {
+        private fun verifyLevelsArePositive(lowerLevelIndex: LevelIndex, upperLevelIndex: LevelIndex, outputLevel: LevelIndex) {
             validateManifest(lowerLevelIndex >= 0) {
                 "Compaction of levels requires positive level indices. The given lower level index is negative: ${lowerLevelIndex}"
             }
             validateManifest(upperLevelIndex >= 0) {
                 "Compaction of levels requires positive level indices. The given upper level index is negative: ${lowerLevelIndex}"
             }
-        }
-
-        private fun verifyCompactionTargetsHigherLevel(lowerLevelIndex: Int, upperLevelIndex: Int) {
-            validateManifest(lowerLevelIndex < upperLevelIndex) {
-                "Compaction of levels requires the lower level (${lowerLevelIndex}) to have a strictly smaller index" +
-                    " than the upper level (${upperLevelIndex})!"
+            validateManifest(outputLevel >= 0) {
+                "Compaction of levels requires positive level indices. The given output level index is negative: ${outputLevel}"
             }
         }
 
-        private fun verifyAtLeastOneOutputFile(outputFileIndices: Set<Int>) {
+        private fun verifyOutputLevelIsGreaterThanInputLevels(lowerLevelIndex: LevelIndex, upperLevelIndex: LevelIndex, outputLevel: LevelIndex) {
+            validateManifest(outputLevel >= upperLevelIndex) {
+                "Compaction of levels requires the output level (${outputLevel}) to be greater than or equal to the upper level (${upperLevelIndex})!"
+            }
+            validateManifest(outputLevel >= lowerLevelIndex) {
+                "Compaction of levels requires the output level (${outputLevel}) to be greater than or equal to the lower level (${lowerLevelIndex})!"
+            }
+            validateManifest(upperLevelIndex >= lowerLevelIndex) {
+                "Compaction of levels requires the upper level (${lowerLevelIndex}) to be greater than or equal to the lower level (${lowerLevelIndex})!"
+            }
+        }
+
+        private fun verifyAtLeastOneOutputFile(outputFileIndices: Set<FileIndex>) {
             validateManifest(outputFileIndices.isNotEmpty()) {
                 "Compaction of levels requires at least one output file index, but got none!"
             }
         }
 
-        private fun verifyLowerLevelFileIndicesAreNotEmpty(lowerLevelFileIndices: Set<Int>) {
+        private fun verifyLowerLevelFileIndicesAreNotEmpty(lowerLevelFileIndices: Set<FileIndex>) {
             validateManifest(lowerLevelFileIndices.isNotEmpty()) {
                 "Compaction of levels requires the lower level file indices to be non-empty, but got none!"
             }
         }
 
-        private fun verifyFileIndicesArePositive(lowerLevelFileIndices: Set<Int>, upperLevelFileIndices: Set<Int>) {
+        private fun verifyFileIndicesArePositive(lowerLevelFileIndices: Set<FileIndex>, upperLevelFileIndices: Set<FileIndex>) {
             validateManifest(lowerLevelFileIndices.all { it >= 0 }) {
                 "Compaction of levels requires all lower level file indices to be non-negative." +
                     " Given indices: ${lowerLevelFileIndices}, problematic file index: ${lowerLevelFileIndices.asSequence().filter { it < 0 }.min()}"
@@ -74,7 +84,7 @@ class LeveledCompactionOperation(
             }
         }
 
-        private fun verifyFileIndicesAreDisjoint(lowerLevelFileIndices: Set<Int>, upperLevelFileIndices: Set<Int>) {
+        private fun verifyFileIndicesAreDisjoint(lowerLevelFileIndices: Set<FileIndex>, upperLevelFileIndices: Set<FileIndex>) {
             validateManifest(lowerLevelFileIndices.none { it in upperLevelFileIndices }) {
                 val jointFileIndices = lowerLevelFileIndices.intersect(upperLevelFileIndices)
                 "Compaction of levels requires file indices at lower and upper level to be disjiont." +
@@ -82,11 +92,12 @@ class LeveledCompactionOperation(
                     " The following ${jointFileIndices.size} file indices occur in both: ${jointFileIndices.sorted()}"
             }
         }
+
     }
 
     init {
-        verifyLevelsArePositive(lowerLevelIndex, upperLevelIndex)
-        verifyCompactionTargetsHigherLevel(lowerLevelIndex, upperLevelIndex)
+        verifyLevelsArePositive(lowerLevelIndex, upperLevelIndex, outputLevelIndex)
+        verifyOutputLevelIsGreaterThanInputLevels(lowerLevelIndex, upperLevelIndex, outputLevelIndex)
         // note that, while we always need files in the lower level, it is allowed for the upper-level files
         // to be empty. This is the case if the upper level doesn't contain ANY files yet.
         verifyLowerLevelFileIndicesAreNotEmpty(lowerLevelFileIndices)
@@ -113,7 +124,7 @@ class LeveledCompactionOperation(
             .minusAll(this.lowerLevelFileIndices)
             .minusAll(this.upperLevelFileIndices)
             // ... and add the compaction target files at the right level
-            .plusAll(this.outputFileIndices.associateWith { LSMFileInfo(it, this.upperLevelIndex) })
+            .plusAll(this.outputFileIndices.associateWith { LSMFileInfo(it, this.outputLevelIndex) })
 
         val newStoreMetadata = storeMetadata.copy(lsmFiles = newLsmFiles)
 
@@ -193,6 +204,7 @@ class LeveledCompactionOperation(
             "on=${this.storeId}, " +
             "lowerLevel=${lowerLevelIndex} (${lowerLevelFileIndices.size} files), " +
             "upperLevel=${upperLevelIndex} (${upperLevelFileIndices.size})" +
+            "outputLevel=${outputLevelIndex}" +
             "]"
     }
 }

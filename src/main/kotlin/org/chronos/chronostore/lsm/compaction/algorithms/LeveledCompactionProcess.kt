@@ -132,7 +132,12 @@ class LeveledCompactionProcess(
         }
         if (level0FileIndicesToMerge.isNotEmpty()) {
             monitor.subTaskWithMonitor(0.7) { subMonitor ->
-                this.compactLevel0Files(level0FileIndicesToMerge, minLevelWithTargetSize, highestNonEmptyLevel, subMonitor)
+                this.compactLevel0Files(
+                    filesToMerge = level0FileIndicesToMerge,
+                    minLevelWithTargetSize = minLevelWithTargetSize,
+                    highestNonEmptyLevel = highestNonEmptyLevel,
+                    monitor = subMonitor,
+                )
             }
             return
         }
@@ -145,7 +150,11 @@ class LeveledCompactionProcess(
 
         if (levelWithHighestSizeToTargetRatio != null) {
             monitor.subTaskWithMonitor(0.6) { subMonitor ->
-                compactBasedOnTargetSizeRatio(levelWithHighestSizeToTargetRatio, highestNonEmptyLevel, subMonitor)
+                compactBasedOnTargetSizeRatio(
+                    levelWithHighestSizeToTargetRatio = levelWithHighestSizeToTargetRatio,
+                    highestNonEmptyLevel = highestNonEmptyLevel,
+                    monitor = subMonitor,
+                )
             }
             return
         }
@@ -166,9 +175,13 @@ class LeveledCompactionProcess(
             ?: return // just a safeguard
 
         val targetLevelIndex = levelWithHighestSizeToTargetRatio + 1
-        val overlappingSSTFilesInTargetLevel = findOverlappingSSTFiles(setOf(chosenSSTFile.index), targetLevelIndex)
+        val overlappingSSTFilesInTargetLevel = this.findOverlappingSSTFiles(
+            inputFileIndices = setOf(chosenSSTFile.index),
+            level = targetLevelIndex,
+        )
         this.store.mergeFiles(
             fileIndices = setOf(chosenSSTFile.index) + overlappingSSTFilesInTargetLevel,
+            outputLevelOrTier = targetLevelIndex,
             // if we do not merge to the highest non-empty level, we have to keep the tombstones during the merge.
             keepTombstones = targetLevelIndex != highestNonEmptyLevel,
             trigger = CompactionTrigger.LEVELED_TARGET_SIZE_RATIO,
@@ -176,8 +189,16 @@ class LeveledCompactionProcess(
         )
     }
 
-    private fun compactLevel0Files(filesToMerge: Set<FileIndex>, minLevelWithTargetSize: Int, highestNonEmptyLevel: Int, monitor: TaskMonitor) {
-        val overlappingSSTFilesInTargetLevel = findOverlappingSSTFiles(filesToMerge, minLevelWithTargetSize)
+    private fun compactLevel0Files(
+        filesToMerge: Set<FileIndex>,
+        minLevelWithTargetSize: Int,
+        highestNonEmptyLevel: Int,
+        monitor: TaskMonitor,
+    ) {
+        val overlappingSSTFilesInTargetLevel = this.findOverlappingSSTFiles(
+            inputFileIndices = filesToMerge,
+            level = minLevelWithTargetSize,
+        )
 
         val keepTombstones = if (highestNonEmptyLevel == 0) {
             // if the highest non-empty level *is* zero, then there is no data at all in the higher ranks and we can drop
@@ -192,7 +213,8 @@ class LeveledCompactionProcess(
             fileIndices = filesToMerge + overlappingSSTFilesInTargetLevel,
             keepTombstones = keepTombstones,
             trigger = CompactionTrigger.LEVELED_LEVEL0,
-            monitor = monitor
+            outputLevelOrTier = minLevelWithTargetSize,
+            monitor = monitor,
         )
     }
 
@@ -208,11 +230,17 @@ class LeveledCompactionProcess(
             .mapNotNull { it.metadata.maxKey }
             .max()
 
-        val overlappingSSTFileIndices = this.store.metadata.getFileIndicesAtTierOrLevel(level).asSequence()
+
+        val filesInTargetLevel = this.store.metadata.getFileIndicesAtTierOrLevel(level)
+        println("Looking for overlapping files in '${this.store.storeId}'. Min key: ${minKey.hex()}, max key: ${maxKey.hex()}, looking at level #${level} which contains ${filesInTargetLevel.size} files.")
+
+        val overlappingSSTFileIndices = filesInTargetLevel.asSequence()
             .mapNotNull { fileIndexToFile[it] }
             .filter { it.metadata.overlaps(minKey, maxKey) }
             .map { it.index }
             .toSet()
+
+        println("Found ${overlappingSSTFileIndices.size} overlapping file indices: ${overlappingSSTFileIndices.joinToString()}")
 
         return overlappingSSTFileIndices
     }

@@ -10,12 +10,15 @@ import org.chronos.chronostore.util.ManagerState
 import org.chronos.chronostore.util.StoreId
 import org.chronos.chronostore.util.TSN
 import org.chronos.chronostore.util.TransactionId
+import org.chronos.chronostore.util.report.TransactionReport
 import org.chronos.chronostore.util.statistics.ChronoStoreStatistics
 import org.chronos.chronostore.util.unit.BinarySize.Companion.MiB
 import org.chronos.chronostore.wal.WriteAheadLog
 import java.util.concurrent.ConcurrentMap
+import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
+import kotlin.math.min
 
 class TransactionManager(
     val storeManager: StoreManager,
@@ -38,11 +41,13 @@ class TransactionManager(
     // the smallest "lastVisibleSerialNumber". A dangling transaction may artificially keep this
     // value low for no reason.
     // TODO [FEATURE]: Allow to configure a maximum number of concurrent transactions.
-    private val openTransactions: ConcurrentMap<TransactionId, ChronoStoreTransaction> = MapMaker()
+    private val openTransactions: ConcurrentMap<TransactionId, ChronoStoreTransactionImpl> = MapMaker()
         .weakValues()
         .makeMap()
 
     private val commitLock = ReentrantLock(true)
+
+    private val transactionCounter = AtomicLong(0)
 
     @Volatile
     private var state: ManagerState = ManagerState.OPEN
@@ -50,11 +55,13 @@ class TransactionManager(
     fun createNewTransaction(): ChronoStoreTransaction {
         this.state.checkOpen()
         ChronoStoreStatistics.TRANSACTIONS.incrementAndGet()
+        this.transactionCounter.incrementAndGet()
         val newTx = ChronoStoreTransactionImpl(
             id = TransactionId.randomUUID(),
             lastVisibleSerialNumber = this.tsnManager.getLastReturnedTSN(),
             storeManager = this.storeManager,
             transactionManager = this,
+            createdAtWallClockTime = System.currentTimeMillis(),
         )
         this.openTransactions[newTx.id] = newTx
         return newTx
@@ -92,6 +99,12 @@ class TransactionManager(
             ChronoStoreStatistics.TRANSACTION_COMMITS.incrementAndGet()
             return commitTSN
         }
+    }
+
+    fun performRollback(tx: ChronoStoreTransactionImpl) {
+        log.trace { "Rolled back transaction ${tx.id}." }
+        ChronoStoreStatistics.TRANSACTION_ROLLBACKS.incrementAndGet()
+        this.openTransactions.remove(tx.id)
     }
 
     private fun checkAllModifiedStoresAreWriteable(
@@ -169,6 +182,20 @@ class TransactionManager(
         for (transaction in this.openTransactions.values) {
             transaction.rollback()
         }
+    }
+
+    fun report(): TransactionReport {
+        val oldestOpenTransactionCreatedAt = this.openTransactions.values.minOfOrNull { it.createdAtWallClockTime }
+        val oldestTransactionRuntime = if (oldestOpenTransactionCreatedAt == null) {
+            null
+        } else {
+            min(0L, System.currentTimeMillis() - oldestOpenTransactionCreatedAt)
+        }
+        return TransactionReport(
+            transactionsProcessed = this.transactionCounter.get(),
+            openTransactions = this.openTransactions.size,
+            longestOpenTransactionDurationInMilliseconds = oldestTransactionRuntime,
+        )
     }
 
 }

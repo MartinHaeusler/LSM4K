@@ -1,11 +1,11 @@
 package org.chronos.chronostore.lsm.compaction.model
 
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor
-import org.chronos.chronostore.impl.store.StoreImpl
 import org.chronos.chronostore.lsm.LSMTree
 import org.chronos.chronostore.lsm.compaction.algorithms.CompactionTrigger
 import org.chronos.chronostore.manifest.StoreMetadata
 import org.chronos.chronostore.util.FileIndex
+import org.chronos.chronostore.util.LevelOrTierIndex
 import org.chronos.chronostore.util.StoreId
 
 class StandardCompactableStore(
@@ -30,10 +30,12 @@ class StandardCompactableStore(
         fileIndices: Set<FileIndex>,
         keepTombstones: Boolean,
         trigger: CompactionTrigger,
+        outputLevelOrTier: LevelOrTierIndex,
         monitor: TaskMonitor,
     ) {
         this.tree.mergeFiles(
             fileIndices = fileIndices,
+            outputLevelOrTier = outputLevelOrTier,
             keepTombstones = keepTombstones,
             trigger = trigger,
             monitor = monitor,
