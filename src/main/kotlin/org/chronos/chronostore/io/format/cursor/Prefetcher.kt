@@ -6,7 +6,6 @@ import org.chronos.chronostore.io.format.datablock.DataBlock
 import org.chronos.chronostore.io.vfs.VirtualFile
 import org.chronos.chronostore.util.collection.RingBuffer
 import java.util.concurrent.CompletableFuture
-import java.util.concurrent.TimeUnit
 
 class Prefetcher(
     val file: VirtualFile,
@@ -51,17 +50,10 @@ class Prefetcher(
         val nextBlockIndex = currentBlock.metaData.blockSequenceNumber + 1
         val nextBlock = when {
             next != null -> {
-                println("Getting next block (${this.file.path}#${nextBlockIndex}) from prefetcher. Loading state: ${next.state()}")
-                val preLoadTime = System.nanoTime()
-                next.get().also {
-                    val postLoadTime = System.nanoTime()
-                    val waitTime = TimeUnit.NANOSECONDS.toMillis(postLoadTime - preLoadTime)
-                    println(" -> Wait time: ${waitTime}ms")
-                }
+                next.get()
             }
             this.fileHeader.metaData.numberOfBlocks <= nextBlockIndex -> null
             else -> {
-                println("Getting next block (${this.file.path}#${nextBlockIndex}) from loader. (#Next: ${this.nextCount}, #Prev: ${this.previousCount})")
                 this.blockLoader.getBlockOrNull(
                     file = this.file,
                     blockIndex = nextBlockIndex,
@@ -78,7 +70,6 @@ class Prefetcher(
         }
         if (operation.isRandomJump) {
             // random jumps clear the operations buffer
-            this.operationBuffer.clear()
             this.clearPrefetchState()
             return
         }

@@ -23,22 +23,6 @@ object PrefetchingBenchmark {
 
     private const val NUMBER_OF_CHANGES_PER_COMMIT = 200
 
-
-    // FIXME:
-    //
-    // Good:
-    // + we survive the benchmark, as in: the store doesn't crash. Yay!
-    // + WAL shortening seems to work fine, including the corner cases introduced by partial commits
-    // + manifest seems to be working just fine
-    // + no concurrency-related issues detected
-    // + prefetcher claims to work 100% of the time and we had zero I/O wait time in the cursors (need to investigate -> that's a little too good to be true)
-    //
-    // Bad:
-    // - We have seemingly random slowdown "hiccups" in the write process. Stalling going on? Maybe the memory manager needs to start flushing data sooner?
-    // - When there's a compaction going on while the store is shutting down, we fail with a PANIC and:
-    //   "An unexpected error occurred during Minor Compaction of store 'benchmark': java.nio.channels.ClosedByInterruptException', cause: java.nio.channels.ClosedByInterruptException".
-    //   Try to make this more graceful.
-
     @JvmStatic
     fun main(args: Array<String>) {
         val tempDir = Files.createTempDirectory("chronostorePrefetchingBenchmark").toFile()

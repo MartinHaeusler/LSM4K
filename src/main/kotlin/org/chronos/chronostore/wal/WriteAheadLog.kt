@@ -9,6 +9,7 @@ import org.chronos.chronostore.io.vfs.VirtualDirectory
 import org.chronos.chronostore.io.vfs.VirtualFile
 import org.chronos.chronostore.io.vfs.VirtualReadWriteFile
 import org.chronos.chronostore.model.command.Command
+import org.chronos.chronostore.util.ManagerState
 import org.chronos.chronostore.util.StoreId
 import org.chronos.chronostore.util.StreamExtensions.byteCounting
 import org.chronos.chronostore.util.TSN
@@ -22,6 +23,7 @@ import org.chronos.chronostore.wal.format.TransactionStartEntry
 import org.chronos.chronostore.wal.format.WALEntry
 import java.util.concurrent.locks.ReentrantLock
 import java.util.concurrent.locks.ReentrantReadWriteLock
+import kotlin.concurrent.Volatile
 import kotlin.concurrent.read
 import kotlin.concurrent.withLock
 import kotlin.concurrent.write
@@ -59,7 +61,7 @@ class WriteAheadLog(
     private val maxWalFileSizeBytes: Long = 128.MiB.bytes,
     /** The minimum number of WAL files to keep before shortening the WAL. */
     private val minNumberOfFiles: Int = 1,
-) {
+) : AutoCloseable {
 
     companion object {
 
@@ -74,6 +76,8 @@ class WriteAheadLog(
     private val lock = ReentrantReadWriteLock(true)
     private val shorteningLock = ReentrantLock(true)
 
+    @Volatile
+    private var state: ManagerState = ManagerState.OPEN
     private val walSummaryFile: WALSummaryFile
     private val walFiles = mutableListOf<WALFile>()
 
@@ -168,6 +172,7 @@ class WriteAheadLog(
 
 
     fun performStartupRecoveryCleanup(maxPersistedTSN: TSN) {
+        this.state.checkOpen()
         // 1. find out in which wal file (going backwards, starting from last) the latest COMPLETED transaction starts.
         // 2. delete all entries after that commit to get rid of partially committed data.
         // 3. if a wal file becomes empty due to this operation, delete the entire wal file.
@@ -235,12 +240,14 @@ class WriteAheadLog(
     }
 
     fun getLatestFileSequenceNumber(): Long? {
+        this.state.checkOpen()
         this.lock.read {
             return this.walFiles.lastOrNull()?.sequenceNumber
         }
     }
 
     fun deleteWalFilesWithSequenceNumberLowerThan(sequenceNumber: Long) {
+        this.state.checkOpen()
         // only allow a single shortening operation at any point in time.
         this.shorteningLock.withLock {
             val fileToKeep: WALFile?
@@ -387,6 +394,7 @@ class WriteAheadLog(
      */
     fun addCommittedTransaction(commitTSN: TSN, transactionChanges: Sequence<Pair<StoreId, Command>>) {
         check(commitTSN >= 0) { "Argument 'commitTSN' (${commitTSN}) must not be negative!" }
+        this.state.checkOpen()
         this.lock.write {
             // TODO [FEATURE]: Compress WAL files by writing blocks of fixed size within each file and compress the blocks.
 
@@ -413,6 +421,7 @@ class WriteAheadLog(
             // at the same time).
             val iterator = entrySequence.iterator()
             while (iterator.hasNext()) { // outer loop
+                this.state.checkOpen()
                 // open the most recent WAL file which still has some space left
                 val targetFile = this.getOrCreateTargetWALFile()
                 // how much space is left in the file?
@@ -424,6 +433,7 @@ class WriteAheadLog(
                 targetFile.append { outputStream ->
                     CountingOutputStream(outputStream).use { countingOutputStream ->
                         while (iterator.hasNext()) { // inner loop
+                            this.state.checkOpen()
                             val entry = iterator.next()
                             entry.writeTo(countingOutputStream)
                             if (freeBytes - countingOutputStream.count <= 0) {
@@ -475,6 +485,7 @@ class WriteAheadLog(
     }
 
     fun readWalStreaming(walReadBuffer: WALReadBuffer, flushBuffer: () -> Unit) {
+        this.state.checkOpen()
         this.lock.read {
             // when we start reading the WAL, we must ignore ALL entries that come BEFORE
             // the first "beginTransaction" command. The reason is that a transaction which
@@ -530,6 +541,7 @@ class WriteAheadLog(
 
 
     fun generateChecksumsForCompletedFiles() {
+        this.state.checkOpen()
         // we do this outside of any lock to avoid blocking writers;
         // technically we're only computing checksums on immutable files so there's
         // not much that can go wrong. Worst case is that we generate a checksum
@@ -590,6 +602,7 @@ class WriteAheadLog(
     }
 
     fun report(): WalReport {
+        this.state.checkOpen()
         this.lock.read {
             return WalReport(this.walFiles.map { this.generateWalFileReport(it) })
         }
@@ -601,6 +614,22 @@ class WriteAheadLog(
             name = walFile.file.name,
             sizeInBytes = walFile.file.length,
         )
+    }
+
+    override fun close() {
+        this.closeInternal(ManagerState.CLOSED)
+    }
+
+    fun closePanic() {
+        this.closeInternal(ManagerState.PANIC)
+    }
+
+    private fun closeInternal(closeState: ManagerState) {
+        if (this.state.isClosed()) {
+            this.state = closeState
+            return
+        }
+        this.state = closeState
     }
 
     private data class WALTransactionInfo(

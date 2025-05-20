@@ -168,6 +168,7 @@ class ChronoStoreImpl(
     private val checkpointTask: CheckpointTask
 
     init {
+        val timeBefore = System.currentTimeMillis()
         // lock the directory to prevent multiple processes to access the same directory.
         this.lockFileManager.lock()
 
@@ -248,6 +249,8 @@ class ChronoStoreImpl(
         }
 
         this.state = ChronoStoreState.RUNNING
+        val timeAfter = System.currentTimeMillis()
+        log.info { "ChronoStore started in ${timeAfter - timeBefore}ms at ${this.rootPath}" }
     }
 
     private fun createNewEmptyDatabase(): TSN {
@@ -323,7 +326,7 @@ class ChronoStoreImpl(
             return
         }
         isOpen = false
-        log.info { "Initiating shut-down of ChronoStore at '${this.vfs}'." }
+        log.info { "Shutting down ChronoStore at '${this.vfs}'..." }
         this.state = ChronoStoreState.SHUTTING_DOWN
         // to ensure a quick startup recovery, ensure that we have a recent checkpoint.
         // If this operation is aborted by process kill, nothing bad happens except
@@ -331,12 +334,23 @@ class ChronoStoreImpl(
         if (this.configuration.checkpointOnShutdown) {
             this.checkpointTask.run(TaskMonitor.create())
         }
+
+        // we're entering shutdown mode, so turn off the killswitch. There's no need
+        // to kill anything during the shutdown process anymore.
+        this.killswitch.disable()
+        // close the transaction manager, this will roll back all active transactions
+        // and prevent the creation of new ones.
         this.transactionManager.close()
+        // close the write-ahead-log manager. This will cancel any ongoing writes.
+        this.writeAheadLog.close()
+        // close the async task manager. This will also shut down any concurrent tasks.
         this.asyncTaskManager.close()
         this.storeManager.close()
         this.prefetchingManager?.close()
+        // release the file-based lock to allow another instance to be opened on
+        // our target directory.
         this.lockFileManager.unlock()
-        log.info { "Completed shut-down of ChronoStore at '${this.vfs}'." }
+        log.info { "Completed shutdown of ChronoStore at '${this.vfs}'." }
     }
 
     private fun panic(message: String, cause: Throwable?) {
@@ -344,6 +358,7 @@ class ChronoStoreImpl(
         this.state = ChronoStoreState.PANIC
         this.isOpen = false
         this.transactionManager.closePanic()
+        this.writeAheadLog.closePanic()
         this.asyncTaskManager.closePanic()
         this.storeManager.closePanic()
         this.prefetchingManager?.closePanic()
