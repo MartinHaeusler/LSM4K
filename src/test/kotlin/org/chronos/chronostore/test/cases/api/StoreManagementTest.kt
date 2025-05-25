@@ -32,12 +32,12 @@ class StoreManagementTest {
     @ChronoStoreTest
     fun canCreateStoresAndPerformPutAndGet(mode: ChronoStoreMode) {
         mode.withChronoStore { chronoStore ->
-            chronoStore.transaction { tx ->
+            chronoStore.readWriteTransaction { tx ->
                 tx.createNewStore("test")
                 tx.createNewStore("math")
                 tx.commit()
             }
-            chronoStore.transaction { tx ->
+            chronoStore.readWriteTransaction { tx ->
                 val test = tx.getStore("test")
                 test.put("foo", "bar")
 
@@ -47,7 +47,7 @@ class StoreManagementTest {
 
                 tx.commit()
             }
-            chronoStore.transaction { tx ->
+            chronoStore.readWriteTransaction { tx ->
                 expectThat(tx) {
                     get { allStores }.hasSize(2).and {
                         any {
@@ -88,7 +88,7 @@ class StoreManagementTest {
         }
 
         mode.withChronoStore { chronoStore ->
-            chronoStore.transaction { tx ->
+            chronoStore.readWriteTransaction { tx ->
                 val test = tx.createNewStore("test")
                 test.put("foo", "bar")
                 val math = tx.createNewStore("math")
@@ -99,7 +99,7 @@ class StoreManagementTest {
 
                 tx.commit()
             }
-            chronoStore.transaction { tx ->
+            chronoStore.readWriteTransaction { tx ->
                 performAssertions(tx)
             }
         }
@@ -127,7 +127,7 @@ class StoreManagementTest {
         }
 
         mode.withChronoStoreAndVFS { chronoStore, vfs ->
-            chronoStore.transaction { tx ->
+            chronoStore.readWriteTransaction { tx ->
                 val test = tx.createNewStore("test")
                 test.put("foo", "bar")
                 val math = tx.createNewStore("math")
@@ -139,7 +139,7 @@ class StoreManagementTest {
                 tx.commit()
             }
 
-            chronoStore.transaction { tx ->
+            chronoStore.readWriteTransaction { tx ->
                 performAssertions(tx)
             }
 
@@ -173,7 +173,7 @@ class StoreManagementTest {
             majorCompactionCron = null,
         )
         mode.withChronoStore(config) { chronoStore ->
-            chronoStore.transaction { tx ->
+            chronoStore.readWriteTransaction { tx ->
                 val data = tx.createNewStore("data")
                 repeat(numberOfEntries) { i ->
                     data.put(createKey(i), "value#${i}")
@@ -182,7 +182,7 @@ class StoreManagementTest {
             }
 
             // start iterating in a new transaction
-            val tx1 = chronoStore.beginTransaction()
+            val tx1 = chronoStore.beginReadWriteTransaction()
             val c1 = tx1.getStore("data").openCursor()
             c1.firstOrThrow()
             val c1Sequence1 = c1.ascendingEntrySequenceFromHere()
@@ -195,7 +195,7 @@ class StoreManagementTest {
 
             c1.firstOrThrow()
 
-            val tx2 = chronoStore.beginTransaction()
+            val tx2 = chronoStore.beginReadWriteTransaction()
             val c2 = tx2.getStore("data").openCursor()
 
             c2.firstOrThrow()
@@ -224,13 +224,13 @@ class StoreManagementTest {
         )
 
         mode.withChronoStore(config) { chronoStore ->
-            chronoStore.transaction { tx ->
+            chronoStore.readWriteTransaction { tx ->
                 tx.createNewStore("test")
                 tx.commit()
             }
             // write some data, flush after every transaction
             repeat(10) { txIndex ->
-                chronoStore.transaction { tx ->
+                chronoStore.readWriteTransaction { tx ->
                     val store = tx.getStore("test")
                     repeat(1000) { i ->
                         store.put("key#${i}", "value#${i}@${txIndex}")
@@ -241,7 +241,7 @@ class StoreManagementTest {
             }
 
             // now we should have 10 files on disk.
-            chronoStore.transaction { readTx ->
+            chronoStore.readWriteTransaction { readTx ->
                 // grab all the latest entries from the store
                 val entryMap = readTx.getStore("test").withCursor { cursor ->
                     cursor.firstOrThrow()
@@ -249,7 +249,7 @@ class StoreManagementTest {
                 }
 
                 // have a parallel transaction commit newer data
-                chronoStore.transaction { writeTx ->
+                chronoStore.readWriteTransaction { writeTx ->
                     val store = writeTx.getStore("test")
                     repeat(1000) { i ->
                         store.put("key#${i}", "value#${i}@${11}")
@@ -311,10 +311,10 @@ class StoreManagementTest {
             // | 18   | a        | b        | b        | b        |
             // | 19   | a        | a        | a        | a        |
             //
-            val txAtZero = chronoStore.beginTransaction()
+            val txAtZero = chronoStore.beginReadWriteTransaction()
 
 
-            chronoStore.transaction { tx ->
+            chronoStore.readWriteTransaction { tx ->
                 val data = tx.createNewStore("data")
                 repeat(numberOfEntries) { i ->
                     data.put(createKey(i), "a")
@@ -322,9 +322,9 @@ class StoreManagementTest {
                 tx.commit()
             }
 
-            val txAtTSN1 = chronoStore.beginTransaction()
+            val txAtTSN1 = chronoStore.beginReadWriteTransaction()
 
-            chronoStore.transaction { tx ->
+            chronoStore.readWriteTransaction { tx ->
                 val data = tx.getStore("data")
                 for (i in (0..<numberOfEntries step 3)) {
                     data.put(createKey(i), "b")
@@ -332,12 +332,12 @@ class StoreManagementTest {
                 tx.commit()
             }
 
-            val txAtTSN2 = chronoStore.beginTransaction()
+            val txAtTSN2 = chronoStore.beginReadWriteTransaction()
 
             // flush the in-memory stores to the VFS
             chronoStore.forest.flushAllInMemoryStoresToDisk()
 
-            chronoStore.transaction { tx ->
+            chronoStore.readWriteTransaction { tx ->
                 val data = tx.getStore("data")
                 for (i in (0..<numberOfEntries step 5)) {
                     data.delete(createKey(i))
@@ -345,12 +345,12 @@ class StoreManagementTest {
                 tx.commit()
             }
 
-            val txAtTSN3 = chronoStore.beginTransaction()
+            val txAtTSN3 = chronoStore.beginReadWriteTransaction()
 
             // flush the in-memory stores to the VFS
             chronoStore.forest.flushAllInMemoryStoresToDisk()
 
-            chronoStore.transaction { tx ->
+            chronoStore.readWriteTransaction { tx ->
                 val data = tx.getStore("data")
                 for (i in (0..<numberOfEntries step 7)) {
                     data.put(createKey(i), "c")
@@ -358,7 +358,7 @@ class StoreManagementTest {
                 tx.commit()
             }
 
-            val txAtTSN4 = chronoStore.beginTransaction()
+            val txAtTSN4 = chronoStore.beginReadWriteTransaction()
 
             val storeDir = vfs.directory("data")
 
@@ -369,7 +369,7 @@ class StoreManagementTest {
                 .hasSize(2)
 
             // iterate over the data.
-            chronoStore.transaction { tx ->
+            chronoStore.readWriteTransaction { tx ->
                 tx.getStore("data").withCursor { cursor ->
                     cursor.firstOrThrow()
                     val entries = cursor.ascendingEntrySequenceFromHere().toList()
@@ -504,7 +504,7 @@ class StoreManagementTest {
     @ChronoStoreTest
     fun canIsolateTransactionsFromOneAnother(mode: ChronoStoreMode) {
         mode.withChronoStore { chronoStore ->
-            chronoStore.transaction { tx ->
+            chronoStore.readWriteTransaction { tx ->
                 // TSN start at 1
                 expectThat(tx.lastVisibleSerialNumber).isEqualTo(1)
 
@@ -521,8 +521,8 @@ class StoreManagementTest {
                 tx.commit()
             }
 
-            chronoStore.transaction { tx1 ->
-                chronoStore.transaction { tx2 ->
+            chronoStore.readWriteTransaction { tx1 ->
+                chronoStore.readWriteTransaction { tx2 ->
 
                     expect {
                         that(tx1.lastVisibleSerialNumber).isEqualTo(4)
@@ -559,7 +559,7 @@ class StoreManagementTest {
     @ChronoStoreTest
     fun cannotCreateNestedStoresInSameTransaction(mode: ChronoStoreMode) {
         mode.withChronoStore { chronoStore ->
-            chronoStore.transaction { tx ->
+            chronoStore.readWriteTransaction { tx ->
                 // ok, since we don't have any stores yet.
                 tx.createNewStore("foo/bar")
                 // ok, since "foo" itself is not a store.
@@ -575,7 +575,7 @@ class StoreManagementTest {
                 tx.commit()
             }
 
-            chronoStore.transaction { tx ->
+            chronoStore.readWriteTransaction { tx ->
                 expectThat(tx.allStores).map { it.storeId.toString() }.containsExactly("foo/bar", "foo/baz")
             }
         }
@@ -584,7 +584,7 @@ class StoreManagementTest {
     @ChronoStoreTest
     fun cannotCreateNestedStoresInDifferentTransaction(mode: ChronoStoreMode) {
         mode.withChronoStore { chronoStore ->
-            chronoStore.transaction { tx ->
+            chronoStore.readWriteTransaction { tx ->
                 // ok, since we don't have any stores yet.
                 tx.createNewStore("foo/bar")
                 // ok, since "foo" itself is not a store.
@@ -592,7 +592,7 @@ class StoreManagementTest {
                 tx.commit()
             }
 
-            chronoStore.transaction { tx ->
+            chronoStore.readWriteTransaction { tx ->
                 // not ok, since "foo/bar" and "foo/baz" are stores
                 expectThrows<IllegalArgumentException> {
                     tx.createNewStore("foo")
@@ -605,7 +605,7 @@ class StoreManagementTest {
                 tx.commit()
             }
 
-            chronoStore.transaction { tx ->
+            chronoStore.readWriteTransaction { tx ->
                 expectThat(tx.allStores).map { it.storeId.toString() }.containsExactly("foo/bar", "foo/baz")
             }
         }

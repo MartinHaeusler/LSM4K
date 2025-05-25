@@ -31,6 +31,7 @@ import org.chronos.chronostore.wal.WriteAheadLog
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.Executors
 import kotlin.math.max
+import kotlin.time.Duration
 
 class ChronoStoreImpl(
     private val vfs: VirtualFileSystem,
@@ -313,9 +314,24 @@ class ChronoStoreImpl(
         return maxTSN
     }
 
+    override fun beginReadOnlyTransaction(): ChronoStoreTransaction {
+        return this.transactionManager.createNewReadOnlyTransaction()
+    }
 
-    override fun beginTransaction(): ChronoStoreTransaction {
-        return this.transactionManager.createNewTransaction()
+    override fun beginReadWriteTransaction(): ChronoStoreTransaction {
+        return this.transactionManager.createNewReadWriteTransaction(this.configuration.defaultLockAcquisitionTimeout)
+    }
+
+    override fun beginReadWriteTransaction(lockAcquisitionTimeout: Duration?): ChronoStoreTransaction {
+        return this.transactionManager.createNewReadWriteTransaction(lockAcquisitionTimeout)
+    }
+
+    override fun beginExclusiveTransaction(): ChronoStoreTransaction {
+        return this.transactionManager.createNewExclusiveTransaction(this.configuration.defaultLockAcquisitionTimeout)
+    }
+
+    override fun beginExclusiveTransaction(lockAcquisitionTimeout: Duration?): ChronoStoreTransaction {
+        return this.transactionManager.createNewExclusiveTransaction(lockAcquisitionTimeout)
     }
 
     override val rootPath: String

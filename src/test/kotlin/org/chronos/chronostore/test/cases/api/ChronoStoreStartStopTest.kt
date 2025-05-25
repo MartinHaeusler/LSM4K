@@ -2,8 +2,8 @@ package org.chronos.chronostore.test.cases.api
 
 import org.chronos.chronostore.api.ChronoStore
 import org.chronos.chronostore.api.exceptions.FileMissingException
-import org.chronos.chronostore.test.extensions.ChronoStoreTestExtensions.flushStoreSynchronous
 import org.chronos.chronostore.test.extensions.ChronoStoreTestExtensions.flushAllStoresSynchronous
+import org.chronos.chronostore.test.extensions.ChronoStoreTestExtensions.flushStoreSynchronous
 import org.chronos.chronostore.test.extensions.transaction.ChronoStoreTransactionTestExtensions.put
 import org.chronos.chronostore.test.util.ChronoStoreMode
 import org.chronos.chronostore.test.util.ChronoStoreTest
@@ -29,14 +29,14 @@ class ChronoStoreStartStopTest {
         mode.withVFS { vfs ->
             // open chronostore, add some data
             ChronoStore.openOnVirtualFileSystem(vfs).use { chronoStore ->
-                chronoStore.transaction { tx ->
+                chronoStore.readWriteTransaction { tx ->
                     tx.createNewStore("foo")
                     tx.createNewStore("bar")
                     tx.createNewStore("empty")
                     tx.commit()
                 }
 
-                chronoStore.transaction { tx ->
+                chronoStore.readWriteTransaction { tx ->
                     val foo = tx.getStore("foo")
                     foo.put("a", "1")
                     foo.put("b", "2")
@@ -57,7 +57,7 @@ class ChronoStoreStartStopTest {
             // reopen the chronostore instance on the same data and check that
             // everything is still present
             ChronoStore.openOnVirtualFileSystem(vfs).use { chronoStore ->
-                chronoStore.transaction { tx ->
+                chronoStore.readWriteTransaction { tx ->
                     val allStores = tx.allStores.map { it.storeId }
                     expectThat(allStores).containsExactlyInAnyOrder(
                         StoreId.of("foo"),
@@ -92,12 +92,12 @@ class ChronoStoreStartStopTest {
         mode.withVFS { vfs ->
             // open chronostore, add some data
             ChronoStore.openOnVirtualFileSystem(vfs).use { chronoStore ->
-                chronoStore.transaction { tx ->
+                chronoStore.readWriteTransaction { tx ->
                     tx.createNewStore("foo")
                     tx.commit()
                 }
 
-                chronoStore.transaction { tx ->
+                chronoStore.readWriteTransaction { tx ->
                     val foo = tx.getStore("foo")
                     foo.put("a", "1")
                     foo.put("b", "2")
@@ -129,12 +129,12 @@ class ChronoStoreStartStopTest {
         mode.withVFS { vfs ->
             // open chronostore, add some data
             ChronoStore.openOnVirtualFileSystem(vfs).use { chronoStore ->
-                chronoStore.transaction { tx ->
+                chronoStore.readWriteTransaction { tx ->
                     tx.createNewStore("foo")
                     tx.commit()
                 }
 
-                chronoStore.transaction { tx ->
+                chronoStore.readWriteTransaction { tx ->
                     val foo = tx.getStore("foo")
                     foo.put("a", "1")
                     foo.put("b", "2")

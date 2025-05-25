@@ -401,6 +401,75 @@ interface Cursor<K, V> : AutoCloseable {
      */
     fun seekExactlyOrNext(key: K): Boolean
 
+
+    // =================================================================================================================
+    // COMBINED HELPER METHODS
+    // =================================================================================================================
+
+    /**
+     * Moves this cursor to its [first] entry. If it exists, returns it as a key-value pair.
+     *
+     * If there is no first entry (i.e. the cursor is empty), the position will be [invalidated][isValidPosition].
+     *
+     * @return The first key-value pair in this cursor, or `null` if there is none.
+     */
+    fun firstEntryOrNull(): Pair<K, V>? {
+        if (!this.first()) {
+            return null
+        }
+        return this.key to this.value
+    }
+
+    /**
+     * Moves this cursor to its [last] entry. If it exists, returns it as a key-value pair.
+     *
+     * If there is no last entry (i.e. the cursor is empty), the position will be [invalidated][isValidPosition].
+     *
+     * @return The last key-value pair in this cursor, or `null` if there is none.
+     */
+    fun lastEntryOrNull(): Pair<K, V>? {
+        if (!this.last()) {
+            return null
+        }
+        return this.key to this.value
+    }
+
+    /**
+     * Seeks the [exact or previous][seekExactlyOrPrevious] entry and returns it if it exists.
+     *
+     * If there is a matching entry, the cursor will be positioned at that entry.
+     *
+     * If there is no matching entry, the position will be [invalidated][isValidPosition].
+     *
+     * @param key The key to search for.
+     *
+     * @return The key-value pair with the largest key less-than-or-equal-to the given [key].
+     */
+    fun exactOrPreviousEntry(key: K): Pair<K, V>? {
+        if (!this.seekExactlyOrPrevious(key)) {
+            return null
+        }
+        return this.key to this.value
+    }
+
+    /**
+     * Seeks the [exact or next][seekExactlyOrNext] entry and returns it if it exists.
+     *
+     * If there is a matching entry, the cursor will be positioned at that entry.
+     *
+     * If there is no matching entry, the position will be [invalidated][isValidPosition].
+     *
+     * @param key The key to search for.
+     *
+     * @return The key-value pair with the smallest key greater-than-or-equal-to the given [key].
+     */
+    fun exactOrNextEntry(key: K): Pair<K, V>? {
+        if (!this.seekExactlyOrNext(key)) {
+            return null
+        }
+        return this.key to this.value
+    }
+
     /**
      * Creates a [Sequence] view on this cursor that iterates over the ascending [key]s and [value]s, starting from the current position.
      *

@@ -1,10 +1,7 @@
 package org.chronos.chronostore.impl.transaction
 
 import io.github.oshai.kotlinlogging.KotlinLogging
-import org.chronos.chronostore.api.ChronoStoreTransaction
-import org.chronos.chronostore.api.Store
-import org.chronos.chronostore.api.StoreManager
-import org.chronos.chronostore.api.TransactionalReadWriteStore
+import org.chronos.chronostore.api.*
 import org.chronos.chronostore.api.compaction.CompactionStrategy
 import org.chronos.chronostore.impl.TransactionManager
 import org.chronos.chronostore.model.command.Command
@@ -17,6 +14,7 @@ import org.chronos.chronostore.util.statistics.ChronoStoreStatistics
 class ChronoStoreTransactionImpl(
     override val id: TransactionId,
     override val lastVisibleSerialNumber: TSN,
+    override val mode: TransactionMode,
     val transactionManager: TransactionManager,
     val storeManager: StoreManager,
     val createdAtWallClockTime: Timestamp,
@@ -81,6 +79,7 @@ class ChronoStoreTransactionImpl(
 
     fun deleteStore(txStore: TransactionalStoreImpl) {
         require(this.isOpen) { TX_ALREADY_CLOSED }
+
         this.storeManager.deleteStore(this, txStore.storeId)
     }
 

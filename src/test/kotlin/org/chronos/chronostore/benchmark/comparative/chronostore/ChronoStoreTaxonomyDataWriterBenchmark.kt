@@ -42,7 +42,7 @@ object ChronoStoreTaxonomyDataWriterBenchmark {
                 }
 
                 val timeBefore = System.currentTimeMillis()
-                chronoStore.transaction { tx ->
+                chronoStore.readWriteTransaction { tx ->
                     tx.createNewStore("data")
                     tx.commit()
                 }
@@ -51,7 +51,7 @@ object ChronoStoreTaxonomyDataWriterBenchmark {
 
                 var transactionCount = 0
                 commandSequence.chunked(10_000).forEach { chunk ->
-                    chronoStore.transaction { tx ->
+                    chronoStore.readWriteTransaction { tx ->
                         val store = tx.getStore("data")
                         for (entry in chunk) {
                             store.put(entry.keyAndTSN.toBytes(), entry.value)

@@ -40,7 +40,7 @@ object SerialReadWriteBenchmark {
         )
 
         ChronoStoreMode.ONDISK.withChronoStore(config) { chronoStore ->
-            chronoStore.transaction { tx ->
+            chronoStore.readWriteTransaction { tx ->
                 tx.createNewStore("test")
                 tx.commit()
             }
@@ -50,7 +50,7 @@ object SerialReadWriteBenchmark {
             log.info { "Starting writer." }
             measureTimeMillis {
                 repeat(NUMBER_OF_COMMITS) { c ->
-                    chronoStore.transaction { tx ->
+                    chronoStore.readWriteTransaction { tx ->
                         val store = tx.getStore("test")
                         repeat(WRITES_PER_COMMIT) { i ->
                             val keyBytes = BasicBytes(uniqueKeys.random())
@@ -87,7 +87,7 @@ object SerialReadWriteBenchmark {
             var totalSize = 0L
             measureTimeMillis {
                 repeat(NUMBER_OF_READS) { r ->
-                    totalSize += chronoStore.transaction { tx ->
+                    totalSize += chronoStore.readWriteTransaction { tx ->
                         val store = tx.getStore("test")
                         val keyBytes = BasicBytes(uniqueKeys.random())
                         store.withCursor { cursor ->

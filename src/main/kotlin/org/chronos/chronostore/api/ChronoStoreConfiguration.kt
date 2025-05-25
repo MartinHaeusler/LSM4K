@@ -14,6 +14,8 @@ import org.chronos.chronostore.util.unit.BinarySize.Companion.MiB
 import java.lang.foreign.MemorySegment
 import java.nio.channels.FileChannel
 import kotlin.math.max
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 
 class ChronoStoreConfiguration(
 
@@ -273,7 +275,17 @@ class ChronoStoreConfiguration(
      * this limit may be temporarily exceeded.
      */
     val walBufferSize: BinarySize = 128.MiB,
-) {
+
+    /**
+     * When opening a [read-write][ChronoStore.beginReadWriteTransaction] or [exclusive][ChronoStore.beginExclusiveTransaction] exception,
+     * this argument determines the default timeout to wait for the required lock.
+     *
+     * This value can be overridden on a per-transaction basis by passing an explicit argument to the [ChronoStore.beginReadWriteTransaction] / [ChronoStore.beginExclusiveTransaction]
+     * method.
+     */
+    val defaultLockAcquisitionTimeout: Duration = 10.seconds,
+
+    ) {
 
     init {
         require(this.maxWriteAheadLogFileSize.bytes > 0) { "Cannot use a negative value for 'maxWriteAheadLogFileSize'!" }

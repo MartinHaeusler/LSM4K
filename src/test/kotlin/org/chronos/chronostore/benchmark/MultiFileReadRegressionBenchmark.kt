@@ -30,13 +30,13 @@ object MultiFileReadRegressionBenchmark {
         )
 
         ChronoStoreMode.ONDISK.withChronoStore(config) { chronoStore ->
-            chronoStore.transaction { tx ->
+            chronoStore.readWriteTransaction { tx ->
                 tx.createNewStore("test")
                 tx.commit()
             }
 
             repeat(10) {
-                chronoStore.transaction { tx ->
+                chronoStore.readWriteTransaction { tx ->
                     val store = tx.getStore("test")
                     repeat(10_000) { index ->
                         store.put(Bytes.stableInt(index), Bytes.random(random, 10.KiB.bytes.toInt()))
@@ -55,7 +55,7 @@ object MultiFileReadRegressionBenchmark {
             // delete the files which are now unused
             chronoStore.garbageCollectionSynchronous()
 
-            val numberOfFiles = chronoStore.transaction { tx ->
+            val numberOfFiles = chronoStore.readWriteTransaction { tx ->
                 val store = tx.getStore("test")
                 val list = (store as TransactionalStoreInternal).store.directory.list().filter { it.endsWith(LSMTreeFile.FILE_EXTENSION) }
                 list.forEach { println(it) }
@@ -68,7 +68,7 @@ object MultiFileReadRegressionBenchmark {
             repeat(30) { runIndex ->
                 entriesInHead = 0
                 val timeBefore = System.currentTimeMillis()
-                chronoStore.transaction { tx ->
+                chronoStore.readWriteTransaction { tx ->
                     val store = tx.getStore("test")
                     store.withCursor { cursor ->
                         cursor.firstOrThrow()

@@ -8,7 +8,7 @@ import org.chronos.chronostore.util.TransactionId
 /**
  * A transaction on a [ChronoStore] instance.
  *
- * Transactions can be opened e.g. via [ChronoStore.beginTransaction] and need to be [closed][close] manually.
+ * Transactions can be opened e.g. via [ChronoStore.beginReadWriteTransaction] and need to be [closed][close] manually.
  *
  * There are three ways to close a transaction:
  *
@@ -44,6 +44,11 @@ interface ChronoStoreTransaction : AutoCloseable {
      * Returns `true` if the transaction is still open, or `false` if it has been [committed][commit] or [rolled back][rollback].
      */
     val isOpen: Boolean
+
+    /**
+     * Returns the [TransactionMode] of this transaction.
+     */
+    val mode: TransactionMode
 
     // =================================================================================================================
     // STORE MANAGEMENT

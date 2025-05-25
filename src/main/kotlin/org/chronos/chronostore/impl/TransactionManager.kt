@@ -4,7 +4,10 @@ import com.google.common.collect.MapMaker
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.chronos.chronostore.api.ChronoStoreTransaction
 import org.chronos.chronostore.api.StoreManager
+import org.chronos.chronostore.api.TransactionMode
 import org.chronos.chronostore.api.exceptions.CommitException
+import org.chronos.chronostore.api.exceptions.TransactionIsReadOnlyException
+import org.chronos.chronostore.api.exceptions.TransactionLockAcquisitionException
 import org.chronos.chronostore.impl.transaction.ChronoStoreTransactionImpl
 import org.chronos.chronostore.util.ManagerState
 import org.chronos.chronostore.util.StoreId
@@ -15,10 +18,14 @@ import org.chronos.chronostore.util.statistics.ChronoStoreStatistics
 import org.chronos.chronostore.util.unit.BinarySize.Companion.MiB
 import org.chronos.chronostore.wal.WriteAheadLog
 import java.util.concurrent.ConcurrentMap
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.locks.Condition
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 import kotlin.math.min
+import kotlin.time.Duration
 
 class TransactionManager(
     val storeManager: StoreManager,
@@ -45,6 +52,12 @@ class TransactionManager(
         .weakValues()
         .makeMap()
 
+    private val openReadWriteTransactions = AtomicInteger(0)
+    private val openExclusiveTransactions = AtomicInteger(0)
+
+    private val transactionCreationLock = ReentrantLock(true)
+    private val readWriteTransactionClosed: Condition = transactionCreationLock.newCondition()
+
     private val commitLock = ReentrantLock(true)
 
     private val transactionCounter = AtomicLong(0)
@@ -52,19 +65,105 @@ class TransactionManager(
     @Volatile
     private var state: ManagerState = ManagerState.OPEN
 
-    fun createNewTransaction(): ChronoStoreTransaction {
+
+    // =================================================================================================================
+    // TRANSACTION OPENING
+    // =================================================================================================================
+
+    fun createNewReadOnlyTransaction(): ChronoStoreTransaction {
         this.state.checkOpen()
+        // NOTE: read-only transactions do not require the transaction creation lock, because they can
+        // run in parallel to read-write transactions and exclusive transactions.
         ChronoStoreStatistics.TRANSACTIONS.incrementAndGet()
         this.transactionCounter.incrementAndGet()
         val newTx = ChronoStoreTransactionImpl(
             id = TransactionId.randomUUID(),
             lastVisibleSerialNumber = this.tsnManager.getLastReturnedTSN(),
+            mode = TransactionMode.READ_ONLY,
             storeManager = this.storeManager,
             transactionManager = this,
             createdAtWallClockTime = System.currentTimeMillis(),
         )
         this.openTransactions[newTx.id] = newTx
         return newTx
+    }
+
+    fun createNewReadWriteTransaction(lockAcquisitionTimeout: Duration?): ChronoStoreTransaction {
+        this.state.checkOpen()
+
+        val waitStart = System.currentTimeMillis()
+        val maxWaitTimeInMillis = lockAcquisitionTimeout?.inWholeMilliseconds ?: Long.MAX_VALUE
+        this.transactionCreationLock.withLock {
+            while (this.openExclusiveTransactions.get() > 0) {
+                // there's an exclusive transaction going on, we have to wait until it's done.
+
+                // is there any wait time left?
+                val now = System.currentTimeMillis()
+                val remainingTimeMillis = maxWaitTimeInMillis - (now - waitStart)
+
+                if (remainingTimeMillis <= 0) {
+                    throw TransactionLockAcquisitionException(
+                        "Could not create a read-write transaction within the configured" +
+                            " timeout (${lockAcquisitionTimeout}) due to an ongoing concurrent" +
+                            " exclusive transaction!"
+                    )
+                }
+                this.readWriteTransactionClosed.await(remainingTimeMillis, TimeUnit.MILLISECONDS)
+            }
+
+            // no concurrent exclusive transactions are going on -> let's create our transaction
+            ChronoStoreStatistics.TRANSACTIONS.incrementAndGet()
+            this.transactionCounter.incrementAndGet()
+            this.openReadWriteTransactions.incrementAndGet()
+            val newTx = ChronoStoreTransactionImpl(
+                id = TransactionId.randomUUID(),
+                lastVisibleSerialNumber = this.tsnManager.getLastReturnedTSN(),
+                mode = TransactionMode.READ_WRITE,
+                storeManager = this.storeManager,
+                transactionManager = this,
+                createdAtWallClockTime = System.currentTimeMillis(),
+            )
+            this.openTransactions[newTx.id] = newTx
+            return newTx
+        }
+    }
+
+    fun createNewExclusiveTransaction(lockAcquisitionTimeout: Duration?): ChronoStoreTransaction {
+        val waitStart = System.currentTimeMillis()
+        val maxWaitTimeInMillis = lockAcquisitionTimeout?.inWholeMilliseconds ?: Long.MAX_VALUE
+        this.transactionCreationLock.withLock {
+            while (this.openExclusiveTransactions.get() > 0 || this.openReadWriteTransactions.get() > 0) {
+                // there's an exclusive or read-write transaction going on, we have to wait until they're done.
+
+                // is there any wait time left?
+                val now = System.currentTimeMillis()
+                val remainingTimeMillis = maxWaitTimeInMillis - (now - waitStart)
+
+                if (remainingTimeMillis <= 0) {
+                    throw TransactionLockAcquisitionException(
+                        "Could not create an exclusive transaction within the configured" +
+                            " timeout (${lockAcquisitionTimeout}) due to an ongoing concurrent" +
+                            " exclusive or read-write transaction!"
+                    )
+                }
+                this.readWriteTransactionClosed.await(remainingTimeMillis, TimeUnit.MILLISECONDS)
+            }
+
+            // no concurrent exclusive transactions are going on -> let's create our transaction
+            ChronoStoreStatistics.TRANSACTIONS.incrementAndGet()
+            this.transactionCounter.incrementAndGet()
+            this.openExclusiveTransactions.incrementAndGet()
+            val newTx = ChronoStoreTransactionImpl(
+                id = TransactionId.randomUUID(),
+                lastVisibleSerialNumber = this.tsnManager.getLastReturnedTSN(),
+                mode = TransactionMode.EXCLUSIVE,
+                storeManager = this.storeManager,
+                transactionManager = this,
+                createdAtWallClockTime = System.currentTimeMillis(),
+            )
+            this.openTransactions[newTx.id] = newTx
+            return newTx
+        }
     }
 
     fun getSmallestOpenReadTSN(): TSN? {
@@ -77,9 +176,19 @@ class TransactionManager(
         return this.openTransactions.values.associate { it.id to it.lastVisibleSerialNumber }
     }
 
+
+    // =================================================================================================================
+    // TRANSACTION CLOSING
+    // =================================================================================================================
+
     fun performCommit(tx: ChronoStoreTransactionImpl): TSN {
         this.state.checkOpen()
-        this.commitLock.withLock {
+
+        if (tx.mode == TransactionMode.READ_ONLY) {
+            throw TransactionIsReadOnlyException("This transaction is read-only and cannot be committed! Please use rollback() or close() instead.")
+        }
+
+        val commitTSN = this.commitLock.withLock {
             val commitTSN = this.tsnManager.getUniqueTSN()
             this.storeManager.withStoreReadLock {
                 // ensure first that all stores are indeed writeable, otherwise we may
@@ -94,11 +203,27 @@ class TransactionManager(
                 this.applyTransactionToLSMTrees(commitTSN, tx)
             }
             log.trace { "Performed commit of transaction ${tx.id}. Transaction TSN: ${tx.lastVisibleSerialNumber}, commit TSN: ${commitTSN}." }
-            this.openTransactions.remove(tx.id)
-            tx.close()
-            ChronoStoreStatistics.TRANSACTION_COMMITS.incrementAndGet()
-            return commitTSN
+            commitTSN
         }
+        this.openTransactions.remove(tx.id)
+        tx.close()
+        ChronoStoreStatistics.TRANSACTION_COMMITS.incrementAndGet()
+        when (tx.mode) {
+            TransactionMode.READ_ONLY -> {
+                // no-op
+            }
+
+            TransactionMode.READ_WRITE -> this.transactionCreationLock.withLock {
+                this.openReadWriteTransactions.decrementAndGet()
+                this.readWriteTransactionClosed.signalAll()
+            }
+
+            TransactionMode.EXCLUSIVE -> this.transactionCreationLock.withLock {
+                this.openExclusiveTransactions.decrementAndGet()
+                this.readWriteTransactionClosed.signalAll()
+            }
+        }
+        return commitTSN
     }
 
     fun performRollback(tx: ChronoStoreTransactionImpl) {
@@ -165,6 +290,28 @@ class TransactionManager(
         }
     }
 
+    // =================================================================================================================
+    // STATUS REPORTING
+    // =================================================================================================================
+
+    fun report(): TransactionReport {
+        val oldestOpenTransactionCreatedAt = this.openTransactions.values.minOfOrNull { it.createdAtWallClockTime }
+        val oldestTransactionRuntime = if (oldestOpenTransactionCreatedAt == null) {
+            null
+        } else {
+            min(0L, System.currentTimeMillis() - oldestOpenTransactionCreatedAt)
+        }
+        return TransactionReport(
+            transactionsProcessed = this.transactionCounter.get(),
+            openTransactions = this.openTransactions.size,
+            longestOpenTransactionDurationInMilliseconds = oldestTransactionRuntime,
+        )
+    }
+
+    // =================================================================================================================
+    // CLOSE HANDLING
+    // =================================================================================================================
+
     override fun close() {
         this.closeInternal(ManagerState.CLOSED)
     }
@@ -182,20 +329,6 @@ class TransactionManager(
         for (transaction in this.openTransactions.values) {
             transaction.rollback()
         }
-    }
-
-    fun report(): TransactionReport {
-        val oldestOpenTransactionCreatedAt = this.openTransactions.values.minOfOrNull { it.createdAtWallClockTime }
-        val oldestTransactionRuntime = if (oldestOpenTransactionCreatedAt == null) {
-            null
-        } else {
-            min(0L, System.currentTimeMillis() - oldestOpenTransactionCreatedAt)
-        }
-        return TransactionReport(
-            transactionsProcessed = this.transactionCounter.get(),
-            openTransactions = this.openTransactions.size,
-            longestOpenTransactionDurationInMilliseconds = oldestTransactionRuntime,
-        )
     }
 
 }

@@ -32,7 +32,7 @@ object ChronoStoreTaxonomyDataRandomReadBenchmark {
         )
         ChronoStore.openOnDirectory(inputDir, configuration).use { chronoStore ->
             measureTimeMillis {
-                chronoStore.transaction { tx ->
+                chronoStore.readWriteTransaction { tx ->
                     val store = tx.getStore("data")
                     store.withCursor { cursor ->
                         cursor.firstOrThrow()
@@ -46,7 +46,7 @@ object ChronoStoreTaxonomyDataRandomReadBenchmark {
             timeBeforeRead = System.currentTimeMillis()
             repeat(REPETITIONS) { repetitionIndex ->
                 measureTimeMillis {
-                    chronoStore.transaction { tx ->
+                    chronoStore.readWriteTransaction { tx ->
                         val store = tx.getStore("data")
                         repeat(NUMBER_OF_READS) { readIndex ->
                             val keyToRead = if ((repetitionIndex + readIndex) % 100 == 0) {

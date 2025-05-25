@@ -4,6 +4,7 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 import org.chronos.chronostore.api.*
 import org.chronos.chronostore.api.compaction.CompactionStrategy
 import org.chronos.chronostore.api.exceptions.StoreNotFoundException
+import org.chronos.chronostore.api.exceptions.TransactionIsReadOnlyException
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.forEachWithMonitor
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.mainTask
@@ -148,7 +149,15 @@ class StoreManagerImpl(
     ): Store {
         this.state.checkOpen()
         check(transaction.isOpen) { "Argument 'transaction' must refer to an open transaction, but the given transaction has already been closed!" }
+        if (transaction.mode == TransactionMode.READ_ONLY) {
+            throw TransactionIsReadOnlyException(
+                "This transaction is read-only and cannot create new stores!" +
+                    " Please use a read-write transaction or exclusive transaction" +
+                    " to perform this operation instead."
+            )
+        }
         require(validFromTSN >= transaction.lastVisibleSerialNumber) { "Argument 'validFrom' (${validFromTSN}) must not be smaller than the transaction last visible TSN (${transaction.lastVisibleSerialNumber})!" }
+
         this.storeManagementLock.write {
             assertInitialized()
             require(!storeId.isSystemInternal) { "Store names must not start with '_' (reserved for internal purposes)!" }
@@ -231,6 +240,15 @@ class StoreManagerImpl(
 
     override fun deleteStore(transaction: ChronoStoreTransaction, storeId: StoreId): Boolean {
         this.state.checkOpen()
+
+        if (transaction.mode == TransactionMode.READ_ONLY) {
+            throw TransactionIsReadOnlyException(
+                "This transaction is read-only and cannot delete stores!" +
+                    " Please use a read-write transaction or exclusive transaction" +
+                    " to perform this operation instead."
+            )
+        }
+
         this.storeManagementLock.write {
             assertInitialized()
             val store = this.getStoreByIdOrNull(transaction, storeId)

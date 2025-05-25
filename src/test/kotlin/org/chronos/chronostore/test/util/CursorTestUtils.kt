@@ -4,6 +4,7 @@ import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.model.command.KeyAndTSN
 import org.chronos.chronostore.model.command.OpCode
 import org.chronos.chronostore.util.cursor.Cursor
+import org.chronos.chronostore.util.cursor.EmptyCursor
 import org.chronos.chronostore.util.cursor.IndexBasedCursor
 import strikt.api.Assertion
 import strikt.assertions.isEqualTo
@@ -38,7 +39,14 @@ object CursorTestUtils {
         return cursorOn("List Cursor", *entries)
     }
 
+    fun <K : Comparable<K>, V> cursorOn(entries: List<Pair<K, V>>): Cursor<K, V> {
+        return cursorOn("List Cursor", *entries.toTypedArray())
+    }
+
     fun <K : Comparable<K>, V> cursorOn(name: String, vararg entries: Pair<K, V>): Cursor<K, V> {
+        if (entries.isEmpty()) {
+            return EmptyCursor(getCursorName = { name })
+        }
         val list = entries.sortedBy { it.first }
         return IndexBasedCursor(
             minIndex = 0,

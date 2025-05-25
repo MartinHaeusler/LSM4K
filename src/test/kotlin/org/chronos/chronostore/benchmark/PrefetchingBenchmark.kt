@@ -47,13 +47,13 @@ object PrefetchingBenchmark {
 
                 println("Inserting data...")
 
-                chronoStore.beginTransaction().use { tx ->
+                chronoStore.beginReadWriteTransaction().use { tx ->
                     tx.createNewStore("benchmark")
                     tx.commit()
                 }
 
                 repeat(NUMBER_OF_COMMITS) { commitIndex ->
-                    chronoStore.beginTransaction().use { tx ->
+                    chronoStore.beginReadWriteTransaction().use { tx ->
                         println("Transaction #${commitIndex + 1} started.")
 
                         val store = tx.getStore("benchmark")
