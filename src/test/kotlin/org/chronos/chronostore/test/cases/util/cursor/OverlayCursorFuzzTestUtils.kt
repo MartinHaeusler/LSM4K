@@ -3,23 +3,11 @@ package org.chronos.chronostore.test.cases.util.cursor
 import org.chronos.chronostore.test.util.CursorTestUtils.cursorOn
 import org.chronos.chronostore.util.ResourceContext
 import org.chronos.chronostore.util.cursor.Cursor
-import org.chronos.chronostore.util.cursor.OverlayCursor.Companion.overlayOnto
+import org.chronos.chronostore.util.cursor.OverlayCursor
+import org.junit.jupiter.api.fail
 import java.util.*
 
 object OverlayCursorFuzzTestUtils {
-
-    fun <K : Comparable<*>, V> treeMapOf(): TreeMap<K, V> {
-        return TreeMap()
-    }
-
-    fun <K : Comparable<*>, V> treeMapOf(vararg entries: Pair<K, V>): TreeMap<K, V> {
-        val map = TreeMap<K, V>()
-        for (entry in entries) {
-            map[entry.first] = entry.second
-        }
-        return map
-    }
-
 
     @JvmStatic
     fun runOverlayCursorTestCase(
@@ -29,10 +17,35 @@ object OverlayCursorFuzzTestUtils {
         allKeys: Set<String>,
         nonExistingKeys: Set<String>,
     ) {
+        this.runOverlayCursorTestCase(
+            baseMap = baseMap,
+            overlayMaps = listOf(overlayMap),
+            resultMap = resultMap,
+            allKeys = allKeys,
+            nonExistingKeys = nonExistingKeys,
+        )
+    }
+
+    @JvmStatic
+    fun runOverlayCursorTestCase(
+        baseMap: Map<String, String>,
+        overlayMaps: List<Map<String, String?>>,
+        resultMap: NavigableMap<String, String>,
+        allKeys: Set<String>,
+        nonExistingKeys: Set<String>,
+    ) {
         ResourceContext.using {
             val base = cursorOn(baseMap.toList()).autoClose()
-            val overlay = cursorOn(overlayMap.toList()).autoClose()
-            val cursor = overlay.overlayOnto(base).autoClose()
+            val overlays = overlayMaps.map { cursorOn(it.toList()).autoClose() }
+            // val cursor = overlay.overlayOnto(base).autoClose()
+
+            val cursorList = mutableListOf<Cursor<String, String?>>()
+
+            @Suppress("UNCHECKED_CAST") // actually safe, we permit additional nullability to make the compiler happy, but we don't need it
+            cursorList += base as Cursor<String, String?>
+            cursorList += overlays
+
+            val cursor = OverlayCursor(cursorList)
 
             // get the first entry
             firstEntryTest(resultMap, cursor)
@@ -51,7 +64,7 @@ object OverlayCursorFuzzTestUtils {
             // - iterate upwards until the last (collecting entries)
             // - iterate backwards until the first (collecting entries)
             // - iterate backwards until the last (collecting entries)
-            entriesAscendingDescendingAscendingTest(resultMap, cursor)
+            runUpAndDownAndUpAgainTest(resultMap, cursor)
 
             // try to perform "exactOrNext" and "exactOrPrevious" with all keys existing in the map
             seekExactlyOrNeighborForExistingKeysTest(allKeys, resultMap, cursor)
@@ -85,10 +98,13 @@ object OverlayCursorFuzzTestUtils {
         assertOperationResultEquals("listAllEntriesDescending", expectedListAllDescending, actualListAllDescending)
     }
 
-    private fun entriesAscendingDescendingAscendingTest(resultMap: NavigableMap<String, String>, cursor: Cursor<String, String>) {
+    private fun runUpAndDownAndUpAgainTest(resultMap: NavigableMap<String, String>, cursor: Cursor<String, String>) {
         if (resultMap.isNotEmpty()) {
             cursor.firstOrThrow()
             val run1 = cursor.ascendingEntrySequenceFromHere(true).toList()
+            if (!cursor.isValidPosition) {
+                fail("Cursor position is invalid after ascendingEntrySequenceFromHere")
+            }
             val run2 = cursor.descendingEntrySequenceFromHere(true).toList()
             val run3 = cursor.ascendingEntrySequenceFromHere(true).toList()
 
@@ -135,7 +151,7 @@ object OverlayCursorFuzzTestUtils {
 
     private fun assertOperationResultEquals(operationName: String, expectedResult: Any?, actualResult: Any?) {
         if (expectedResult != actualResult) {
-            AssertionError("Operation '${operationName}' failed. Expected: ${expectedResult}, actual: ${actualResult}")
+            throw AssertionError("Operation '${operationName}' failed. Expected: ${expectedResult}, actual: ${actualResult}")
         }
     }
 

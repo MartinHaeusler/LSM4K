@@ -26,21 +26,26 @@ class OverlayCursorFuzzTest {
                 "${it}-base"
             }
 
-            val overlayMapSize = Random.nextInt(0..allKeys.size)
-            val overlayMap = allKeys.selectUniqueRandomSample(overlayMapSize).associateWith {
-                if (Random.nextBoolean()) {
-                    "${it}-overlay"
-                } else {
-                    null
+            // create the overlay maps
+            val overlayMaps = mutableListOf<Map<String, String?>>()
+            repeat(Random.nextInt(1..3)) {
+                val overlayMapSize = Random.nextInt(0..allKeys.size)
+                val overlayMap = allKeys.selectUniqueRandomSample(overlayMapSize).associateWith {
+                    if (Random.nextBoolean()) {
+                        "${it}-overlay"
+                    } else {
+                        null
+                    }
                 }
+                overlayMaps += overlayMap
             }
 
-            val resultMap = buildExpectedResultMap(baseMap, overlayMap)
+            val resultMap = buildExpectedResultMap(baseMap, overlayMaps)
 
             try {
                 OverlayCursorFuzzTestUtils.runOverlayCursorTestCase(
                     baseMap = baseMap,
-                    overlayMap = overlayMap,
+                    overlayMaps = overlayMaps,
                     resultMap = resultMap,
                     allKeys = allKeys,
                     nonExistingKeys = nonExistingKeys,
@@ -49,22 +54,16 @@ class OverlayCursorFuzzTest {
                 println("A ${t::class.simpleName} occurred during a fuzz test:")
                 println(t.stackTraceToString())
 
-                printTestSetup(baseMap, overlayMap)
-
-                // generate the code for the stand-alone test case
-                println()
-                println()
-                println("GENERATED TEST CODE:")
-                println()
-                println()
-                println(generateSampleTestSourceCode(allKeys, nonExistingKeys, baseMap, overlayMap, resultMap))
-                println()
-                println()
-
-                // sleep a little to avoid mixing up the logs (err vs. out)
                 Thread.sleep(100)
+                val generatedSampleTestCode = generateSampleTestSourceCode(allKeys, nonExistingKeys, baseMap, overlayMaps, resultMap)
 
-                fail("Test iteration #${iteration} failed. Please refer to the logs for the exact reason and the test data.")
+                fail(
+                    "Test iteration #${iteration} failed due to a ${t::class.simpleName}." +
+                        " Please refer to the logs for the exact reason and the test data.\n\n" +
+                        "${testSetupToString(baseMap, overlayMaps)}\n\n" +
+                        "GENERATED TEST CODE:\n\n" +
+                        generatedSampleTestCode, t
+                )
             }
 
         }
@@ -75,7 +74,7 @@ class OverlayCursorFuzzTest {
         allKeys: Set<String>,
         nonExistingKeys: Set<String>,
         baseMap: Map<String, String>,
-        overlayMap: Map<String, String?>,
+        overlayMaps: List<Map<String, String?>>,
         resultMap: NavigableMap<String, String>,
     ): String {
 
@@ -85,11 +84,14 @@ class OverlayCursorFuzzTest {
             postfix = ",\n",
         ) { "${it.key.toKotlinCode()} to ${it.value.toKotlinCode()}" }
 
-        val overlayMapMembers = overlayMap.entries.joinToString(
-            prefix = "\n",
-            separator = ",\n",
-            postfix = ",\n"
-        ) { it.key.toKotlinCode() + " to " + it.value.toKotlinCode() }
+        val overlayMapsCode = overlayMaps.joinToString(prefix = "listOf(", separator = ", ", postfix = ")") { overlayMap ->
+            overlayMap.entries.joinToString(
+                prefix = "\nmapOf(",
+                separator = ",\n",
+                postfix = ",\n),",
+            ) { it.key.toKotlinCode() + " to " + it.value.toKotlinCode() }
+        }
+
 
         val resultMapMembers = resultMap.entries.joinToString(
             prefix = "\n",
@@ -97,7 +99,7 @@ class OverlayCursorFuzzTest {
             postfix = ",\n"
         ) { it.key.toKotlinCode() + " to " + it.value.toKotlinCode() }
 
-        val table = createOverviewTable(baseMap, overlayMap, resultMap)
+        val table = createOverviewTable(baseMap, overlayMaps, resultMap)
 
         val tableAsComment = table.toString().lines().joinToString(separator = "\n") { "//  ${it}" }
 
@@ -110,12 +112,12 @@ class OverlayCursorFuzzTest {
                 val allKeys = setOf(${allKeys.joinToString(separator = ", ") { it.toKotlinCode() }})
                 val nonExistingKeys = setOf(${nonExistingKeys.joinToString(separator = ", ") { it.toKotlinCode() }})
                 val baseMap = mapOf(${baseMapMembers})
-                val overlayMap = mapOf($overlayMapMembers)
+                val overlayMaps = $overlayMapsCode
                 val resultMap = treeMapOf($resultMapMembers)
             
                 runOverlayCursorTestCase(
                     baseMap = baseMap,
-                    overlayMap = overlayMap,
+                    overlayMaps = overlayMaps,
                     resultMap = resultMap,
                     allKeys = allKeys,
                     nonExistingKeys = nonExistingKeys,
@@ -126,25 +128,29 @@ class OverlayCursorFuzzTest {
 
     private fun createOverviewTable(
         baseMap: Map<String, String>,
-        overlayMap: Map<String, String?>,
+        overlayMaps: List<Map<String, String?>>,
         resultMap: NavigableMap<String, String>,
     ): StringBuilder {
         val overviewMembers = mutableListOf<OverviewMember>()
 
-        for (key in (baseMap.keys + overlayMap.keys).sorted()) {
+        val allKeys = (baseMap.keys + overlayMaps.flatMap { it.keys }).distinct().sorted()
+
+        for (key in allKeys) {
             val base = baseMap[key] ?: " "
-            val overlay = if (overlayMap.contains(key)) {
-                overlayMap[key] ?: "<delete>"
-            } else {
-                " "
+            val overlays = overlayMaps.map { overlayMap ->
+                if (overlayMap.contains(key)) {
+                    overlayMap[key] ?: "<delete>"
+                } else {
+                    " "
+                }
             }
             val result = resultMap[key] ?: "<skip>"
-            overviewMembers += OverviewMember(key, base, overlay, result)
+            overviewMembers += OverviewMember(key, base, overlays, result)
         }
 
         val keyColumnWidth = max("KEY".length, overviewMembers.maxOfOrNull { it.key.length } ?: 0)
         val baseColumnWidth = max("BASE".length, overviewMembers.maxOfOrNull { it.base.length } ?: 0)
-        val overlayColumnWidth = max("OVERLAY".length, overviewMembers.maxOfOrNull { it.overlay.length } ?: 0)
+        val overlayColumnWidths = overlayMaps.indices.map { index -> max("OVERLAY ${index}".length, overviewMembers.map { it.overlays[index] }.maxOfOrNull { it.length } ?: 0) }
         val resultColumnWidth = max("RESULT".length, overviewMembers.maxOfOrNull { it.result.length } ?: 0)
 
         val table = StringBuilder()
@@ -152,17 +158,22 @@ class OverlayCursorFuzzTest {
         table.append("   ")
         table.append("BASE".padEnd(baseColumnWidth))
         table.append("   ")
-        table.append("OVERLAY".padEnd(overlayColumnWidth))
-        table.append("   ")
+        overlayColumnWidths.mapIndexed { index, width ->
+            table.append("OVERLAY ${index}".padEnd(width))
+            table.append("   ")
+        }
         table.append("RESULT".padEnd(resultColumnWidth))
         table.append("\n")
-        for ((key, base, overlay, result) in overviewMembers) {
+        for ((key, base, overlays, result) in overviewMembers) {
             table.append(key.padEnd(keyColumnWidth))
             table.append("   ")
             table.append(base.padEnd(baseColumnWidth))
             table.append("   ")
-            table.append(overlay.padEnd(overlayColumnWidth))
-            table.append("   ")
+            for ((index, overlay) in overlays.withIndex()) {
+                val width = overlayColumnWidths[index]
+                table.append(overlay.padEnd(width))
+                table.append("   ")
+            }
             table.append(result.padEnd(resultColumnWidth))
             table.append("\n")
         }
@@ -177,25 +188,30 @@ class OverlayCursorFuzzTest {
         }
     }
 
-    private fun printTestSetup(baseMap: Map<String, String>, overlayMap: Map<String, String?>) {
-        println()
-        println()
-        println("Fuzz test setup:")
-        println("Base Map: ${baseMap.entries.joinToString(prefix = "[", separator = ", ", postfix = "]") { "${it.key}: ${it.value}" }}")
-        println("Overlay Map: ${overlayMap.entries.joinToString(prefix = "[", separator = ", ", postfix = "]") { "${it.key}: ${it.value}" }}")
+    private fun testSetupToString(baseMap: Map<String, String>, overlayMaps: List<Map<String, String?>>): String {
+        return """Fuzz test setup:
+            |    Base Map: ${baseMap.entries.joinToString(prefix = "[", separator = ", ", postfix = "]") { "${it.key}: ${it.value}" }}
+            |    ${
+            overlayMaps.withIndex().joinToString(separator = "\n    ") { (index, overlayMap) ->
+                "Overlay Map #${index}: ${overlayMap.entries.joinToString(prefix = "[", separator = ", ", postfix = "]") { "${it.key}: ${it.value}" }}"
+            }
+        }
+        """.trimMargin()
     }
 
     private fun buildExpectedResultMap(
         baseMap: Map<String, String>,
-        overlayMap: Map<String, String?>,
+        overlayMaps: List<Map<String, String?>>,
     ): NavigableMap<String, String> {
         val resultMap = TreeMap<String, String>()
         resultMap += baseMap
-        for ((key, value) in overlayMap) {
-            if (value == null) {
-                resultMap.remove(key)
-            } else {
-                resultMap[key] = value
+        for (overlayMap in overlayMaps) {
+            for ((key, value) in overlayMap) {
+                if (value == null) {
+                    resultMap.remove(key)
+                } else {
+                    resultMap[key] = value
+                }
             }
         }
 
@@ -219,7 +235,7 @@ class OverlayCursorFuzzTest {
     data class OverviewMember(
         val key: String,
         val base: String,
-        val overlay: String,
+        val overlays: List<String>,
         val result: String,
     )
 }

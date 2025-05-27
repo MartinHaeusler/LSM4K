@@ -1,582 +1,455 @@
 package org.chronos.chronostore.util.cursor
 
-import org.chronos.chronostore.util.Order
 import org.chronos.chronostore.util.Order.ASCENDING
 import org.chronos.chronostore.util.Order.DESCENDING
-import org.chronos.chronostore.util.statistics.ChronoStoreStatistics
+import java.util.*
 
-open class OverlayCursor<K : Comparable<*>, V>(
-    base: Cursor<K, V>,
-    overlay: Cursor<K, V?>,
-) : CombiningCursor<Cursor<K, V>, Cursor<K, V?>, K, V>(
-    // apply "boundary checking" to the sub-cursors to avoid calling their "next()" and "previous()"
-    // methods too often. This results in efficiency gains if one of the cursors contains much more
-    // entries than the other, causing the smaller one to call "next()" / "previous()" constantly while
-    // returning false all the time.
-    cursorA = BoundaryCheckingCursor(base),
-    cursorB = BoundaryCheckingCursor(overlay)
-) {
+class OverlayCursor<K : Comparable<K>, V>(
+    /** An ordered list of cursors. The first has the lowest priority, the last has the highest priority. */
+    orderedCursors: List<Cursor<K, V?>>,
+) : Cursor<K, V> {
 
     companion object {
 
         @Suppress("UNCHECKED_CAST")
         @JvmName("overlayOntoNonNullable")
-        fun <K : Comparable<*>, V> Cursor<K, V>.overlayOnto(base: Cursor<K, V>): Cursor<K, V> {
-            return OverlayCursor(base = base, overlay = this as Cursor<K, V?>)
+        fun <K : Comparable<K>, V> Cursor<K, V>.overlayOnto(base: Cursor<K, V>): Cursor<K, V> {
+            return OverlayCursor(base as Cursor<K, V?>, this as Cursor<K, V?>)
         }
 
+        @Suppress("UNCHECKED_CAST")
         @JvmName("overlayOntoNullable")
-        fun <K : Comparable<*>, V> Cursor<K, V?>.overlayOnto(base: Cursor<K, V>): Cursor<K, V> {
-            return OverlayCursor(base = base, overlay = this)
+        fun <K : Comparable<K>, V> Cursor<K, V?>.overlayOnto(base: Cursor<K, V>): Cursor<K, V> {
+            return OverlayCursor(base as Cursor<K, V?>, this)
         }
 
-        fun <K : Comparable<*>, V> Cursor<K, V>.overlayUnder(overlay: Cursor<K, V?>): Cursor<K, V> {
-            return OverlayCursor(base = this, overlay = overlay)
+        @Suppress("UNCHECKED_CAST")
+        fun <K : Comparable<K>, V> Cursor<K, V>.overlayUnder(overlay: Cursor<K, V?>): Cursor<K, V> {
+            return OverlayCursor(this as Cursor<K, V?>, overlay)
         }
 
     }
 
-    override var keyOrNullInternal: K? = null
-    override var valueOrNullInternal: V? = null
+    private val cursorsByPriority: List<Cursor<K, V?>> = orderedCursors
+
+    private val cursorToPriority = IdentityHashMap<Cursor<K, V?>, Int>()
+
+    private val cursorsByKeyAscending: NavigableSet<Cursor<K, V?>>
+
+    private var currentDirection = ASCENDING
+
+    override var modCount: Long = 0
+
+    override var isOpen: Boolean = true
+
+    override var isValidPosition: Boolean = false
+
+    private val closeHandlers = mutableListOf<CloseHandler>()
+
+    override val keyOrNull: K?
+        get() {
+            this.assertNotClosed()
+            return this.keyOrNullInternal
+        }
+
+    override val valueOrNull: V?
+        get() {
+            this.assertNotClosed()
+            return this.valueOrNullInternal
+        }
+
+    private var keyOrNullInternal: K? = null
+    private var valueOrNullInternal: V? = null
+
+    constructor(vararg orderedCursors: Cursor<K, V?>) : this(listOf(*orderedCursors))
 
     init {
-        ChronoStoreStatistics.OVERLAY_CURSORS.incrementAndGet()
+        var priority = 0
+        for (cursor in this.cursorsByPriority) {
+            this.cursorToPriority[cursor] = priority
+            priority++
+        }
+        this.cursorsByKeyAscending = TreeSet(CursorByKeyAndPriorityComparator(this.cursorToPriority))
+        for (cursor in this.cursorsByPriority) {
+            this.cursorsByKeyAscending += cursor
+        }
+        this.invalidatePosition()
     }
 
-    override fun doFirst(): Boolean {
-        ChronoStoreStatistics.OVERLAY_CURSOR_FIRST_SEEKS.incrementAndGet()
-        // rewind the cursors to their first position. Both resulting keys are nullable,
-        // because both collections may be empty, causing "first()" to fail.
-        this.cursorA.firstAndReturnKey()
-        this.updateLastModifiedCursorA()
-
-        this.cursorB.firstAndReturnKey()
-        this.updateLastModifiedCursorB()
-
-        // did the overlay cursor remove our first key?
-        val found = skipAcrossDeletionsInOverlay(ASCENDING)
-        if (!found) {
-            this.invalidatePosition()
-            return false
+    override fun invalidatePosition() {
+        assertNotClosed()
+        for (cursor in this.cursorsByPriority) {
+            cursor.invalidatePosition()
         }
-
-        return this.evaluatePosition(
-            baseKey = this.cursorA.keyOrNull,
-            overlayKey = this.cursorB.keyOrNull,
-            order = ASCENDING,
-            invalidateIfBothKeysAreNull = true,
-        )
-    }
-
-    override fun doLast(): Boolean {
-        ChronoStoreStatistics.OVERLAY_CURSOR_LAST_SEEKS.incrementAndGet()
-        // rewind the cursors to their first position. Both resulting keys are nullable, because
-        // both collections may be empty, causing "last()" to fail.
-        this.cursorA.lastAndReturnKey()
-        this.updateLastModifiedCursorA()
-
-        this.cursorB.lastAndReturnKey()
-        this.updateLastModifiedCursorB()
-
-        // did the overlay cursor remove our last key?
-        val found = skipAcrossDeletionsInOverlay(DESCENDING)
-        if (!found) {
-            this.invalidatePosition()
-            return false
-        }
-
-        return evaluatePosition(
-            baseKey = this.cursorA.keyOrNull,
-            overlayKey = this.cursorB.keyOrNull,
-            order = DESCENDING,
-            invalidateIfBothKeysAreNull = true,
-        )
-    }
-
-    override fun doMove(direction: Order): Boolean {
-        when (direction) {
-            ASCENDING -> ChronoStoreStatistics.OVERLAY_CURSOR_NEXT_SEEKS.incrementAndGet()
-            DESCENDING -> ChronoStoreStatistics.OVERLAY_CURSOR_PREVIOUS_SEEKS.incrementAndGet()
-        }
-        if (!this.isValidPosition) {
-            // we're not in a valid position, therefore moving doesn't do
-            // anything by definition.
-            return false
-        }
-
-        val startKey = this.key
-
-        val currentBaseKey = this.cursorA.keyOrNull
-        val currentOverlayKey = this.cursorB.keyOrNull
-        val keyCmp = this.compareKeysNullsLast(currentBaseKey, currentOverlayKey, direction)
-
-        return when {
-            keyCmp == 0 -> doMoveSameInitialKey(direction, currentBaseKey, currentOverlayKey)
-            keyCmp < 0 -> doMoveBaseBehind(direction, startKey, currentBaseKey, currentOverlayKey)
-            else -> doMoveBaseAhead(direction, startKey, currentBaseKey, currentOverlayKey)
-        }
-    }
-
-    private fun doMoveSameInitialKey(direction: Order, currentBaseKey: K?, currentOverlayKey: K?): Boolean {
-        // both cursors are at the same key. Move them both once
-        val baseMoved = this.cursorA.move(direction)
-        val overlayMoved = this.cursorB.move(direction)
-
-        if (!baseMoved && !overlayMoved) {
-            // if neither cursor moved, both are at their last entry.
-            // -> we have nowhere to go.
-            return false
-        } else if (!baseMoved && overlayMoved) {
-            // base is out of options, use whatever overlay says (but skip over nulls)
-            while (this.cursorB.valueOrNull == null) {
-                if (!this.cursorB.move(direction)) {
-                    // we're out of data
-                    if (currentBaseKey != null) {
-                        this.cursorA.seekExactlyOrNext(currentBaseKey)
-                        this.cursorB.seekExactlyOrNext(currentBaseKey)
-                    }
-                    this.updateLastModifiedCursorA()
-                    this.updateLastModifiedCursorB()
-                    return false
-                }
-            }
-
-            this.markAsValidPosition(this.cursorB.key, this.cursorB.value)
-            this.updateLastModifiedCursorA()
-            this.updateLastModifiedCursorB()
-            return true
-        } else if (baseMoved && !overlayMoved) {
-            // overlay is out of options, use whatever the base says
-            this.markAsValidPosition(this.cursorA.key, this.cursorA.value)
-            this.updateLastModifiedCursorA()
-            this.updateLastModifiedCursorB()
-
-            return true
-        } else {
-            if (!this.skipAcrossDeletionsInOverlay(direction)) {
-                // due to deletions in the overlay, we don't have another valid
-                // entry to go to. In order to honor the contract of "move(...)"
-                // (which doesn't modify anything observably if it returns false),
-                // we reset our internal cursors.
-                if (currentBaseKey != null) {
-                    this.cursorA.seekExactlyOrNext(currentBaseKey)
-                }
-                if (currentOverlayKey != null) {
-                    this.cursorB.seekExactlyOrNext(currentOverlayKey)
-                }
-
-                // we can't go in this direction.
-                return false
-            }
-
-            this.updateLastModifiedCursorA()
-            this.updateLastModifiedCursorB()
-
-            return this.evaluatePosition(
-                baseKey = this.cursorA.keyOrNull,
-                overlayKey = this.cursorB.keyOrNull,
-                order = direction,
-                invalidateIfBothKeysAreNull = false,
-            )
-        }
-    }
-
-
-    private fun doMoveBaseAhead(direction: Order, startKey: K, currentBaseKey: K?, currentOverlayKey: K?): Boolean {
-        // the base cursor is "ahead".
-        val overlayMoved = this.cursorB.move(direction)
-
-        if (!overlayMoved) {
-            // the overlay cursor is exhausted. This can happen if the overlay cursor
-            // has more entries at the end of the range of the base cursor.
-            val baseMoved = this.cursorA.move(direction)
-            if (!baseMoved) {
-
-                val baseKey = this.cursorA.keyOrNull
-                if (this.compareKeysNullsLast(startKey, baseKey, direction) == 0) {
-                    // if neither cursor moved, both are at their last entry.
-                    // -> we have nowhere to go.
-                    return false
-                }
-
-                // we have one last key to report, which is the key in base (which was ahead)
-                if (baseKey != null) {
-                    this.keyOrNullInternal = baseKey
-                    this.valueOrNullInternal = this.cursorA.valueOrNull
-                    return true
-                }
-
-                return false
-            }
-            if (!this.skipAcrossDeletionsInOverlay(direction)) {
-                // due to deletions in the overlay, we don't have another valid
-                // entry to go to. In order to honor the contract of "move(...)"
-                // (which doesn't modify anything observably if it returns false),
-                // we reset our internal cursors.
-                if (currentBaseKey != null) {
-                    this.cursorA.seekExactlyOrNext(currentBaseKey)
-                }
-                if (currentOverlayKey != null) {
-                    this.cursorB.seekExactlyOrNext(currentOverlayKey)
-                }
-                this.updateLastModifiedCursorA()
-                this.updateLastModifiedCursorB()
-
-                // we can't go in this direction.
-                return false
-            }
-
-            this.markAsValidPosition(this.cursorA.key, this.cursorA.value)
-            this.updateLastModifiedCursorA()
-            this.updateLastModifiedCursorB()
-
-            return true
-        } else {
-            // we've managed to move the overlay cursor. It may now happen that the
-            // base cursor key coincides with the overlay cursor key and the overlay
-            // is a deletion. Move them if that's the case.
-            if (!this.skipAcrossDeletionsInOverlay(direction)) {
-                // due to deletions in the overlay, we don't have another valid
-                // entry to go to. In order to honor the contract of "move(...)"
-                // (which doesn't modify anything observably if it returns false),
-                // we reset our internal cursors.
-                if (currentBaseKey != null) {
-                    this.cursorA.seekExactlyOrNext(currentBaseKey)
-                }
-                if (currentOverlayKey != null) {
-                    this.cursorB.seekExactlyOrNext(currentOverlayKey)
-                }
-                this.updateLastModifiedCursorA()
-                this.updateLastModifiedCursorB()
-
-                // we can't go in this direction.
-                return false
-            }
-
-            this.updateLastModifiedCursorA()
-            this.updateLastModifiedCursorB()
-
-            return this.evaluatePosition(
-                baseKey = this.cursorA.keyOrNull,
-                overlayKey = this.cursorB.keyOrNull,
-                order = direction,
-                invalidateIfBothKeysAreNull = false,
-            )
-        }
-
-    }
-
-    private fun doMoveBaseBehind(direction: Order, startKey: K, currentBaseKey: K?, currentOverlayKey: K?): Boolean {
-        // the base cursor is "behind".
-        val baseMoved = this.cursorA.move(direction)
-
-        if (!baseMoved) {
-            // the base cursor is exhausted. This can happen if the overlay cursor
-            // has more entries at the end of the range of the base cursor.
-            val overlayMoved = this.cursorB.move(direction)
-            if (!overlayMoved) {
-                val overlayKey = this.cursorB.keyOrNull
-
-                // we have potentially one last key to report, which is the key in overlay (which was ahead)
-                if (this.compareKeysNullsLast(startKey, overlayKey, direction) == 0) {
-                    // if neither cursor moved, both are at their last entry.
-                    // -> we have nowhere to go.
-                    return false
-                }
-
-                val overlayValue = this.cursorB.valueOrNull
-                if (overlayKey != null && overlayValue != null) {
-                    this.keyOrNullInternal = overlayKey
-                    this.valueOrNullInternal = overlayValue
-                    return true
-                } else {
-                    return false
-                }
-            }
-
-            if (!this.skipAcrossDeletionsInOverlay(direction)) {
-                // due to deletions in the overlay, we don't have another valid
-                // entry to go to. In order to honor the contract of "move(...)"
-                // (which doesn't modify anything observably if it returns false),
-                // we reset our internal cursors.
-                if (currentBaseKey != null) {
-                    this.cursorA.seekExactlyOrNext(currentBaseKey)
-                }
-                if (currentOverlayKey != null) {
-                    this.cursorB.seekExactlyOrNext(currentOverlayKey)
-                }
-                this.updateLastModifiedCursorA()
-                this.updateLastModifiedCursorB()
-
-                // we can't go in this direction.
-                return false
-            }
-
-            while (this.cursorB.valueOrNull == null) {
-                if (!this.cursorB.move(direction)) {
-                    if (currentBaseKey != null) {
-                        this.cursorA.seekExactlyOrNext(currentBaseKey)
-                        this.cursorB.seekExactlyOrNext(currentBaseKey)
-                    }
-                    this.updateLastModifiedCursorA()
-                    this.updateLastModifiedCursorB()
-                    return false
-                }
-            }
-
-            this.markAsValidPosition(this.cursorB.key, this.cursorB.value)
-            this.updateLastModifiedCursorA()
-            this.updateLastModifiedCursorB()
-            return true
-        }
-
-        // we've managed to move the base cursor. It may now happen that the
-        // base cursor key coincides with the overlay cursor key and the overlay
-        // is a deletion. Move them if that's the case.
-        if (!this.skipAcrossDeletionsInOverlay(direction)) {
-            // due to deletions in the overlay, we don't have another valid
-            // entry to go to. In order to honor the contract of "move(...)"
-            // (which doesn't modify anything observably if it returns false),
-            // we reset our internal cursors.
-            if (currentBaseKey != null) {
-                this.cursorA.seekExactlyOrNext(currentBaseKey)
-            }
-            if (currentOverlayKey != null) {
-                this.cursorB.seekExactlyOrNext(currentOverlayKey)
-            }
-            this.updateLastModifiedCursorA()
-            this.updateLastModifiedCursorB()
-
-            // we can't go in this direction.
-            return false
-        }
-
-        this.updateLastModifiedCursorA()
-        this.updateLastModifiedCursorB()
-
-        return this.evaluatePosition(
-            baseKey = this.cursorA.keyOrNull,
-            overlayKey = this.cursorB.keyOrNull,
-            order = direction,
-            invalidateIfBothKeysAreNull = false,
-        )
-    }
-
-    override fun doSeekExactlyOrPrevious(key: K): Boolean {
-        ChronoStoreStatistics.OVERLAY_CURSOR_EXACTLY_OR_PREVIOUS_SEEKS.incrementAndGet()
-        var baseCursorKey = if (this.cursorA.seekExactlyOrPrevious(key)) {
-            this.cursorA.keyOrNull
-        } else {
-            null
-        }
-        this.updateLastModifiedCursorA()
-        var overlayCursorKey = if (this.cursorB.seekExactlyOrPrevious(key)) {
-            this.cursorB.keyOrNull
-        } else {
-            null
-        }
-        this.updateLastModifiedCursorB()
-
-        if (!this.skipAcrossDeletionsInOverlay(DESCENDING)) {
-            this.invalidatePosition()
-            return false
-        }
-
-        baseCursorKey = this.cursorA.keyOrNull
-        overlayCursorKey = this.cursorB.keyOrNull
-
-        // if only one of the two cursors has found nothing, we need to take an additional action in
-        // order to enable next()/previous() in further steps: We have to rewind the failed cursor to the beginning.
-        if (baseCursorKey == null && overlayCursorKey != null) {
-            this.cursorA.first()
-            this.updateLastModifiedCursorA()
-        } else if (baseCursorKey != null && overlayCursorKey == null) {
-            this.cursorB.first()
-            this.updateLastModifiedCursorB()
-        }
-
-        return this.evaluatePosition(baseCursorKey, overlayCursorKey, DESCENDING, invalidateIfBothKeysAreNull = true)
-    }
-
-
-    override fun doSeekExactlyOrNext(key: K): Boolean {
-        ChronoStoreStatistics.OVERLAY_CURSOR_EXACTLY_OR_NEXT_SEEKS.incrementAndGet()
-        var baseCursorKey = if (this.cursorA.seekExactlyOrNext(key)) {
-            this.cursorA.keyOrNull
-        } else {
-            null
-        }
-        this.updateLastModifiedCursorA()
-        var overlayCursorKey = if (this.cursorB.seekExactlyOrNext(key)) {
-            this.cursorB.keyOrNull
-        } else {
-            null
-        }
-        this.updateLastModifiedCursorB()
-
-        if (!this.skipAcrossDeletionsInOverlay(ASCENDING)) {
-            this.invalidatePosition()
-            return false
-        }
-
-        baseCursorKey = this.cursorA.keyOrNull
-        overlayCursorKey = this.cursorB.keyOrNull
-
-        // if only one of the two cursors has found nothing, we need to take an additional action in
-        // order to enable next()/previous() in further steps: We have to rewind the failed cursor to the end.
-        if (baseCursorKey == null && overlayCursorKey != null) {
-            this.cursorA.last()
-            this.updateLastModifiedCursorA()
-        } else if (baseCursorKey != null && overlayCursorKey == null) {
-            this.cursorB.last()
-            this.updateLastModifiedCursorB()
-        }
-
-        return this.evaluatePosition(baseCursorKey, overlayCursorKey, ASCENDING, invalidateIfBothKeysAreNull = true)
-    }
-
-    // =================================================================================================================
-    // HELPER METHODS
-    // =================================================================================================================
-
-    private fun skipAcrossDeletionsInOverlay(direction: Order): Boolean {
-        while (true) {
-            // first of all, skip deletions in the overlay cursor until the overlay cursor has the same key as base or is a head of base.
-            var changed = this.skipDeletionsInOverlayUntilSameAsOrAheadOfBase(direction)
-
-            // then, check if a deletion coincides with the base cursor. If so, skip ahead until the deletions no longer coincide
-            // and the two cursors can either produce a key, or have nowhere left to go.
-            while (this.cursorA.keyOrNull == this.cursorB.keyOrNull && this.cursorB.valueOrNull == null) {
-                // the overlay cursor removed this key. Move both cursors forward
-                val cursorAMoved = this.cursorA.move(direction)
-                val cursorBMoved = this.cursorB.move(direction)
-
-                changed = true
-
-                if (!cursorAMoved && !cursorBMoved) {
-                    // the overlay cursor eliminates all keys in the base cursor -> nothing left!
-                    this.updateLastModifiedCursorA()
-                    this.updateLastModifiedCursorB()
-                    return false
-                }
-            }
-
-            if (!changed) {
-                // skipping ahead changed nothing, and the same-key-elimination didn't apply
-                break
-            }
-        }
-        // we've found a position that seems valid.
-        this.updateLastModifiedCursorA()
-        this.updateLastModifiedCursorB()
-        return true
-    }
-
-    private fun skipDeletionsInOverlayUntilSameAsOrAheadOfBase(direction: Order): Boolean {
-        var changed = false
-        while (compareKeysNullsLast(this.cursorA.keyOrNull, this.cursorB.keyOrNull, direction) > 0 && this.cursorB.valueOrNull == null) {
-            changed = true
-            // the overlay cursor contains deletions for which there is no corresponding entry in the base,
-            // skip them.
-            if (!cursorB.move(direction)) {
-                // overlay cursor ran out of entries
-                cursorB.invalidatePosition()
-                return true
-            }
-        }
-        return changed
-    }
-
-    private fun evaluatePosition(baseKey: K?, overlayKey: K?, order: Order, invalidateIfBothKeysAreNull: Boolean): Boolean {
-        if (baseKey == null && overlayKey == null) {
-            return if (invalidateIfBothKeysAreNull) {
-                // both cursors are empty -> this combined cursor has no keys to iterate over.
-                this.markAsInvalidPosition()
-            } else {
-                // we remain in a valid position (i.e. key, value, and isValidPosition remain unchanged), we just can't go further.
-                // This is the case when we hit the "edge" of the keyspace and next()/previous() is called in the direction for which
-                // we have no more keys.
-                false
-            }
-        }
-
-        val comparison = this.compareKeysNullsLast(baseKey, overlayKey, order)
-        return if (comparison < 0) {
-            // the base cursor has a predecessor key that doesn't appear in the overlay, use that.
-            this.markAsValidPosition(baseKey!!, this.cursorA.valueOrNull)
-        } else {
-            // the base cursor either has the same key as the overlay, or the overlay has a key
-            // that doesn't appear in the base cursor. Either way, we have to use the overlay cursor.
-            this.markAsValidPosition(overlayKey!!, this.cursorB.valueOrNull)
-        }
-    }
-
-    private fun markAsInvalidPosition(): Boolean {
         this.isValidPosition = false
-        this.keyOrNullInternal = null
-        this.valueOrNullInternal = null
-        return false
     }
 
-    private fun markAsValidPosition(key: K, value: V?): Boolean {
-        this.isValidPosition = true
-        this.keyOrNullInternal = key
-        this.valueOrNullInternal = value
-        return true
+    override fun first(): Boolean {
+        this.assertNotClosed()
+
+        // reset all cursors to the start
+        this.cursorsByKeyAscending.clear()
+        for (cursor in this.cursorsByPriority) {
+            if (cursor.first()) {
+                this.cursorsByKeyAscending += cursor
+            }
+        }
+
+        if (this.cursorsByKeyAscending.isEmpty()) {
+            // none of our cursors is valid after calling "first()" -> they're all empty!
+            this.invalidatePosition()
+            return false
+        }
+
+        // remember that we're going in ascending direction
+        this.currentDirection = ASCENDING
+
+        return findValidNextHigherEntry()
     }
 
-    @Suppress("UNCHECKED_CAST")
-    private fun compareKeysNullsLast(key1: K?, key2: K?, order: Order): Int {
-        return when {
-            key1 == null && key2 == null -> 0
-            key1 != null && key2 == null -> -1
-            key1 == null && key2 != null -> +1
-            else -> when (order) {
-                ASCENDING -> (key1 as Comparable<Any>).compareTo(key2!!)
-                DESCENDING -> (key2 as Comparable<Any>).compareTo(key1!!)
+    override fun last(): Boolean {
+        this.assertNotClosed()
+        // reset all cursors to the start
+        this.cursorsByPriority.forEach { it.last() }
+        // order has changed, re-insert the non-empty ones into the tree
+        // (we don't care about the invalid ones, they point to empty keyspaces)
+        this.cursorsByKeyAscending.clear()
+        for (cursor in this.cursorsByPriority) {
+            if (cursor.isValidPosition) {
+                this.cursorsByKeyAscending += cursor
+            }
+        }
+
+        if (this.cursorsByKeyAscending.isEmpty()) {
+            // none of our cursors is valid after calling "last()" -> they're all empty!
+            this.invalidatePosition()
+            return false
+        }
+
+        // remember that we're going in ascending direction
+        this.currentDirection = DESCENDING
+
+        return findValidNextLowerEntry()
+    }
+
+    private fun prepareForAscendingMove() {
+        if (this.currentDirection == ASCENDING) {
+            // we're already on the ascending track -> nothing to do
+            return
+        }
+        // direction change -> reset the cursors to arrive at the regular state we would
+        // have during ascending iteration.
+        val currentKey = this.key
+        this.cursorsByKeyAscending.clear()
+        for (cursor in this.cursorsByPriority) {
+            if (!cursor.isValidPosition) {
+                if (cursor.seekExactlyOrNext(currentKey)) {
+                    this.cursorsByKeyAscending += cursor
+                }
+            } else {
+                while (cursor.key < currentKey) {
+                    if (!cursor.next()) {
+                        cursor.invalidatePosition()
+                        break
+                    }
+                }
+                if (cursor.isValidPosition) {
+                    this.cursorsByKeyAscending += cursor
+                }
             }
         }
     }
 
-
-    @JvmName("firstAndReturnKeyNonNullable")
-    private fun Cursor<K, V>.firstAndReturnKey(): K? {
-        return if (this.first()) {
-            this.keyOrNull
-        } else {
-            null
+    private fun prepareForDescendingMove() {
+        if (this.currentDirection == DESCENDING) {
+            // we're already on the descending track -> nothing to do.
+            return
+        }
+        // direction change -> reset the cursors to arrive at the regular state we would
+        // have during descending iteration.
+        val currentKey = this.key
+        this.cursorsByKeyAscending.clear()
+        for (cursor in this.cursorsByPriority) {
+            if (!cursor.isValidPosition) {
+                if (cursor.seekExactlyOrPrevious(currentKey)) {
+                    this.cursorsByKeyAscending += cursor
+                }
+            } else {
+                while (cursor.key > currentKey) {
+                    if (!cursor.previous()) {
+                        cursor.invalidatePosition()
+                        break
+                    }
+                }
+                if (cursor.isValidPosition) {
+                    this.cursorsByKeyAscending += cursor
+                }
+            }
         }
     }
 
-    @JvmName("firstAndReturnKeyNullable")
-    private fun Cursor<K, V?>.firstAndReturnKey(): K? {
-        return if (this.first()) {
-            this.keyOrNull
-        } else {
-            null
+    private fun findValidNextLowerEntry(max: K? = null): Boolean {
+        // did we change direction?
+        this.prepareForDescendingMove()
+
+        while (true) {
+            // take the smallest key, check which other cursors point at exactly the same key
+            val currentKey = this.cursorsByKeyAscending.last().key
+            val maxPriorityCursor = this.cursorsByKeyAscending.reversed().asSequence()
+                .takeWhile { it.key == currentKey }
+                // among the contributing cursors, decide which value to use via the override order
+                .maxByPriorityOrThrow()
+
+            // check the cursor with the highest priority. Is the value a deletion?
+            val value = maxPriorityCursor.valueOrNull
+            if (value != null && (max == null || currentKey < max)) {
+                // the value is not a deletion; we've found our valid position.
+                this.currentDirection = DESCENDING
+                markValidPosition(currentKey, value)
+                return true
+            } else {
+                // the value is a deletion according to an overlay. Move to the next-lower value.
+                while (this.cursorsByKeyAscending.isNotEmpty() && this.cursorsByKeyAscending.last().key >= currentKey) {
+                    val cursor = this.cursorsByKeyAscending.removeLast()
+                    // fast-forward the cursor
+                    while (cursor.key >= currentKey) {
+                        if (!cursor.previous()) {
+                            // don't add the cursor back into the tree, invalidate it
+                            cursor.invalidatePosition()
+                            break
+                        }
+                    }
+                    if (cursor.isValidPosition) {
+                        // re-add the cursor into the tree
+                        this.cursorsByKeyAscending += cursor
+                    }
+                }
+                // are there any valid cursors left?
+                if (this.cursorsByKeyAscending.isEmpty()) {
+                    this.currentDirection = DESCENDING
+                    return false
+                }
+
+                // otherwise, retry with the next position
+                continue
+            }
         }
     }
 
-    @JvmName("lastAndReturnKeyNonNullable")
-    private fun Cursor<K, V>.lastAndReturnKey(): K? {
-        return if (this.last()) {
-            this.keyOrNull
-        } else {
-            null
+    private fun findValidNextHigherEntry(min: K? = null): Boolean {
+        // did we change direction?
+        prepareForAscendingMove()
+
+        while (true) {
+            // take the smallest key, check which other cursors point at exactly the same key
+            val currentKey = this.cursorsByKeyAscending.first().key
+            val maxPriorityCursor = this.cursorsByKeyAscending.asSequence()
+                .takeWhile { it.key == currentKey }
+                // among the contributing cursors, decide which value to use via the override order
+                .maxByPriorityOrThrow()
+
+            // check the cursor with the highest priority. Is the value a deletion?
+            val value = maxPriorityCursor.valueOrNull
+            if (value != null && (min == null || currentKey > min)) {
+                // the value is not a deletion; we've found our valid position.
+                this.currentDirection = ASCENDING
+                markValidPosition(currentKey, value)
+                return true
+            } else {
+                // the value is a deletion according to an overlay. Move to the next-higher value.
+                while (this.cursorsByKeyAscending.isNotEmpty() && this.cursorsByKeyAscending.first().key <= currentKey) {
+                    val cursor = this.cursorsByKeyAscending.removeFirst()
+                    // fast-forward the cursor
+                    while (cursor.key <= currentKey) {
+                        if (!cursor.next()) {
+                            // don't add the cursor back into the tree, invalidate it
+                            cursor.invalidatePosition()
+                            break
+                        }
+                    }
+                    if (cursor.isValidPosition) {
+                        // re-add the cursor into the tree
+                        if (!this.cursorsByKeyAscending.add(cursor)) {
+                            error("Cursor was already in the set!")
+                        }
+                    }
+                }
+                // are there any valid cursors left?
+                if (this.cursorsByKeyAscending.isEmpty()) {
+                    this.currentDirection = ASCENDING
+                    return false
+                }
+
+                // otherwise, retry with the next position
+                continue
+            }
         }
     }
 
-    @JvmName("lastAndReturnKeyNullable")
-    private fun Cursor<K, V?>.lastAndReturnKey(): K? {
-        return if (this.last()) {
-            this.keyOrNull
-        } else {
-            null
+    private fun markValidPosition(currentKey: K, value: V) {
+        this.keyOrNullInternal = currentKey
+        this.valueOrNullInternal = value
+        this.isValidPosition = true
+    }
+
+    override fun next(): Boolean {
+        this.assertNotClosed()
+        if (!this.isValidPosition) {
+            return false
         }
+
+        return this.findValidNextHigherEntry(this.key)
+    }
+
+    override fun previous(): Boolean {
+        this.assertNotClosed()
+        if (!this.isValidPosition) {
+            return false
+        }
+        return this.findValidNextLowerEntry(this.key)
+    }
+
+    override fun seekExactlyOrNext(key: K): Boolean {
+        this.assertNotClosed()
+        // reset all cursors to the start
+        this.cursorsByKeyAscending.clear()
+        for (cursor in this.cursorsByPriority) {
+            if (cursor.seekExactlyOrNext(key)) {
+                this.cursorsByKeyAscending += cursor
+            }
+        }
+
+        if (this.cursorsByKeyAscending.isEmpty()) {
+            // none of our cursors is valid after calling "seekExactlyOrNext()" -> no cursor has any data
+            this.invalidatePosition()
+            return false
+        }
+
+        // remember that we're going in ascending direction
+        this.currentDirection = ASCENDING
+
+        val found = findValidNextHigherEntry()
+        if (!found) {
+            this.invalidatePosition()
+        }
+        return found
+    }
+
+    override fun seekExactlyOrPrevious(key: K): Boolean {
+        this.assertNotClosed()
+        // reset all cursors to the start
+        this.cursorsByPriority.forEach { it.seekExactlyOrPrevious(key) }
+        // order has changed, re-insert the non-empty ones into the tree
+        // (we don't care about the invalid ones, they point to empty keyspaces)
+        this.cursorsByKeyAscending.clear()
+        for (cursor in this.cursorsByPriority) {
+            if (cursor.isValidPosition) {
+                this.cursorsByKeyAscending += cursor
+            }
+        }
+
+        if (this.cursorsByKeyAscending.isEmpty()) {
+            // none of our cursors is valid after calling "seekExactlyOrPrevious()" -> no cursor has any data
+            this.invalidatePosition()
+            return false
+        }
+
+        // remember that we're going in descending direction
+        this.currentDirection = DESCENDING
+
+        val found = findValidNextLowerEntry()
+        if (!found) {
+            this.invalidatePosition()
+        }
+        return found
+    }
+
+
+    override fun onClose(action: CloseHandler): Cursor<K, V> {
+        this.assertNotClosed()
+        this.closeHandlers += action
+        return this
+    }
+
+    override fun close() {
+        if (!this.isOpen) {
+            return
+        }
+        this.isOpen = false
+        CursorUtils.executeCloseHandlers(this.closeHandlers)
+        for (cursor in this.cursorsByPriority) {
+            cursor.close()
+        }
+    }
+
+    private fun assertNotClosed() {
+        check(this.isOpen) {
+            "This cursor has already been closed!"
+        }
+    }
+
+    private fun Sequence<Cursor<K, V?>>.maxByPriorityOrThrow(): Cursor<K, V?> {
+        return this.maxByPriorityOrNull()
+            ?: error("Could not determine cursor with highest priority: the sequence is empty!")
+    }
+
+    private fun Sequence<Cursor<K, V?>>.maxByPriorityOrNull(): Cursor<K, V?>? {
+        return this.maxByOrNull { getCursorPriority(it) }
+    }
+
+    private fun getCursorPriority(cursor: Cursor<K, V?>): Int {
+        return this.cursorToPriority[cursor]
+            ?: error("Cursor is not a child of this overlay cursor: ${cursor}")
     }
 
     override fun toString(): String {
-        return "OverlayCursor[Base: ${this.cursorA}, Overlay: ${this.cursorB}]"
+        return "OverlayCursor[${this.cursorsByPriority.joinToString()}]"
     }
 
+    // =================================================================================================================
+    // INNER CLASSES
+    // =================================================================================================================
+
+    private class CursorByKeyAndPriorityComparator<K : Comparable<K>, V>(
+        private val cursorToPriority: IdentityHashMap<Cursor<K, V?>, Int>,
+    ) : Comparator<Cursor<K, V?>> {
+
+        override fun compare(o1: Cursor<K, V?>?, o2: Cursor<K, V?>?): Int {
+            if (o1 == null && o2 == null) {
+                return 0
+            } else if (o1 != null && o2 == null) {
+                return -1
+            } else if (o1 == null && o2 != null) {
+                return +1
+            }
+            o1!!
+            o2!!
+
+            val k1 = o1.keyOrNull
+            val k2 = o2.keyOrNull
+
+            if (k1 == null && k2 == null) {
+                return 0
+            } else if (k1 != null && k2 == null) {
+                return -1
+            } else if (k1 == null && k2 != null) {
+                return +1
+            }
+
+            k1!!
+            k2!!
+            val keyCompare = k1.compareTo(k2)
+            if (keyCompare != 0) {
+                return keyCompare
+            }
+
+            // final fallback: compare by comparator priority
+            return this.getCursorPriority(o1).compareTo(getCursorPriority(o2))
+        }
+
+        private fun getCursorPriority(cursor: Cursor<K, V?>): Int {
+            return this.cursorToPriority[cursor]
+                ?: error("Cursor is not a child of this overlay cursor: ${cursor}")
+        }
+    }
 }

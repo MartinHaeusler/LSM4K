@@ -11,7 +11,7 @@ import org.chronos.chronostore.util.StoreId
 import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.cursor.Cursor
 import org.chronos.chronostore.util.cursor.IndexBasedCursor
-import org.chronos.chronostore.util.cursor.OverlayCursor
+import org.chronos.chronostore.util.cursor.OverlayCursor.Companion.overlayOnto
 import java.util.*
 
 class TransactionalStoreImpl(
@@ -138,7 +138,7 @@ class TransactionalStoreImpl(
         } else {
             return bytesToBytesCursor
         }
-        return OverlayCursor(bytesToBytesCursor, transientModificationCursor)
+        return transientModificationCursor.overlayOnto(bytesToBytesCursor)
     }
 
     private fun getTree(): LSMTree {

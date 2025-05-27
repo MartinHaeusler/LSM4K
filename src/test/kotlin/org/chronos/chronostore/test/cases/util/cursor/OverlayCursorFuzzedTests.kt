@@ -1,8 +1,8 @@
 package org.chronos.chronostore.test.cases.util.cursor
 
 import org.chronos.chronostore.test.cases.util.cursor.OverlayCursorFuzzTestUtils.runOverlayCursorTestCase
-import org.chronos.chronostore.test.cases.util.cursor.OverlayCursorFuzzTestUtils.treeMapOf
 import org.chronos.chronostore.test.util.junit.UnitTest
+import org.chronos.chronostore.util.collection.TreeMapUtils.treeMapOf
 import org.junit.jupiter.api.Test
 
 /**
@@ -149,5 +149,86 @@ class OverlayCursorFuzzedTests {
         )
     }
 
+    @Test
+    fun fuzzTestSample3() {
+
+        //  KEY   BASE     OVERLAY     RESULT
+        //  d              d-overlay   d-overlay
+        //  f              <delete>    <skip>
+        //  h              h-overlay   h-overlay
+        //  j     j-base               j-base
+        //  r              <delete>    <skip>
+        //
+
+        val allKeys = setOf("b", "d", "f", "h", "j", "l", "n", "p", "r", "t")
+        val nonExistingKeys = setOf("a", "c", "e", "g", "i", "k", "l", "m", "o", "q", "s", "u")
+        val baseMap = mapOf(
+            "j" to "j-base",
+        )
+        val overlayMap = mapOf(
+            "f" to null,
+            "r" to null,
+            "d" to "d-overlay",
+            "h" to "h-overlay",
+        )
+        val resultMap = treeMapOf(
+            "d" to "d-overlay",
+            "h" to "h-overlay",
+            "j" to "j-base",
+        )
+
+        runOverlayCursorTestCase(
+            baseMap = baseMap,
+            overlayMap = overlayMap,
+            resultMap = resultMap,
+            allKeys = allKeys,
+            nonExistingKeys = nonExistingKeys,
+        )
+    }
+
+    @Test
+    fun fuzzTestSample4() {
+
+        //  KEY   BASE     OVERLAY     RESULT
+        //  b     b-base   <delete>    <skip>
+        //  d     d-base               d-base
+        //  h     h-base   <delete>    <skip>
+        //  j     j-base   j-overlay   j-overlay
+        //  n              n-overlay   n-overlay
+        //  p              <delete>    <skip>
+        //  t              t-overlay   t-overlay
+        //
+
+        val allKeys = setOf("b", "d", "f", "h", "j", "l", "n", "p", "r", "t")
+        val nonExistingKeys = setOf("a", "c", "e", "g", "i", "k", "l", "m", "o", "q", "s", "u")
+        val baseMap = mapOf(
+            "j" to "j-base",
+            "d" to "d-base",
+            "h" to "h-base",
+            "b" to "b-base",
+        )
+        val overlayMap = mapOf(
+            "t" to "t-overlay",
+            "h" to null,
+            "n" to "n-overlay",
+            "j" to "j-overlay",
+            "b" to null,
+            "p" to null,
+        )
+        val resultMap = treeMapOf(
+            "d" to "d-base",
+            "j" to "j-overlay",
+            "n" to "n-overlay",
+            "t" to "t-overlay",
+        )
+
+        runOverlayCursorTestCase(
+            baseMap = baseMap,
+            overlayMap = overlayMap,
+            resultMap = resultMap,
+            allKeys = allKeys,
+            nonExistingKeys = nonExistingKeys,
+        )
+    }
 
 }
