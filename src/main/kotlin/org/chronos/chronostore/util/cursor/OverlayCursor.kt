@@ -1,8 +1,10 @@
 package org.chronos.chronostore.util.cursor
 
+import org.chronos.chronostore.util.Order
 import org.chronos.chronostore.util.Order.ASCENDING
 import org.chronos.chronostore.util.Order.DESCENDING
 import java.util.*
+import java.util.concurrent.ConcurrentSkipListSet
 
 class OverlayCursor<K : Comparable<K>, V>(
     /** An ordered list of cursors. The first has the lowest priority, the last has the highest priority. */
@@ -34,7 +36,7 @@ class OverlayCursor<K : Comparable<K>, V>(
 
     private val cursorToPriority = IdentityHashMap<Cursor<K, V?>, Int>()
 
-    private val cursorsByKeyAscending: NavigableSet<Cursor<K, V?>>
+    private var cursorsByKey: NavigableSet<Cursor<K, V?>>
 
     private var currentDirection = ASCENDING
 
@@ -69,9 +71,9 @@ class OverlayCursor<K : Comparable<K>, V>(
             this.cursorToPriority[cursor] = priority
             priority++
         }
-        this.cursorsByKeyAscending = TreeSet(CursorByKeyAndPriorityComparator(this.cursorToPriority))
+        this.cursorsByKey = this.createCursorsByKeyMapForDirection(currentDirection)
         for (cursor in this.cursorsByPriority) {
-            this.cursorsByKeyAscending += cursor
+            this.cursorsByKey += cursor
         }
         this.invalidatePosition()
     }
@@ -88,14 +90,14 @@ class OverlayCursor<K : Comparable<K>, V>(
         this.assertNotClosed()
 
         // reset all cursors to the start
-        this.cursorsByKeyAscending.clear()
+        this.cursorsByKey = this.createCursorsByKeyMapForDirection(ASCENDING)
         for (cursor in this.cursorsByPriority) {
             if (cursor.first()) {
-                this.cursorsByKeyAscending += cursor
+                this.cursorsByKey += cursor
             }
         }
 
-        if (this.cursorsByKeyAscending.isEmpty()) {
+        if (this.cursorsByKey.isEmpty()) {
             // none of our cursors is valid after calling "first()" -> they're all empty!
             this.invalidatePosition()
             return false
@@ -109,18 +111,14 @@ class OverlayCursor<K : Comparable<K>, V>(
 
     override fun last(): Boolean {
         this.assertNotClosed()
-        // reset all cursors to the start
-        this.cursorsByPriority.forEach { it.last() }
-        // order has changed, re-insert the non-empty ones into the tree
-        // (we don't care about the invalid ones, they point to empty keyspaces)
-        this.cursorsByKeyAscending.clear()
+        this.cursorsByKey = this.createCursorsByKeyMapForDirection(DESCENDING)
         for (cursor in this.cursorsByPriority) {
-            if (cursor.isValidPosition) {
-                this.cursorsByKeyAscending += cursor
+            if (cursor.last()) {
+                this.cursorsByKey += cursor
             }
         }
 
-        if (this.cursorsByKeyAscending.isEmpty()) {
+        if (this.cursorsByKey.isEmpty()) {
             // none of our cursors is valid after calling "last()" -> they're all empty!
             this.invalidatePosition()
             return false
@@ -140,11 +138,11 @@ class OverlayCursor<K : Comparable<K>, V>(
         // direction change -> reset the cursors to arrive at the regular state we would
         // have during ascending iteration.
         val currentKey = this.key
-        this.cursorsByKeyAscending.clear()
+        this.cursorsByKey = this.createCursorsByKeyMapForDirection(ASCENDING)
         for (cursor in this.cursorsByPriority) {
             if (!cursor.isValidPosition) {
                 if (cursor.seekExactlyOrNext(currentKey)) {
-                    this.cursorsByKeyAscending += cursor
+                    this.cursorsByKey += cursor
                 }
             } else {
                 while (cursor.key < currentKey) {
@@ -154,7 +152,7 @@ class OverlayCursor<K : Comparable<K>, V>(
                     }
                 }
                 if (cursor.isValidPosition) {
-                    this.cursorsByKeyAscending += cursor
+                    this.cursorsByKey += cursor
                 }
             }
         }
@@ -168,11 +166,11 @@ class OverlayCursor<K : Comparable<K>, V>(
         // direction change -> reset the cursors to arrive at the regular state we would
         // have during descending iteration.
         val currentKey = this.key
-        this.cursorsByKeyAscending.clear()
+        this.cursorsByKey = this.createCursorsByKeyMapForDirection(DESCENDING)
         for (cursor in this.cursorsByPriority) {
             if (!cursor.isValidPosition) {
                 if (cursor.seekExactlyOrPrevious(currentKey)) {
-                    this.cursorsByKeyAscending += cursor
+                    this.cursorsByKey += cursor
                 }
             } else {
                 while (cursor.key > currentKey) {
@@ -182,7 +180,7 @@ class OverlayCursor<K : Comparable<K>, V>(
                     }
                 }
                 if (cursor.isValidPosition) {
-                    this.cursorsByKeyAscending += cursor
+                    this.cursorsByKey += cursor
                 }
             }
         }
@@ -193,12 +191,10 @@ class OverlayCursor<K : Comparable<K>, V>(
         this.prepareForDescendingMove()
 
         while (true) {
-            // take the smallest key, check which other cursors point at exactly the same key
-            val currentKey = this.cursorsByKeyAscending.last().key
-            val maxPriorityCursor = this.cursorsByKeyAscending.reversed().asSequence()
-                .takeWhile { it.key == currentKey }
-                // among the contributing cursors, decide which value to use via the override order
-                .maxByPriorityOrThrow()
+            // take the first key. The comparator asserts that we get the cursor
+            // with the highest priority in case that there are multiple overrides for the same key.
+            val maxPriorityCursor = this.cursorsByKey.first()
+            val currentKey = maxPriorityCursor.key
 
             // check the cursor with the highest priority. Is the value a deletion?
             val value = maxPriorityCursor.valueOrNull
@@ -209,8 +205,8 @@ class OverlayCursor<K : Comparable<K>, V>(
                 return true
             } else {
                 // the value is a deletion according to an overlay. Move to the next-lower value.
-                while (this.cursorsByKeyAscending.isNotEmpty() && this.cursorsByKeyAscending.last().key >= currentKey) {
-                    val cursor = this.cursorsByKeyAscending.removeLast()
+                while (this.cursorsByKey.isNotEmpty() && this.cursorsByKey.first().key >= currentKey) {
+                    val cursor = this.cursorsByKey.removeFirst()
                     // fast-forward the cursor
                     while (cursor.key >= currentKey) {
                         if (!cursor.previous()) {
@@ -221,11 +217,11 @@ class OverlayCursor<K : Comparable<K>, V>(
                     }
                     if (cursor.isValidPosition) {
                         // re-add the cursor into the tree
-                        this.cursorsByKeyAscending += cursor
+                        this.cursorsByKey += cursor
                     }
                 }
                 // are there any valid cursors left?
-                if (this.cursorsByKeyAscending.isEmpty()) {
+                if (this.cursorsByKey.isEmpty()) {
                     this.currentDirection = DESCENDING
                     return false
                 }
@@ -241,12 +237,10 @@ class OverlayCursor<K : Comparable<K>, V>(
         prepareForAscendingMove()
 
         while (true) {
-            // take the smallest key, check which other cursors point at exactly the same key
-            val currentKey = this.cursorsByKeyAscending.first().key
-            val maxPriorityCursor = this.cursorsByKeyAscending.asSequence()
-                .takeWhile { it.key == currentKey }
-                // among the contributing cursors, decide which value to use via the override order
-                .maxByPriorityOrThrow()
+            // take the first key. The comparator asserts that we get the cursor
+            // with the highest priority in case that there are multiple overrides for the same key.
+            val maxPriorityCursor = this.cursorsByKey.first()
+            val currentKey = maxPriorityCursor.key
 
             // check the cursor with the highest priority. Is the value a deletion?
             val value = maxPriorityCursor.valueOrNull
@@ -257,8 +251,8 @@ class OverlayCursor<K : Comparable<K>, V>(
                 return true
             } else {
                 // the value is a deletion according to an overlay. Move to the next-higher value.
-                while (this.cursorsByKeyAscending.isNotEmpty() && this.cursorsByKeyAscending.first().key <= currentKey) {
-                    val cursor = this.cursorsByKeyAscending.removeFirst()
+                while (this.cursorsByKey.isNotEmpty() && this.cursorsByKey.first().key <= currentKey) {
+                    val cursor = this.cursorsByKey.removeFirst()
                     // fast-forward the cursor
                     while (cursor.key <= currentKey) {
                         if (!cursor.next()) {
@@ -269,13 +263,13 @@ class OverlayCursor<K : Comparable<K>, V>(
                     }
                     if (cursor.isValidPosition) {
                         // re-add the cursor into the tree
-                        if (!this.cursorsByKeyAscending.add(cursor)) {
+                        if (!this.cursorsByKey.add(cursor)) {
                             error("Cursor was already in the set!")
                         }
                     }
                 }
                 // are there any valid cursors left?
-                if (this.cursorsByKeyAscending.isEmpty()) {
+                if (this.cursorsByKey.isEmpty()) {
                     this.currentDirection = ASCENDING
                     return false
                 }
@@ -312,14 +306,14 @@ class OverlayCursor<K : Comparable<K>, V>(
     override fun seekExactlyOrNext(key: K): Boolean {
         this.assertNotClosed()
         // reset all cursors to the start
-        this.cursorsByKeyAscending.clear()
+        this.cursorsByKey = this.createCursorsByKeyMapForDirection(ASCENDING)
         for (cursor in this.cursorsByPriority) {
             if (cursor.seekExactlyOrNext(key)) {
-                this.cursorsByKeyAscending += cursor
+                this.cursorsByKey += cursor
             }
         }
 
-        if (this.cursorsByKeyAscending.isEmpty()) {
+        if (this.cursorsByKey.isEmpty()) {
             // none of our cursors is valid after calling "seekExactlyOrNext()" -> no cursor has any data
             this.invalidatePosition()
             return false
@@ -328,7 +322,7 @@ class OverlayCursor<K : Comparable<K>, V>(
         // remember that we're going in ascending direction
         this.currentDirection = ASCENDING
 
-        val found = findValidNextHigherEntry()
+        val found = this.findValidNextHigherEntry()
         if (!found) {
             this.invalidatePosition()
         }
@@ -341,14 +335,14 @@ class OverlayCursor<K : Comparable<K>, V>(
         this.cursorsByPriority.forEach { it.seekExactlyOrPrevious(key) }
         // order has changed, re-insert the non-empty ones into the tree
         // (we don't care about the invalid ones, they point to empty keyspaces)
-        this.cursorsByKeyAscending.clear()
+        this.cursorsByKey = this.createCursorsByKeyMapForDirection(DESCENDING)
         for (cursor in this.cursorsByPriority) {
             if (cursor.isValidPosition) {
-                this.cursorsByKeyAscending += cursor
+                this.cursorsByKey += cursor
             }
         }
 
-        if (this.cursorsByKeyAscending.isEmpty()) {
+        if (this.cursorsByKey.isEmpty()) {
             // none of our cursors is valid after calling "seekExactlyOrPrevious()" -> no cursor has any data
             this.invalidatePosition()
             return false
@@ -357,7 +351,7 @@ class OverlayCursor<K : Comparable<K>, V>(
         // remember that we're going in descending direction
         this.currentDirection = DESCENDING
 
-        val found = findValidNextLowerEntry()
+        val found = this.findValidNextLowerEntry()
         if (!found) {
             this.invalidatePosition()
         }
@@ -388,6 +382,15 @@ class OverlayCursor<K : Comparable<K>, V>(
         }
     }
 
+    private fun createCursorsByKeyMapForDirection(direction: Order): NavigableSet<Cursor<K, V?>> {
+        return ConcurrentSkipListSet(
+            CursorByKeyAndPriorityComparator(
+                direction = direction,
+                cursorToPriority = cursorToPriority,
+            )
+        )
+    }
+
     private fun Sequence<Cursor<K, V?>>.maxByPriorityOrThrow(): Cursor<K, V?> {
         return this.maxByPriorityOrNull()
             ?: error("Could not determine cursor with highest priority: the sequence is empty!")
@@ -410,7 +413,15 @@ class OverlayCursor<K : Comparable<K>, V>(
     // INNER CLASSES
     // =================================================================================================================
 
+    /**
+     * Compares cursors by their current [key][Cursor.key] and tie-breaks by the [priority][cursorToPriority].
+     *
+     * If multiple cursors have the same [key][Cursor.key], this comparator sorts by the cursor's
+     * [priority][cursorToPriority] (descending). If the key ordering is ascending or descending
+     * depends on the [direction].
+     */
     private class CursorByKeyAndPriorityComparator<K : Comparable<K>, V>(
+        private val direction: Order,
         private val cursorToPriority: IdentityHashMap<Cursor<K, V?>, Int>,
     ) : Comparator<Cursor<K, V?>> {
 
@@ -440,11 +451,14 @@ class OverlayCursor<K : Comparable<K>, V>(
             k2!!
             val keyCompare = k1.compareTo(k2)
             if (keyCompare != 0) {
-                return keyCompare
+                return direction.applyToCompare(keyCompare)
             }
 
-            // final fallback: compare by comparator priority
-            return this.getCursorPriority(o1).compareTo(getCursorPriority(o2))
+            // final fallback: compare by comparator priority (DESCENDING!)
+            val p1 = this.getCursorPriority(o1)
+            val p2 = this.getCursorPriority(o2)
+            // multiply the comparison by -1 to get descending sorting
+            return p1.compareTo(p2) * -1
         }
 
         private fun getCursorPriority(cursor: Cursor<K, V?>): Int {
