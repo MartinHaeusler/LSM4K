@@ -2,6 +2,7 @@ package org.chronos.chronostore.lsm.cache
 
 import org.chronos.chronostore.io.format.FileHeader
 import org.chronos.chronostore.io.vfs.VirtualFile
+import org.chronos.chronostore.util.statistics.StatisticsReporter
 import org.chronos.chronostore.util.unit.BinarySize
 
 sealed interface FileHeaderCache {
@@ -10,13 +11,18 @@ sealed interface FileHeaderCache {
 
     companion object {
 
-        val NONE: FileHeaderCache = NoFileHeaderCache
+        fun none(statisticsReporter: StatisticsReporter): FileHeaderCache {
+            return NoFileHeaderCache(statisticsReporter)
+        }
 
-        fun create(fileHeaderCacheSize: BinarySize?): FileHeaderCache {
+        fun create(fileHeaderCacheSize: BinarySize?, statisticsReporter: StatisticsReporter): FileHeaderCache {
             return if (fileHeaderCacheSize != null) {
-                FileHeaderCacheImpl(fileHeaderCacheSize)
+                FileHeaderCacheImpl(
+                    maxSize = fileHeaderCacheSize,
+                    statisticsReporter = statisticsReporter
+                )
             } else {
-                NoFileHeaderCache
+                NoFileHeaderCache(statisticsReporter)
             }
         }
 

@@ -14,7 +14,7 @@ import org.chronos.chronostore.util.StoreId
 import org.chronos.chronostore.util.TSN
 import org.chronos.chronostore.util.TransactionId
 import org.chronos.chronostore.util.report.TransactionReport
-import org.chronos.chronostore.util.statistics.ChronoStoreStatistics
+import org.chronos.chronostore.util.statistics.StatisticsReporter
 import org.chronos.chronostore.util.unit.BinarySize.Companion.MiB
 import org.chronos.chronostore.wal.WriteAheadLog
 import java.util.concurrent.ConcurrentMap
@@ -31,6 +31,7 @@ class TransactionManager(
     val storeManager: StoreManager,
     val tsnManager: TSNManager,
     val writeAheadLog: WriteAheadLog,
+    val statisticsReporter: StatisticsReporter,
 ) : AutoCloseable {
 
     companion object {
@@ -74,7 +75,6 @@ class TransactionManager(
         this.state.checkOpen()
         // NOTE: read-only transactions do not require the transaction creation lock, because they can
         // run in parallel to read-write transactions and exclusive transactions.
-        ChronoStoreStatistics.TRANSACTIONS.incrementAndGet()
         this.transactionCounter.incrementAndGet()
         val newTx = ChronoStoreTransactionImpl(
             id = TransactionId.randomUUID(),
@@ -83,7 +83,9 @@ class TransactionManager(
             storeManager = this.storeManager,
             transactionManager = this,
             createdAtWallClockTime = System.currentTimeMillis(),
+            statisticsReporter = this.statisticsReporter,
         )
+        this.statisticsReporter.reportTransactionOpened(TransactionMode.READ_ONLY)
         this.openTransactions[newTx.id] = newTx
         return newTx
     }
@@ -112,7 +114,6 @@ class TransactionManager(
             }
 
             // no concurrent exclusive transactions are going on -> let's create our transaction
-            ChronoStoreStatistics.TRANSACTIONS.incrementAndGet()
             this.transactionCounter.incrementAndGet()
             this.openReadWriteTransactions.incrementAndGet()
             val newTx = ChronoStoreTransactionImpl(
@@ -122,7 +123,9 @@ class TransactionManager(
                 storeManager = this.storeManager,
                 transactionManager = this,
                 createdAtWallClockTime = System.currentTimeMillis(),
+                statisticsReporter = this.statisticsReporter,
             )
+            this.statisticsReporter.reportTransactionOpened(TransactionMode.READ_WRITE)
             this.openTransactions[newTx.id] = newTx
             return newTx
         }
@@ -150,7 +153,6 @@ class TransactionManager(
             }
 
             // no concurrent exclusive transactions are going on -> let's create our transaction
-            ChronoStoreStatistics.TRANSACTIONS.incrementAndGet()
             this.transactionCounter.incrementAndGet()
             this.openExclusiveTransactions.incrementAndGet()
             val newTx = ChronoStoreTransactionImpl(
@@ -160,7 +162,9 @@ class TransactionManager(
                 storeManager = this.storeManager,
                 transactionManager = this,
                 createdAtWallClockTime = System.currentTimeMillis(),
+                statisticsReporter = this.statisticsReporter,
             )
+            this.statisticsReporter.reportTransactionOpened(TransactionMode.EXCLUSIVE)
             this.openTransactions[newTx.id] = newTx
             return newTx
         }
@@ -207,7 +211,7 @@ class TransactionManager(
         }
         this.openTransactions.remove(tx.id)
         tx.close()
-        ChronoStoreStatistics.TRANSACTION_COMMITS.incrementAndGet()
+        this.statisticsReporter.reportTransactionCommit(tx.mode)
         when (tx.mode) {
             TransactionMode.READ_ONLY -> {
                 // no-op
@@ -226,9 +230,20 @@ class TransactionManager(
         return commitTSN
     }
 
-    fun performRollback(tx: ChronoStoreTransactionImpl) {
-        log.trace { "Rolled back transaction ${tx.id}." }
-        ChronoStoreStatistics.TRANSACTION_ROLLBACKS.incrementAndGet()
+    fun performRollback(tx: ChronoStoreTransactionImpl, isDangling: Boolean) {
+        log.trace {
+            val qualifier = if (isDangling) {
+                "dangling "
+            } else {
+                ""
+            }
+            "Rolled back ${qualifier}transaction ${tx.id}."
+        }
+        if (isDangling) {
+            this.statisticsReporter.reportTransactionDangling(tx.mode)
+        } else {
+            this.statisticsReporter.reportTransactionRollback(tx.mode)
+        }
         this.openTransactions.remove(tx.id)
     }
 

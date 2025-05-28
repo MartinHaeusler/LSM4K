@@ -8,14 +8,15 @@ import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.model.command.KeyAndTSN
 import org.chronos.chronostore.util.cursor.CloseHandler
 import org.chronos.chronostore.util.cursor.Cursor
+import org.chronos.chronostore.util.cursor.CursorInternal
 import org.chronos.chronostore.util.cursor.CursorUtils
-import org.chronos.chronostore.util.statistics.ChronoStoreStatistics
+import org.chronos.chronostore.util.cursor.CursorUtils.checkIsOpen
 
 class ChronoStoreFileCursor(
     private val file: VirtualFile,
     private val fileHeader: FileHeader,
     private val blockLoader: BlockLoader,
-) : Cursor<KeyAndTSN, Command> {
+) : CursorInternal<KeyAndTSN, Command> {
 
     companion object {
 
@@ -24,14 +25,24 @@ class ChronoStoreFileCursor(
 
     }
 
-    override var modCount: Long = 0
+    override var parent: CursorInternal<*, *>? = null
+        set(value) {
+            if (field === value) {
+                return
+            }
+            check(field == null) {
+                "Cannot assign another parent to this cursor; a parent is already present." +
+                    " Existing parent: ${field}, proposed new parent: ${value}"
+            }
+            field = value
+        }
 
     override var isOpen: Boolean = true
 
     override var isValidPosition: Boolean = false
 
     private var currentBlock: DataBlock? = null
-    private var currentCursor: Cursor<KeyAndTSN, Command>? = null
+    private var currentCursor: CursorInternal<KeyAndTSN, Command>? = null
 
     private val closeHandlers = mutableListOf<CloseHandler>()
 
@@ -42,43 +53,57 @@ class ChronoStoreFileCursor(
         commandBufferSize = COMMAND_BUFFER_SIZE,
     )
 
-    init {
-        ChronoStoreStatistics.FILE_CURSORS.incrementAndGet()
-    }
+    override val keyOrNull: KeyAndTSN?
+        get() {
+            this.checkIsOpen()
+            if (!this.isValidPosition) {
+                return null
+            }
+            return this.currentCursor?.keyOrNull
+        }
 
-    override fun invalidatePosition() {
-        check(this.isOpen, this::getAlreadyClosedMessage)
+    override val valueOrNull: Command?
+        get() {
+            this.checkIsOpen()
+            if (!this.isValidPosition) {
+                return null
+            }
+            return this.currentCursor?.valueOrNull
+        }
+
+    override fun invalidatePositionInternal() {
+        this.checkIsOpen()
         this.currentCursor?.close()
         this.currentCursor = null
         this.currentBlock = null
         this.isValidPosition = false
-        this.modCount++
     }
 
-    override fun first(): Boolean {
-        check(this.isOpen, this::getAlreadyClosedMessage)
+    override fun firstInternal(): Boolean {
+        this.checkIsOpen()
         this.prefetcher.registerOperation(CursorMoveOperation.FIRST, null)
-        ChronoStoreStatistics.FILE_CURSOR_FIRST_SEEKS.incrementAndGet()
-        this.invalidatePosition()
+        this.invalidatePositionInternal()
         val firstBlock = this.blockLoader.getBlockOrNull(file, 0)
         if (firstBlock == null || firstBlock.isEmpty()) {
             this.isValidPosition = false
             return false
         }
         this.currentBlock = firstBlock
-        val cursor = firstBlock.cursor()
-        this.currentCursor = cursor
+        val cursor = firstBlock.cursor() as CursorInternal<KeyAndTSN, Command>
         // the block isn't empty, so we have a first element.
-        cursor.firstOrThrow()
+        check(cursor.firstInternal()) {
+            "Illegal Iterator state - move 'first()' failed!"
+        }
+        this.currentCursor = cursor
+        cursor.parent = this
         this.isValidPosition = true
         return true
     }
 
-    override fun last(): Boolean {
-        check(this.isOpen, this::getAlreadyClosedMessage)
+    override fun lastInternal(): Boolean {
+        this.checkIsOpen()
         this.prefetcher.registerOperation(CursorMoveOperation.LAST, null)
-        ChronoStoreStatistics.FILE_CURSOR_LAST_SEEKS.incrementAndGet()
-        this.invalidatePosition()
+        this.invalidatePositionInternal()
         val numberOfBlocks = fileHeader.metaData.numberOfBlocks
         val lastBlock = this.blockLoader.getBlockOrNull(file, numberOfBlocks - 1)
         if (lastBlock == null || lastBlock.isEmpty()) {
@@ -86,18 +111,20 @@ class ChronoStoreFileCursor(
             return false
         }
         this.currentBlock = lastBlock
-        val cursor = lastBlock.cursor()
+        val cursor = lastBlock.cursor() as CursorInternal<KeyAndTSN, Command>
         this.currentCursor = cursor
+        cursor.parent = this
         // the block isn't empty, so we have a last element.
-        cursor.lastOrThrow()
+        check(cursor.lastInternal()) {
+            "Illegal Iterator state - move 'last()' failed!"
+        }
         this.isValidPosition = true
         return true
     }
 
-    override fun next(): Boolean {
-        check(this.isOpen, this::getAlreadyClosedMessage)
+    override fun nextInternal(): Boolean {
+        this.checkIsOpen()
         this.prefetcher.registerOperation(CursorMoveOperation.NEXT, this.currentBlock)
-        ChronoStoreStatistics.FILE_CURSOR_NEXT_SEEKS.incrementAndGet()
         if (!this.isValidPosition) {
             return false
         }
@@ -106,29 +133,29 @@ class ChronoStoreFileCursor(
         if (block == null || cursor == null) {
             return false
         }
-        if (cursor.next()) {
-            this.modCount++
+        if (cursor.nextInternal()) {
             return true
         }
         // open the cursor on the next block
         val nextBlock = this.prefetcher.getNextBlock(block)
         if (nextBlock == null) {
             // there is no next position; keep the current cursor
-            this.modCount++
             return false
         }
 
-        val newCursor = nextBlock.cursor()
-        newCursor.firstOrThrow()
-        this.currentBlock = nextBlock
+        val newCursor = nextBlock.cursor() as CursorInternal<KeyAndTSN, Command>
+        newCursor.parent = this
         this.currentCursor = newCursor
+        this.currentBlock = nextBlock
+        check(newCursor.firstInternal()) {
+            "Illegal Iterator state - move 'first()' failed!"
+        }
         return true
     }
 
-    override fun previous(): Boolean {
-        check(this.isOpen, this::getAlreadyClosedMessage)
+    override fun previousInternal(): Boolean {
+        this.checkIsOpen()
         this.prefetcher.registerOperation(CursorMoveOperation.PREVIOUS, this.currentBlock)
-        ChronoStoreStatistics.FILE_CURSOR_PREVIOUS_SEEKS.incrementAndGet()
         if (!this.isValidPosition) {
             return false
         }
@@ -137,33 +164,35 @@ class ChronoStoreFileCursor(
         if (block == null || cursor == null) {
             return false
         }
-        if (cursor.previous()) {
-            this.modCount++
+        if (cursor.previousInternal()) {
             return true
         }
         // open the cursor on the previous block
         val previousBlock = this.prefetcher.getPreviousBlock(block)
         if (previousBlock == null) {
             // there is no previous position; keep the current cursor
-            this.modCount++
             return false
         }
 
-        val newCursor = previousBlock.cursor()
-        newCursor.lastOrThrow()
+        val newCursor = previousBlock.cursor() as CursorInternal<KeyAndTSN, Command>
+        check(newCursor.lastInternal()) {
+            "Illegal Iterator state - move 'last()' failed!"
+        }
         this.currentBlock = previousBlock
         this.currentCursor = newCursor
+        newCursor.parent = this
         return true
     }
 
-    override fun peekNext(): Pair<KeyAndTSN, Command>? {
+    override fun peekNextInternal(): Pair<KeyAndTSN, Command>? {
+        this.checkIsOpen()
         if (!this.isValidPosition) {
             return null
         }
         val cursor = this.currentCursor
-            ?: return super.peekNext() // safeguard: fall back to default implementation
+            ?: return super.peekNextInternal() // safeguard: fall back to default implementation
 
-        val peekNext = cursor.peekNext()
+        val peekNext = cursor.peekNextInternal()
         if (peekNext != null) {
             return peekNext
         }
@@ -183,18 +212,19 @@ class ChronoStoreFileCursor(
         // perspective.
 
         // the default implementation will take care of this.
-        return super.peekNext()
+        return super.peekNextInternal()
 
     }
 
-    override fun peekPrevious(): Pair<KeyAndTSN, Command>? {
+    override fun peekPreviousInternal(): Pair<KeyAndTSN, Command>? {
+        this.checkIsOpen()
         if (!this.isValidPosition) {
             return null
         }
         val cursor = this.currentCursor
-            ?: return super.peekPrevious() // safeguard: fall back to default implementation
+            ?: return super.peekPreviousInternal() // safeguard: fall back to default implementation
 
-        val peekNext = cursor.peekPrevious()
+        val peekNext = cursor.peekPreviousInternal()
         if (peekNext != null) {
             return peekNext
         }
@@ -214,100 +244,79 @@ class ChronoStoreFileCursor(
         // perspective.
 
         // the default implementation will take care of this.
-        return super.peekPrevious()
+        return super.peekPreviousInternal()
     }
 
-    override val keyOrNull: KeyAndTSN?
-        get() {
-            check(this.isOpen, this::getAlreadyClosedMessage)
-            if (!this.isValidPosition) {
-                return null
-            }
-            return this.currentCursor?.keyOrNull
+    override fun seekExactlyOrNextInternal(key: KeyAndTSN): Boolean {
+        this.checkIsOpen()
+        this.prefetcher.registerOperation(CursorMoveOperation.SEEK_NEXT, this.currentBlock)
+        if (key == this.keyOrNull) {
+            // we're already there
+            return true
         }
+        this.invalidatePositionInternal()
+        val blockIndex = fileHeader.indexOfBlocks.getBlockIndexForKeyAndTimestampAscending(key)
+            ?: return false
+        val block = this.blockLoader.getBlockOrNull(this.file, blockIndex)
+            ?: return false
+        val cursor = block.cursor() as CursorInternal<KeyAndTSN, Command>
 
-    override val valueOrNull: Command?
-        get() {
-            check(this.isOpen, this::getAlreadyClosedMessage)
-            if (!this.isValidPosition) {
-                return null
-            }
-            return this.currentCursor?.valueOrNull
+        if (!cursor.seekExactlyOrNextInternal(key)) {
+            cursor.closeInternal()
+            return false
         }
+        this.currentBlock = block
+        this.currentCursor = cursor
+        cursor.parent = this
+        this.isValidPosition = true
+        return true
+    }
+
+    override fun seekExactlyOrPreviousInternal(key: KeyAndTSN): Boolean {
+        this.checkIsOpen()
+        this.prefetcher.registerOperation(CursorMoveOperation.SEEK_PREVIOUS, this.currentBlock)
+        if (key == this.keyOrNull) {
+            // we're already there
+            return true
+        }
+        this.invalidatePositionInternal()
+
+        val blockIndex = fileHeader.indexOfBlocks.getBlockIndexForKeyAndTimestampDescending(key)
+            ?: return false
+        val block = this.blockLoader.getBlockOrNull(this.file, blockIndex)
+            ?: return false
+        val cursor = block.cursor() as CursorInternal<KeyAndTSN, Command>
+        if (!cursor.seekExactlyOrPreviousInternal(key)) {
+            cursor.closeInternal()
+            return false
+        }
+        this.currentBlock = block
+        this.currentCursor = cursor
+        cursor.parent = this
+        this.isValidPosition = true
+        return true
+    }
 
     override fun onClose(action: CloseHandler): Cursor<KeyAndTSN, Command> {
-        check(this.isOpen, this::getAlreadyClosedMessage)
+        this.checkIsOpen()
         this.closeHandlers += action
         return this
     }
 
-    override fun close() {
+    override fun closeInternal() {
         if (!this.isOpen) {
             return
         }
         this.isOpen = false
         val current = this.currentCursor
         val currentCursorCloseHandler = if (current != null) {
-            current::close
+            current::closeInternal
         } else {
             null
         }
         CursorUtils.executeCloseHandlers(currentCursorCloseHandler, this.closeHandlers)
     }
 
-    override fun seekExactlyOrNext(key: KeyAndTSN): Boolean {
-        check(this.isOpen, this::getAlreadyClosedMessage)
-        this.prefetcher.registerOperation(CursorMoveOperation.SEEK_NEXT, this.currentBlock)
-        ChronoStoreStatistics.FILE_CURSOR_EXACTLY_OR_NEXT_SEEKS.incrementAndGet()
-        if (key == this.keyOrNull) {
-            // we're already there
-            return true
-        }
-        this.invalidatePosition()
-        val blockIndex = fileHeader.indexOfBlocks.getBlockIndexForKeyAndTimestampAscending(key)
-            ?: return false
-        val block = this.blockLoader.getBlockOrNull(this.file, blockIndex)
-            ?: return false
-        val cursor = block.cursor()
-
-        if (!cursor.seekExactlyOrNext(key)) {
-            cursor.close()
-            return false
-        }
-        this.currentBlock = block
-        this.currentCursor = cursor
-        this.isValidPosition = true
-        return true
-    }
-
-    override fun seekExactlyOrPrevious(key: KeyAndTSN): Boolean {
-        check(this.isOpen, this::getAlreadyClosedMessage)
-        this.prefetcher.registerOperation(CursorMoveOperation.SEEK_PREVIOUS, this.currentBlock)
-        ChronoStoreStatistics.FILE_CURSOR_EXACTLY_OR_PREVIOUS_SEEKS.incrementAndGet()
-        if (key == this.keyOrNull) {
-            // we're already there
-            return true
-        }
-        this.invalidatePosition()
-
-        val blockIndex = fileHeader.indexOfBlocks.getBlockIndexForKeyAndTimestampDescending(key)
-            ?: return false
-        val block = this.blockLoader.getBlockOrNull(this.file, blockIndex)
-            ?: return false
-        val cursor = block.cursor()
-        if (!cursor.seekExactlyOrPrevious(key)) {
-            cursor.close()
-            return false
-        }
-        this.currentBlock = block
-        this.currentCursor = cursor
-        this.isValidPosition = true
-        return true
-    }
-
-    private fun getAlreadyClosedMessage(): String {
-        return "This cursor on ${this.file.path} has already been closed!"
-    }
 
     override fun toString(): String {
         return "ChronoStoreFileCursor[${this.file.path}]"

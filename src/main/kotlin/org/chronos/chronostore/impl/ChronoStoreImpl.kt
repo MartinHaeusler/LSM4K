@@ -26,6 +26,8 @@ import org.chronos.chronostore.util.StoreId
 import org.chronos.chronostore.util.TSN
 import org.chronos.chronostore.util.report.ChronoStoreReport
 import org.chronos.chronostore.util.sequence.SequenceExtensions.toTreeMap
+import org.chronos.chronostore.util.statistics.StatisticsCollector
+import org.chronos.chronostore.util.statistics.report.StatisticsReport
 import org.chronos.chronostore.wal.WALReadBuffer
 import org.chronos.chronostore.wal.WriteAheadLog
 import java.util.concurrent.CompletableFuture
@@ -43,6 +45,8 @@ class ChronoStoreImpl(
         private val log = KotlinLogging.logger {}
 
     }
+
+    private val statisticsCollector = StatisticsCollector()
 
     /** Tells if the engine is currently open and ready for requests. */
     @Volatile
@@ -77,7 +81,10 @@ class ChronoStoreImpl(
     /**
      * Caches [FileHeader] instances for quick access.
      */
-    private val fileHeaderCache = FileHeaderCache.create(configuration.fileHeaderCacheSize)
+    private val fileHeaderCache = FileHeaderCache.create(
+        fileHeaderCacheSize = configuration.fileHeaderCacheSize,
+        statisticsReporter = this.statisticsCollector
+    )
 
     /**
      * The prefetching manager to use for block loading operations.
@@ -90,6 +97,7 @@ class ChronoStoreImpl(
         fileHeaderCache = this.fileHeaderCache,
         driverFactory = this.configuration.randomFileAccessDriverFactory,
         prefetchingThreads = this.configuration.prefetchingThreads,
+        statisticsReporter = this.statisticsCollector,
     )
 
     /**
@@ -100,7 +108,8 @@ class ChronoStoreImpl(
     private val blockLoader: BlockLoader = this.prefetchingManager
         ?: BlockLoader.basic(
             driverFactory = this.configuration.randomFileAccessDriverFactory,
-            headerCache = this.fileHeaderCache
+            headerCache = this.fileHeaderCache,
+            statisticsReporter = this.statisticsCollector,
         )
 
     /**
@@ -117,6 +126,7 @@ class ChronoStoreImpl(
     private val blockCache: BlockCache = BlockCache.create(
         maxSize = this.configuration.blockCacheSize,
         loader = this.blockLoader,
+        statisticsReporter = this.statisticsCollector,
     )
 
     /**
@@ -127,6 +137,7 @@ class ChronoStoreImpl(
     val forest: LSMForestMemoryManager = LSMForestMemoryManager(
         maxForestSize = this.configuration.maxForestSize.bytes,
         flushThresholdSize = (this.configuration.maxForestSize.bytes * this.configuration.forestFlushThreshold).toLong(),
+        statisticsReporter = this.statisticsCollector,
     )
 
     /**
@@ -143,6 +154,7 @@ class ChronoStoreImpl(
         configuration = this.configuration,
         getSmallestOpenReadTSN = { this.transactionManager.getSmallestOpenReadTSN() },
         killswitch = this.killswitch,
+        statisticsReporter = this.statisticsCollector,
     )
 
     /**
@@ -206,7 +218,8 @@ class ChronoStoreImpl(
         this.transactionManager = TransactionManager(
             storeManager = this.storeManager,
             tsnManager = this.tsnManager,
-            writeAheadLog = this.writeAheadLog
+            writeAheadLog = this.writeAheadLog,
+            statisticsReporter = this.statisticsCollector,
         )
 
         this.checkpointTask = CheckpointTask(
@@ -401,6 +414,14 @@ class ChronoStoreImpl(
                 .maxOrNull(),
             transactionReport = this.transactionManager.report()
         )
+    }
+
+    override fun statisticsReport(): StatisticsReport {
+        return this.statisticsCollector.report()
+    }
+
+    override fun resetStatistics() {
+        this.statisticsCollector.reset()
     }
 
     // =================================================================================================================

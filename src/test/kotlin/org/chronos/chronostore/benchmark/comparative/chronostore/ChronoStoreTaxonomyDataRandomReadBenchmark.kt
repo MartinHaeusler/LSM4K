@@ -6,7 +6,6 @@ import org.chronos.chronostore.api.TransactionalStore.Companion.withCursor
 import org.chronos.chronostore.benchmark.util.Statistics.Companion.statistics
 import org.chronos.chronostore.util.bytes.BasicBytes
 import org.chronos.chronostore.util.bytes.Bytes
-import org.chronos.chronostore.util.statistics.ChronoStoreStatistics
 import org.chronos.chronostore.util.unit.BinarySize.Companion.GiB
 import java.io.File
 import kotlin.system.measureTimeMillis
@@ -30,7 +29,7 @@ object ChronoStoreTaxonomyDataRandomReadBenchmark {
         val configuration = ChronoStoreConfiguration(
             blockCacheSize = 4.GiB,
         )
-        ChronoStore.openOnDirectory(inputDir, configuration).use { chronoStore ->
+        val statisticsReport = ChronoStore.openOnDirectory(inputDir, configuration).use { chronoStore ->
             measureTimeMillis {
                 chronoStore.readWriteTransaction { tx ->
                     val store = tx.getStore("data")
@@ -64,6 +63,8 @@ object ChronoStoreTaxonomyDataRandomReadBenchmark {
                     println(it)
                 }
             }
+
+            chronoStore.statisticsReport()
         }
 
         val timeAfterRead = System.currentTimeMillis()
@@ -74,7 +75,7 @@ object ChronoStoreTaxonomyDataRandomReadBenchmark {
         println()
         println()
         println()
-        println(ChronoStoreStatistics.snapshot().prettyPrint())
+        println(statisticsReport.prettyPrint())
     }
 
 }

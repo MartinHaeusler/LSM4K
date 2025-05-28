@@ -30,13 +30,6 @@ typealias CloseHandler = () -> Unit
 interface Cursor<K, V> : AutoCloseable {
 
     /**
-     * Returns the mod count of this cursor, i.e. how many moves have been executed on it.
-     *
-     * This is mostly used for consistency checking in cursor orchestration.
-     */
-    val modCount: Long
-
-    /**
      * Checks if this cursor is still open.
      */
     val isOpen: Boolean
@@ -277,7 +270,7 @@ interface Cursor<K, V> : AutoCloseable {
      * @return The next entry in the given direction (or `null` if there is none) without moving this cursor.
      */
     fun peek(direction: Order): Pair<K, V>? {
-        return when(direction){
+        return when (direction) {
             Order.ASCENDING -> peekNext()
             Order.DESCENDING -> peekPrevious()
         }
@@ -787,7 +780,12 @@ interface Cursor<K, V> : AutoCloseable {
      * cursor will be visible on the view, and vice versa.
      */
     fun <MK> mapKey(map: (K) -> MK, mapInverse: (MK) -> (K)): Cursor<MK, V> {
-        return MappingCursor(original = this, mapKey = map, mapKeyInverse = mapInverse, mapValue = { it })
+        return MappingCursor(
+            innerCursor = this as CursorInternal<K, V>,
+            mapKey = map,
+            mapKeyInverse = mapInverse,
+            mapValue = { it }
+        )
     }
 
     /**
@@ -802,7 +800,12 @@ interface Cursor<K, V> : AutoCloseable {
      * cursor will be visible on the view, and vice versa.
      */
     fun <MV> mapValue(map: (V) -> MV): Cursor<K, MV> {
-        return MappingCursor(original = this, mapKey = { it }, mapKeyInverse = { it }, mapValue = map)
+        return MappingCursor(
+            innerCursor = this as CursorInternal<K, V>,
+            mapKey = { it },
+            mapKeyInverse = { it },
+            mapValue = map
+        )
     }
 
     /**
@@ -821,7 +824,12 @@ interface Cursor<K, V> : AutoCloseable {
      * cursor will be visible on the view, and vice versa.
      */
     fun <MK, MV> mapKeyAndValue(mapKey: (K) -> MK, mapKeyInverse: (MK) -> (K), mapValue: (V) -> MV): Cursor<MK, MV> {
-        return MappingCursor(original = this, mapKey = mapKey, mapKeyInverse = mapKeyInverse, mapValue = mapValue)
+        return MappingCursor(
+            innerCursor = this as CursorInternal<K, V>,
+            mapKey = mapKey,
+            mapKeyInverse = mapKeyInverse,
+            mapValue = mapValue
+        )
     }
 
     /**
@@ -832,7 +840,9 @@ interface Cursor<K, V> : AutoCloseable {
      * @return A view on this cursor with the given filter applied. The returned cursor takes ownership of this cursor.
      */
     fun filterKeys(isValidKey: (K) -> Boolean): Cursor<K, V> {
-        return KeyFilteringCursor(this, isValidKey)
+        return FilteringCursor(this as CursorInternal<K, V>) { key, _ ->
+            isValidKey(key)
+        }
     }
 
     /**
@@ -843,7 +853,9 @@ interface Cursor<K, V> : AutoCloseable {
      * @return A view on this cursor with the given filter applied. The returned cursor takes ownership of this cursor.
      */
     fun filterValues(isValidValue: (V?) -> Boolean): Cursor<K, V> {
-        return ValueFilteringCursor(this, isValidValue)
+        return FilteringCursor(this as CursorInternal<K, V>) { _, value ->
+            isValidValue(value)
+        }
     }
 
     /**

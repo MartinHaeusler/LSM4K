@@ -1,6 +1,7 @@
 package org.chronos.chronostore.test.cases.util.cursor
 
 import org.chronos.chronostore.io.vfs.VirtualFileSystem
+import org.chronos.chronostore.lsm.LSMTreeFile
 import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.model.command.KeyAndTSN
 import org.chronos.chronostore.test.util.CursorTestUtils.asString
@@ -11,6 +12,8 @@ import org.chronos.chronostore.test.util.junit.TestTags
 import org.chronos.chronostore.test.util.lsm.LsmFileFactory.createLsmTreeFile
 import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.cursor.LevelOrTierCursor
+import org.chronos.chronostore.util.statistics.StatisticsCollector
+import org.chronos.chronostore.util.statistics.StatisticsReporter
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.params.ParameterizedTest
 import strikt.api.expectThat
@@ -19,58 +22,65 @@ import strikt.assertions.*
 @Tag(TestTags.UNIT_TEST)
 class LevelOrTierCursorTest {
 
-    private fun setUpExampleLsmFiles(vfs: VirtualFileSystem) = listOf(
-        vfs.createLsmTreeFile(
-            index = 0,
-            content = listOf(
-                Command.put("a", 1, "a1"),
-                Command.put("a", 2, "a2"),
-                Command.put("a", 3, "a3"),
-                Command.put("b", 1, "b1"),
-                Command.put("b", 2, "b2"),
-                Command.put("b", 3, "b3"),
-            )
-        ),
-        vfs.createLsmTreeFile(
-            index = 1,
-            content = listOf(
-                Command.put("e", 1, "e1"),
-                Command.put("e", 2, "e2"),
-                Command.put("e", 3, "e3"),
-                Command.put("h", 1, "h1"),
-                Command.put("h", 2, "h2"),
-                Command.put("h", 3, "h3"),
-            )
-        ),
-        vfs.createLsmTreeFile(
-            index = 2,
-            content = listOf(
-                Command.put("h", 10, "h10"),
-                Command.put("h", 20, "h20"),
-                Command.put("h", 30, "h30"),
-                Command.put("h", 40, "h40"),
-                Command.put("h", 50, "h50"),
-                Command.put("h", 60, "h60"),
-            )
-        ),
-        vfs.createLsmTreeFile(
-            index = 3,
-            content = listOf(
-                Command.put("y", 1, "y1"),
-                Command.put("y", 2, "y2"),
-                Command.put("y", 3, "y3"),
-                Command.put("z", 1, "z1"),
-                Command.put("z", 2, "z2"),
-                Command.put("z", 3, "z3"),
-            )
-        ),
-    )
+    private fun setUpExampleLsmFiles(vfs: VirtualFileSystem, statisticsReporter: StatisticsReporter): List<LSMTreeFile> {
+        return listOf(
+            vfs.createLsmTreeFile(
+                statisticsReporter = statisticsReporter,
+                index = 0,
+                content = listOf(
+                    Command.put("a", 1, "a1"),
+                    Command.put("a", 2, "a2"),
+                    Command.put("a", 3, "a3"),
+                    Command.put("b", 1, "b1"),
+                    Command.put("b", 2, "b2"),
+                    Command.put("b", 3, "b3"),
+                )
+            ),
+            vfs.createLsmTreeFile(
+                statisticsReporter = statisticsReporter,
+                index = 1,
+                content = listOf(
+                    Command.put("e", 1, "e1"),
+                    Command.put("e", 2, "e2"),
+                    Command.put("e", 3, "e3"),
+                    Command.put("h", 1, "h1"),
+                    Command.put("h", 2, "h2"),
+                    Command.put("h", 3, "h3"),
+                )
+            ),
+            vfs.createLsmTreeFile(
+                statisticsReporter = statisticsReporter,
+                index = 2,
+                content = listOf(
+                    Command.put("h", 10, "h10"),
+                    Command.put("h", 20, "h20"),
+                    Command.put("h", 30, "h30"),
+                    Command.put("h", 40, "h40"),
+                    Command.put("h", 50, "h50"),
+                    Command.put("h", 60, "h60"),
+                )
+            ),
+            vfs.createLsmTreeFile(
+                statisticsReporter = statisticsReporter,
+                index = 3,
+                content = listOf(
+                    Command.put("y", 1, "y1"),
+                    Command.put("y", 2, "y2"),
+                    Command.put("y", 3, "y3"),
+                    Command.put("z", 1, "z1"),
+                    Command.put("z", 2, "z2"),
+                    Command.put("z", 3, "z3"),
+                )
+            ),
+        )
+    }
 
     @ParameterizedTest
     @VirtualFileSystemTest
     fun canMoveFirstAndLastAndIterate(vfsMode: VFSMode) {
+        val stats = StatisticsCollector()
         vfsMode.withVFS { vfs ->
-            val lsmFiles = setUpExampleLsmFiles(vfs)
+            val lsmFiles = setUpExampleLsmFiles(vfs, stats)
             LevelOrTierCursor(lsmFiles).use { cursor ->
                 cursor.firstOrThrow()
                 expectThat(cursor) {
@@ -154,8 +164,9 @@ class LevelOrTierCursorTest {
     @ParameterizedTest
     @VirtualFileSystemTest
     fun canSeekExactlyOrNext(vfsMode: VFSMode) {
+        val stats = StatisticsCollector()
         vfsMode.withVFS { vfs ->
-            val lsmFiles = setUpExampleLsmFiles(vfs)
+            val lsmFiles = setUpExampleLsmFiles(vfs, stats)
             LevelOrTierCursor(lsmFiles).use { cursor ->
                 expectThat(cursor.seekExactlyOrNext(KeyAndTSN(Bytes.of(""), 1))).isTrue()
                 expectThat(cursor) {
@@ -203,8 +214,9 @@ class LevelOrTierCursorTest {
     @ParameterizedTest
     @VirtualFileSystemTest
     fun canSeekExactlyOrPrevious(vfsMode: VFSMode) {
+        val stats = StatisticsCollector()
         vfsMode.withVFS { vfs ->
-            val lsmFiles = setUpExampleLsmFiles(vfs)
+            val lsmFiles = setUpExampleLsmFiles(vfs, stats)
             LevelOrTierCursor(lsmFiles).use { cursor ->
                 expectThat(cursor.seekExactlyOrPrevious(KeyAndTSN(Bytes.of(""), 1))).isFalse()
                 expectThat(cursor.seekExactlyOrPrevious(KeyAndTSN(Bytes.of("e"), 1))).isTrue()

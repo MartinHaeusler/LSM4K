@@ -6,7 +6,6 @@ import org.chronos.chronostore.api.TransactionalStore.Companion.withCursor
 import org.chronos.chronostore.test.util.ChronoStoreMode
 import org.chronos.chronostore.util.bytes.BasicBytes
 import org.chronos.chronostore.util.bytes.Bytes
-import org.chronos.chronostore.util.statistics.ChronoStoreStatistics
 import org.chronos.chronostore.util.unit.BinarySize.Companion.GiB
 import org.chronos.chronostore.util.unit.BinarySize.Companion.MiB
 import kotlin.random.Random
@@ -65,7 +64,7 @@ object SerialReadWriteBenchmark {
                     }
                     if (c % 100 == 0) {
                         val runtime = System.currentTimeMillis() - startTime
-                        val stallTime = ChronoStoreStatistics.TOTAL_WRITE_STALL_TIME_MILLIS.get()
+                        val stallTime = chronoStore.statisticsReport().totalWriteStallTimeMillis
                         val stallTimePercent = (stallTime / runtime.toDouble()) * 100
                         log.info { "Commit #${c} successful. Stall time: ${stallTime}ms (${stallTimePercent}%)." }
                     }
@@ -112,7 +111,7 @@ object SerialReadWriteBenchmark {
             }.let { log.info { "Read complete. Time: ${it}ms, Total data read: ${Bytes.formatSize(totalSize)}" } }
 
             log.info { "FINAL STATISTICS" }
-            println(ChronoStoreStatistics.snapshot().prettyPrint())
+            println(chronoStore.statisticsReport().prettyPrint())
         }
     }
 

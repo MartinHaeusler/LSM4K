@@ -9,6 +9,7 @@ import org.chronos.chronostore.lsm.cache.BlockCache
 import org.chronos.chronostore.lsm.cache.FileHeaderCache
 import org.chronos.chronostore.util.ManagerState
 import org.chronos.chronostore.util.ResourceContext.Companion.using
+import org.chronos.chronostore.util.statistics.StatisticsReporter
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ExecutorService
@@ -27,11 +28,17 @@ class BlockPrefetchingManager(
     private val fileHeaderCache: FileHeaderCache,
     private val driverFactory: RandomFileAccessDriverFactory,
     private val executor: ExecutorService,
+    private val statisticsReporter: StatisticsReporter,
 ) : BlockLoader, AutoCloseable {
 
     companion object {
 
-        fun createIfNecessary(fileHeaderCache: FileHeaderCache, driverFactory: RandomFileAccessDriverFactory, prefetchingThreads: Int): BlockPrefetchingManager? {
+        fun createIfNecessary(
+            fileHeaderCache: FileHeaderCache,
+            driverFactory: RandomFileAccessDriverFactory,
+            prefetchingThreads: Int,
+            statisticsReporter: StatisticsReporter,
+        ): BlockPrefetchingManager? {
             if (prefetchingThreads <= 0) {
                 // disable prefetching
                 return null
@@ -40,6 +47,7 @@ class BlockPrefetchingManager(
                 fileHeaderCache = fileHeaderCache,
                 driverFactory = driverFactory,
                 executor = Executors.newFixedThreadPool(prefetchingThreads),
+                statisticsReporter = statisticsReporter,
             )
         }
 
@@ -74,6 +82,7 @@ class BlockPrefetchingManager(
             blockIndex = blockIndex,
             fileHeaderCache = this.fileHeaderCache,
             driverFactory = this.driverFactory,
+            statisticsReporter = this.statisticsReporter,
         )
 
         return CompletableFuture.supplyAsync(blockLoader::load, this.executor)
@@ -123,6 +132,7 @@ class BlockPrefetchingManager(
         private val blockIndex: Int,
         private val fileHeaderCache: FileHeaderCache,
         private val driverFactory: RandomFileAccessDriverFactory,
+        private val statisticsReporter: StatisticsReporter,
     ) {
 
         fun load(): DataBlock? = using {
@@ -134,6 +144,7 @@ class BlockPrefetchingManager(
                 driver = driver,
                 fileHeader = header,
                 blockIndex = blockIndex,
+                statisticsReporter = statisticsReporter,
             )
         }
 

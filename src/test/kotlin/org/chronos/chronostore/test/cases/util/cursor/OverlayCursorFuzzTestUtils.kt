@@ -3,7 +3,9 @@ package org.chronos.chronostore.test.cases.util.cursor
 import org.chronos.chronostore.test.util.CursorTestUtils.cursorOn
 import org.chronos.chronostore.util.ResourceContext
 import org.chronos.chronostore.util.cursor.Cursor
+import org.chronos.chronostore.util.cursor.CursorInternal
 import org.chronos.chronostore.util.cursor.OverlayCursor
+import org.chronos.chronostore.util.statistics.StatisticsReporter
 import org.junit.jupiter.api.fail
 import java.util.*
 
@@ -16,6 +18,7 @@ object OverlayCursorFuzzTestUtils {
         resultMap: NavigableMap<String, String>,
         allKeys: Set<String>,
         nonExistingKeys: Set<String>,
+        statisticsReporter: StatisticsReporter,
     ) {
         this.runOverlayCursorTestCase(
             baseMap = baseMap,
@@ -23,6 +26,7 @@ object OverlayCursorFuzzTestUtils {
             resultMap = resultMap,
             allKeys = allKeys,
             nonExistingKeys = nonExistingKeys,
+            statisticsReporter = statisticsReporter,
         )
     }
 
@@ -33,19 +37,20 @@ object OverlayCursorFuzzTestUtils {
         resultMap: NavigableMap<String, String>,
         allKeys: Set<String>,
         nonExistingKeys: Set<String>,
+        statisticsReporter: StatisticsReporter,
     ) {
         ResourceContext.using {
             val base = cursorOn(baseMap.toList()).autoClose()
-            val overlays = overlayMaps.map { cursorOn(it.toList()).autoClose() }
+            val overlays = overlayMaps.map { cursorOn(it.toList()).autoClose() as CursorInternal<String, String?> }
             // val cursor = overlay.overlayOnto(base).autoClose()
 
-            val cursorList = mutableListOf<Cursor<String, String?>>()
+            val cursorList = mutableListOf<CursorInternal<String, String?>>()
 
             @Suppress("UNCHECKED_CAST") // actually safe, we permit additional nullability to make the compiler happy, but we don't need it
-            cursorList += base as Cursor<String, String?>
+            cursorList += base as CursorInternal<String, String?>
             cursorList += overlays
 
-            val cursor = OverlayCursor(cursorList)
+            val cursor = OverlayCursor(cursorList, statisticsReporter)
 
             // get the first entry
             firstEntryTest(resultMap, cursor)

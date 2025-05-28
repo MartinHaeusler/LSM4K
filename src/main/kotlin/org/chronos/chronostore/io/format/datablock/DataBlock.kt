@@ -11,7 +11,7 @@ import org.chronos.chronostore.util.bytes.BytesBuffer
 import org.chronos.chronostore.util.cursor.Cursor
 import org.chronos.chronostore.util.cursor.EmptyCursor
 import org.chronos.chronostore.util.cursor.NavigableMapCursor
-import org.chronos.chronostore.util.statistics.ChronoStoreStatistics
+import org.chronos.chronostore.util.statistics.StatisticsReporter
 import java.util.*
 
 class DataBlock(
@@ -25,10 +25,10 @@ class DataBlock(
         @Suppress("UNCHECKED_CAST")
         fun loadBlock(
             input: Bytes,
-            compressionAlgorithm: CompressionAlgorithm
+            compressionAlgorithm: CompressionAlgorithm,
+            statisticsReporter: StatisticsReporter,
         ): DataBlock {
-            ChronoStoreStatistics.BLOCK_LOADS.incrementAndGet()
-
+            val timeBefore = System.currentTimeMillis()
             val buffer = BytesBuffer(input)
 
             val magicBytes = buffer.takeBytes(ChronoStoreFileFormat.BLOCK_MAGIC_BYTES.size)
@@ -50,7 +50,11 @@ class DataBlock(
             val blockMetaData = blockMetadataBytes.createInputStream().use(BlockMetaData::readFrom)
 
             // decompress the data
-            val decompressedData = compressionAlgorithm.decompress(compressedBytes, blockMetaData.uncompressedDataSize)
+            val decompressedData = compressionAlgorithm.decompress(
+                bytes = compressedBytes,
+                uncompressedSize = blockMetaData.uncompressedDataSize,
+                statisticsReporter = statisticsReporter,
+            )
 
             val commandsArray = arrayOfNulls<Map.Entry<KeyAndTSN, Command>>(blockMetaData.commandCount)
             val decompressedBuffer = BytesBuffer(decompressedData)
@@ -83,11 +87,16 @@ class DataBlock(
             // all commands from the block, we will have filled every spot in the array with a non-NULL command.
             val commands = TreeMapUtils.treeMapFromSortedList(commandsArray.asList() as List<Map.Entry<KeyAndTSN, Command>>)
 
-            return DataBlock(
+            val timeAfter = System.currentTimeMillis()
+
+            val dataBlock = DataBlock(
                 metaData = blockMetaData,
                 data = commands,
             )
 
+            statisticsReporter.reportBlockLoadTime(timeAfter - timeBefore)
+
+            return dataBlock
         }
 
     }

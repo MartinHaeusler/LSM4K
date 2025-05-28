@@ -5,20 +5,21 @@ import com.google.common.cache.CacheBuilder
 import org.chronos.chronostore.io.format.BlockLoader
 import org.chronos.chronostore.io.format.datablock.DataBlock
 import org.chronos.chronostore.io.vfs.VirtualFile
-import org.chronos.chronostore.util.statistics.ChronoStoreStatistics
+import org.chronos.chronostore.util.statistics.StatisticsReporter
 import org.chronos.chronostore.util.unit.BinarySize
 import java.util.concurrent.CompletableFuture
 
 class BlockCacheImpl(
     val maxSize: BinarySize,
     val loader: BlockLoader,
+    val statisticsReporter: StatisticsReporter,
 ) : BlockCache {
 
     // TODO [DEPENDENCIES] Use Caffeine cache here, it supports async loading out of the box
     private val cache: Cache<CacheKey, DataBlock> = CacheBuilder.newBuilder()
         .maximumWeight(maxSize.bytes)
         .weigher(this::computeBlockCacheWeight)
-        .removalListener<CacheKey, DataBlock> { ChronoStoreStatistics.BLOCK_CACHE_EVICTIONS.incrementAndGet() }
+        .removalListener<CacheKey, DataBlock> { this.statisticsReporter.reportBlockCacheEviction() }
         .build()
 
     private fun computeBlockCacheWeight(
@@ -37,11 +38,13 @@ class BlockCacheImpl(
     }
 
     override fun getBlockAsync(file: VirtualFile, blockIndex: Int): CompletableFuture<DataBlock?> {
+        this.statisticsReporter.reportBlockCacheRequest()
         val cacheKey = CacheKey(file.path, blockIndex)
         val cachedResult = this.cache.getIfPresent(cacheKey)
         if (cachedResult != null) {
             return CompletableFuture.completedFuture(cachedResult)
         }
+        this.statisticsReporter.reportBlockCacheMiss()
         return this.loader.getBlockAsync(file, blockIndex)
             .thenApply { dataBlock ->
                 if (dataBlock != null) {

@@ -7,7 +7,7 @@ import org.chronos.chronostore.io.format.cursor.ChronoStoreFileCursor
 import org.chronos.chronostore.io.vfs.disk.DiskBasedVirtualFileSystem
 import org.chronos.chronostore.io.vfs.disk.DiskBasedVirtualFileSystemSettings
 import org.chronos.chronostore.lsm.cache.FileHeaderCache
-import org.chronos.chronostore.util.statistics.ChronoStoreStatistics
+import org.chronos.chronostore.util.statistics.StatisticsCollector
 import org.chronos.chronostore.util.unit.BinarySize.Companion.MiB
 import org.xerial.snappy.Snappy
 import java.io.File
@@ -35,15 +35,15 @@ object ChronoStoreTaxonomyDataReaderDirectBenchmark {
 
 
         this.driverFactory.createDriver(inputFile).use { driver ->
-            val fileHeaderCache = FileHeaderCache.create(100.MiB)
+            val stats = StatisticsCollector()
+            val fileHeaderCache = FileHeaderCache.create(100.MiB, stats)
             val header = fileHeaderCache.getFileHeader(inputFile) { ChronoStoreFileFormat.loadFileHeader(driver) }
-            ChronoStoreFileCursor(inputFile, header, BlockLoader.basic(this.driverFactory, fileHeaderCache)).use { cursor ->
+            ChronoStoreFileCursor(inputFile, header, BlockLoader.basic(this.driverFactory, stats, fileHeaderCache)).use { cursor ->
                 val timeBeforeRead = System.currentTimeMillis()
                 val commands = countCommands(cursor)
                 val timeAfterRead = System.currentTimeMillis()
                 println("Read all ${commands} in file '${inputFile.path}' in ${timeAfterRead - timeBeforeRead}ms.")
-                val statistics = ChronoStoreStatistics.snapshot()
-                println(statistics.prettyPrint())
+                println(stats.report().prettyPrint())
             }
         }
     }

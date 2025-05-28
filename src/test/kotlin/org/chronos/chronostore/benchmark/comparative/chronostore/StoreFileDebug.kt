@@ -11,6 +11,8 @@ import org.chronos.chronostore.io.vfs.VirtualReadWriteFile
 import org.chronos.chronostore.io.vfs.disk.DiskBasedVirtualFileSystem
 import org.chronos.chronostore.io.vfs.disk.DiskBasedVirtualFileSystemSettings
 import org.chronos.chronostore.lsm.cache.FileHeaderCache
+import org.chronos.chronostore.util.statistics.StatisticsCollector
+import org.chronos.chronostore.util.statistics.StatisticsReporter
 import org.chronos.chronostore.util.unit.BinarySize.Companion.Bytes
 import org.chronos.chronostore.util.unit.BinarySize.Companion.MiB
 import java.io.File
@@ -31,9 +33,11 @@ object StoreFileDebug {
         var overallEntries = 0L
         val issues = mutableListOf<Issue>()
 
+        val stats = StatisticsCollector()
+
         for (chronoStoreFileName in chronoStoreFileNames) {
             val file = vfs.file(chronoStoreFileName)
-            val entriesInFile = countEntriesInFile(file)
+            val entriesInFile = countEntriesInFile(file, stats)
             println()
             println("File '${file.name}' has ${entriesInFile} entries (counted).")
             overallEntries += entriesInFile
@@ -67,7 +71,7 @@ object StoreFileDebug {
             println("File '${file.name}' blocks:")
             for (blockIndex in 0..<header.metaData.numberOfBlocks) {
                 FileChannelDriver.Factory.withDriver(file) { driver ->
-                    val dataBlock = ChronoStoreFileFormat.loadBlockFromFile(driver, header, blockIndex)
+                    val dataBlock = ChronoStoreFileFormat.loadBlockFromFile(driver, header, blockIndex, stats)
                     println("  - Block #${blockIndex}")
                     println("    - Size (compressed): ${dataBlock.metaData.compressedDataSize.Bytes.toHumanReadableString()}")
                     println("    - Size (uncompressed): ${dataBlock.metaData.uncompressedDataSize.Bytes.toHumanReadableString()}")
@@ -109,12 +113,12 @@ object StoreFileDebug {
         }
     }
 
-    private fun countEntriesInFile(file: VirtualReadWriteFile): Long {
+    private fun countEntriesInFile(file: VirtualReadWriteFile, statisticsReporter: StatisticsReporter): Long {
         val driverFactory = FileChannelDriver.Factory
         driverFactory.createDriver(file).use { driver ->
-            val fileHeaderCache = FileHeaderCache.create(100.MiB)
+            val fileHeaderCache = FileHeaderCache.create(100.MiB, statisticsReporter)
             val header = fileHeaderCache.getFileHeader(file) { ChronoStoreFileFormat.loadFileHeader(driver) }
-            val entries = ChronoStoreFileCursor(file, header, BlockLoader.basic(driverFactory, fileHeaderCache)).use { cursor ->
+            val entries = ChronoStoreFileCursor(file, header, BlockLoader.basic(driverFactory, statisticsReporter, fileHeaderCache)).use { cursor ->
                 cursor.firstOrThrow()
                 cursor.ascendingKeySequenceFromHere().fold(0L) { acc, _ -> acc + 1 }
             }

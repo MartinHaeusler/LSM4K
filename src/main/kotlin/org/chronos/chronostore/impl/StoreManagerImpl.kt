@@ -24,6 +24,7 @@ import org.chronos.chronostore.util.ManagerState
 import org.chronos.chronostore.util.StoreId
 import org.chronos.chronostore.util.TSN
 import org.chronos.chronostore.util.TransactionId
+import org.chronos.chronostore.util.statistics.StatisticsReporter
 import org.pcollections.TreePMap
 import java.util.concurrent.Executors
 import java.util.concurrent.locks.ReentrantReadWriteLock
@@ -35,6 +36,7 @@ class StoreManagerImpl(
     private val blockCache: BlockCache,
     private val fileHeaderCache: FileHeaderCache,
     private val forest: LSMForestMemoryManager,
+    private val statisticsReporter: StatisticsReporter,
     private val driverFactory: RandomFileAccessDriverFactory,
     private val newFileSettings: ChronoStoreFileSettings,
     private val configuration: ChronoStoreConfiguration,
@@ -104,6 +106,7 @@ class StoreManagerImpl(
             newFileSettings = this.newFileSettings,
             getSmallestOpenReadTSN = this.getSmallestOpenReadTSN,
             killswitch = this.killswitch,
+            statisticsReporter = this.statisticsReporter,
         )
     }
 

@@ -1,6 +1,7 @@
 package org.chronos.chronostore.test.cases.util.cursor
 
 import org.chronos.chronostore.test.util.junit.UnitTest
+import org.chronos.chronostore.util.statistics.StatisticsCollector
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.fail
 import java.util.*
@@ -49,6 +50,7 @@ class OverlayCursorFuzzTest {
                     resultMap = resultMap,
                     allKeys = allKeys,
                     nonExistingKeys = nonExistingKeys,
+                    statisticsReporter = StatisticsCollector(),
                 )
             } catch (t: Throwable) {
                 println("A ${t::class.simpleName} occurred during a fuzz test:")

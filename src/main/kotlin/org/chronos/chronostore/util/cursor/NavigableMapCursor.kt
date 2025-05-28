@@ -2,31 +2,57 @@ package org.chronos.chronostore.util.cursor
 
 import com.google.common.collect.PeekingIterator
 import org.chronos.chronostore.util.Order
+import org.chronos.chronostore.util.cursor.CursorUtils.checkIsOpen
 import org.chronos.chronostore.util.iterator.IteratorExtensions.peekingIterator
 import java.util.*
 import kotlin.collections.Map.Entry
 
 class NavigableMapCursor<K : Comparable<K>, V>(
     private val navigableMap: NavigableMap<K, V>,
-) : AbstractCursor<K, V>() {
+) : CursorInternal<K, V> {
+
+    override var parent: CursorInternal<*, *>? = null
+        set(value) {
+            if (field === value) {
+                return
+            }
+            check(field == null) {
+                "Cannot assign another parent to this cursor; a parent is already present." +
+                    " Existing parent: ${field}, proposed new parent: ${value}"
+            }
+            field = value
+        }
 
     private var currentIterator: PeekingIterator<Entry<K, V>>? = null
     private var currentIteratorDirection: Order? = null
 
     private var currentEntry: Entry<K, V>? = null
 
+    override var isOpen: Boolean = true
+    private val closeHandlers = mutableListOf<CloseHandler>()
 
-    override val keyOrNullInternal: K?
-        get() = this.currentEntry?.key
+    override val keyOrNull: K?
+        get() {
+            this.checkIsOpen()
+            return this.currentEntry?.key
+        }
 
-    override val valueOrNullInternal: V?
-        get() = this.currentEntry?.value
+    override val valueOrNull: V?
+        get() {
+            this.checkIsOpen()
+            return this.currentEntry?.value
+        }
 
-    override fun closeInternal() {
-        // nothing to do, everything is in-memory.
+    override val isValidPosition: Boolean
+        get() = this.currentEntry != null
+
+    override fun invalidatePositionInternal() {
+        this.checkIsOpen()
+        this.currentEntry = null
     }
 
     override fun firstInternal(): Boolean {
+        this.checkIsOpen()
         val ascendingIterator = this.navigableMap.peekingIterator()
         this.currentIterator = ascendingIterator
         this.currentIteratorDirection = Order.ASCENDING
@@ -38,6 +64,7 @@ class NavigableMapCursor<K : Comparable<K>, V>(
     }
 
     override fun lastInternal(): Boolean {
+        this.checkIsOpen()
         val descendingIterator = this.navigableMap.descendingMap().peekingIterator()
         this.currentIterator = descendingIterator
         this.currentIteratorDirection = Order.DESCENDING
@@ -48,7 +75,17 @@ class NavigableMapCursor<K : Comparable<K>, V>(
         return true
     }
 
-    override fun moveInternal(direction: Order): Boolean {
+    override fun nextInternal(): Boolean {
+        this.checkIsOpen()
+        return this.moveInternal(Order.ASCENDING)
+    }
+
+    override fun previousInternal(): Boolean {
+        this.checkIsOpen()
+        return this.moveInternal(Order.DESCENDING)
+    }
+
+    private fun moveInternal(direction: Order): Boolean {
         val cachedIterator = this.currentIterator
         if (cachedIterator != null && this.currentIteratorDirection == direction) {
             // keep going in the same direction
@@ -64,8 +101,19 @@ class NavigableMapCursor<K : Comparable<K>, V>(
                 ?: return false // position is invalid, can't move
 
             val newIterator = when (direction) {
-                Order.ASCENDING -> this.navigableMap.subMap(start.key, false, this.navigableMap.lastKey(), true).peekingIterator()
-                Order.DESCENDING -> this.navigableMap.subMap(this.navigableMap.firstKey(), true, start.key, false).descendingMap().peekingIterator()
+                Order.ASCENDING -> this.navigableMap.subMap(
+                    /* fromKey = */ start.key,
+                    /* fromInclusive = */ false,
+                    /* toKey = */ this.navigableMap.lastKey(),
+                    /* toInclusive = */ true,
+                ).peekingIterator()
+
+                Order.DESCENDING -> this.navigableMap.subMap(
+                    /* fromKey = */ this.navigableMap.firstKey(),
+                    /* fromInclusive = */ true,
+                    /* toKey = */ start.key,
+                    /* toInclusive = */ false,
+                ).descendingMap().peekingIterator()
             }
             if (!newIterator.hasNext()) {
                 // no keys in the given direction
@@ -81,6 +129,7 @@ class NavigableMapCursor<K : Comparable<K>, V>(
     }
 
     override fun seekExactlyOrPreviousInternal(key: K): Boolean {
+        this.checkIsOpen()
         // invalidate the current iterator, if any
         this.currentIterator = null
         this.currentIteratorDirection = null
@@ -93,6 +142,7 @@ class NavigableMapCursor<K : Comparable<K>, V>(
     }
 
     override fun seekExactlyOrNextInternal(key: K): Boolean {
+        this.checkIsOpen()
         // invalidate the current iterator, if any
         this.currentIterator = null
         this.currentIteratorDirection = null
@@ -105,7 +155,8 @@ class NavigableMapCursor<K : Comparable<K>, V>(
         return true
     }
 
-    override fun peekNext(): Pair<K, V>? {
+    override fun peekNextInternal(): Pair<K, V>? {
+        this.checkIsOpen()
         if (!this.isValidPosition) {
             return null
         }
@@ -115,15 +166,19 @@ class NavigableMapCursor<K : Comparable<K>, V>(
             return currentIterator.peek().toPair()
         }
         // fall back to the default implementation
-        if (!this.next()) {
+        if (!this.nextInternal()) {
             return null
         }
         val entry = this.key to this.value
-        this.previousOrThrow()
+        check(this.previousInternal()) {
+            "Illegal Iterator state - move 'previous()' failed!"
+        }
+
         return entry
     }
 
-    override fun peekPrevious(): Pair<K, V>? {
+    override fun peekPreviousInternal(): Pair<K, V>? {
+        this.checkIsOpen()
         if (!this.isValidPosition) {
             return null
         }
@@ -133,12 +188,29 @@ class NavigableMapCursor<K : Comparable<K>, V>(
             return currentIterator.peek().toPair()
         }
         // fall back to the default implementation
-        if (!this.previous()) {
+        if (!this.previousInternal()) {
             return null
         }
         val entry = this.key to this.value
-        this.nextOrThrow()
+        check(this.nextInternal()) {
+            "Illegal Iterator state - move 'next()' failed!"
+        }
+
         return entry
+    }
+
+    override fun onClose(action: CloseHandler): Cursor<K, V> {
+        this.checkIsOpen()
+        this.closeHandlers += action
+        return this
+    }
+
+    override fun closeInternal() {
+        if (!this.isOpen) {
+            return
+        }
+        this.isOpen = false
+        CursorUtils.executeCloseHandlers(this.closeHandlers)
     }
 
 }

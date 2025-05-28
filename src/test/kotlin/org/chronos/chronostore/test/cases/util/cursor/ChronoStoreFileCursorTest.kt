@@ -9,6 +9,7 @@ import org.chronos.chronostore.test.util.VirtualFileSystemTest
 import org.chronos.chronostore.test.util.junit.TestTags
 import org.chronos.chronostore.test.util.lsm.LsmFileFactory.createLsmTreeFile
 import org.chronos.chronostore.util.bytes.Bytes
+import org.chronos.chronostore.util.statistics.StatisticsCollector
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.params.ParameterizedTest
 import strikt.api.expectThat
@@ -22,6 +23,7 @@ class ChronoStoreFileCursorTest {
     fun canSeekFirstAndLastAndIterate(vfsMode: VFSMode) {
         vfsMode.withVFS { vfs ->
             val lsmFile = vfs.createLsmTreeFile(
+                statisticsReporter = StatisticsCollector(),
                 index = 0,
                 content = listOf(
                     Command.put("a", 1, "a1"),
@@ -30,7 +32,7 @@ class ChronoStoreFileCursorTest {
                     Command.put("c", 1, "c1"),
                     Command.put("c", 2, "c2"),
                     Command.put("c", 3, "c3"),
-                )
+                ),
             )
             lsmFile.cursor().use { cursor ->
                 cursor.firstOrThrow()
@@ -66,6 +68,7 @@ class ChronoStoreFileCursorTest {
                     get(1).isEqualToKeyValuePair("c@2", "c@2->c2")
                     get(0).isEqualToKeyValuePair("c@3", "c@3->c3")
                 }
+
             }
         }
     }
@@ -75,6 +78,7 @@ class ChronoStoreFileCursorTest {
     fun canSeekExactlyOrPrevious(vfsMode: VFSMode) {
         vfsMode.withVFS { vfs ->
             val lsmFile = vfs.createLsmTreeFile(
+                statisticsReporter = StatisticsCollector(),
                 index = 0,
                 content = listOf(
                     Command.put("a", 1, "a1"),
@@ -134,6 +138,7 @@ class ChronoStoreFileCursorTest {
     fun canSeekExactlyOrNext(vfsMode: VFSMode) {
         vfsMode.withVFS { vfs ->
             val lsmFile = vfs.createLsmTreeFile(
+                statisticsReporter = StatisticsCollector(),
                 index = 0,
                 content = listOf(
                     Command.put("a", 1, "a1"),

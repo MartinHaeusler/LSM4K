@@ -7,7 +7,7 @@ import org.chronos.chronostore.io.vfs.VirtualFile
 import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.model.command.KeyAndTSN
 import org.chronos.chronostore.util.bytes.Bytes
-import org.chronos.chronostore.util.statistics.ChronoStoreStatistics
+import org.chronos.chronostore.util.statistics.StatisticsReporter
 
 object ChronoStoreFileFormat {
 
@@ -52,23 +52,39 @@ object ChronoStoreFileFormat {
     }
 
     @JvmStatic
-    fun loadBlockFromFileOrNull(driver: RandomFileAccessDriver, fileHeader: FileHeader, blockIndex: Int): DataBlock? {
+    fun loadBlockFromFileOrNull(driver: RandomFileAccessDriver, fileHeader: FileHeader, blockIndex: Int, statisticsReporter: StatisticsReporter): DataBlock? {
         val timeBefore = System.currentTimeMillis()
         val (startPosition, length) = fileHeader.indexOfBlocks.getBlockStartPositionAndLengthOrNull(blockIndex)
             ?: return null
 
-        return loadBlockInternal(driver, startPosition, length, fileHeader, timeBefore, blockIndex)
+        return loadBlockInternal(
+            driver = driver,
+            startPosition = startPosition,
+            length = length,
+            fileHeader = fileHeader,
+            timeBefore = timeBefore,
+            blockIndex = blockIndex,
+            statisticsReporter = statisticsReporter,
+        )
     }
 
     @JvmStatic
-    fun loadBlockFromFile(driver: RandomFileAccessDriver, fileHeader: FileHeader, blockIndex: Int): DataBlock {
+    fun loadBlockFromFile(driver: RandomFileAccessDriver, fileHeader: FileHeader, blockIndex: Int, statisticsReporter: StatisticsReporter): DataBlock {
         val timeBefore = System.currentTimeMillis()
         val (startPosition, length) = fileHeader.indexOfBlocks.getBlockStartPositionAndLengthOrNull(blockIndex)
             ?: throw IllegalStateException(
                 "Could not fetch block #${blockIndex} in file: '${driver.filePath}')!" +
                     " The block index contains ${fileHeader.indexOfBlocks.size} entries."
             )
-        return loadBlockInternal(driver, startPosition, length, fileHeader, timeBefore, blockIndex)
+        return loadBlockInternal(
+            driver = driver,
+            startPosition = startPosition,
+            length = length,
+            fileHeader = fileHeader,
+            timeBefore = timeBefore,
+            blockIndex = blockIndex,
+            statisticsReporter = statisticsReporter,
+        )
     }
 
     private fun loadBlockInternal(
@@ -78,13 +94,18 @@ object ChronoStoreFileFormat {
         fileHeader: FileHeader,
         timeBefore: Long,
         blockIndex: Int,
+        statisticsReporter: StatisticsReporter,
     ): DataBlock {
         val blockBytes = driver.readBytes(startPosition, length)
         val compressionAlgorithm = fileHeader.metaData.settings.compression
         try {
-            val dataBlock = DataBlock.loadBlock(blockBytes, compressionAlgorithm)
+            val dataBlock = DataBlock.loadBlock(
+                input = blockBytes,
+                compressionAlgorithm = compressionAlgorithm,
+                statisticsReporter = statisticsReporter,
+            )
             val timeAfter = System.currentTimeMillis()
-            ChronoStoreStatistics.BLOCK_LOAD_TIME.addAndGet(timeAfter - timeBefore)
+            statisticsReporter.reportBlockLoadTime(timeAfter - timeBefore)
             return dataBlock
         } catch (e: Exception) {
             throw BlockReadException(

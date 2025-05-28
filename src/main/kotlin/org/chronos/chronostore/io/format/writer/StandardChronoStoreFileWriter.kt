@@ -14,6 +14,7 @@ import org.chronos.chronostore.util.bloom.BytesBloomFilter
 import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.bytes.Bytes.Companion.writeBytesWithoutSize
 import org.chronos.chronostore.util.iterator.IteratorExtensions.checkOrdered
+import org.chronos.chronostore.util.statistics.StatisticsReporter
 import java.io.ByteArrayOutputStream
 import java.io.OutputStream
 import java.util.*
@@ -28,6 +29,8 @@ class StandardChronoStoreFileWriter : ChronoStoreFileWriter {
     private val outputStream: PositionTrackingStream
 
     private val settings: ChronoStoreFileSettings
+
+    private val statisticsReporter: StatisticsReporter
 
     companion object {
 
@@ -44,9 +47,10 @@ class StandardChronoStoreFileWriter : ChronoStoreFileWriter {
      * @param settings The settings to use for writing the file. Will also be persisted in the file itself.
      */
     @Suppress("ConvertSecondaryConstructorToPrimary")
-    constructor(outputStream: OutputStream, settings: ChronoStoreFileSettings) {
+    constructor(outputStream: OutputStream, settings: ChronoStoreFileSettings, statisticsReporter: StatisticsReporter) {
         this.outputStream = PositionTrackingStream(outputStream.buffered())
         this.settings = settings
+        this.statisticsReporter = statisticsReporter
     }
 
     override fun write(
@@ -276,7 +280,10 @@ class StandardChronoStoreFileWriter : ChronoStoreFileWriter {
         blockDataOutputStream.close()
         val blockDataArrayRaw = blockDataOutputStream.toByteArray()
         // compress the data
-        val blockDataArrayCompressed = this.settings.compression.compress(blockDataArrayRaw)
+        val blockDataArrayCompressed = this.settings.compression.compress(
+            bytes = blockDataArrayRaw,
+            statisticsReporter = this.statisticsReporter,
+        )
 
         // record the sizes
         val uncompressedSize = blockDataArrayRaw.size

@@ -12,11 +12,13 @@ import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.cursor.Cursor
 import org.chronos.chronostore.util.cursor.IndexBasedCursor
 import org.chronos.chronostore.util.cursor.OverlayCursor.Companion.overlayOnto
+import org.chronos.chronostore.util.statistics.StatisticsReporter
 import java.util.*
 
 class TransactionalStoreImpl(
     override val transaction: ChronoStoreTransactionImpl,
     override val store: Store,
+    private val statisticsReporter: StatisticsReporter,
 ) : TransactionalReadWriteStoreInternal {
 
     // TODO [SCALABILITY]: A transaction should be able to "spill" its transient modifications to disk if they get too big.
@@ -138,7 +140,7 @@ class TransactionalStoreImpl(
         } else {
             return bytesToBytesCursor
         }
-        return transientModificationCursor.overlayOnto(bytesToBytesCursor)
+        return transientModificationCursor.overlayOnto(bytesToBytesCursor, this.statisticsReporter)
     }
 
     private fun getTree(): LSMTree {

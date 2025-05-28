@@ -6,7 +6,6 @@ import org.chronos.chronostore.impl.ChronoStoreImpl
 import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.util.IOExtensions.size
 import org.chronos.chronostore.util.bytes.Bytes
-import org.chronos.chronostore.util.statistics.ChronoStoreStatistics
 import org.chronos.chronostore.util.unit.BinarySize.Companion.MiB
 import org.xerial.snappy.Snappy
 import java.io.File
@@ -35,7 +34,7 @@ object ChronoStoreTaxonomyDataWriterBenchmark {
             checkpointOnShutdown = false,
         )
 
-        ChronoStore.openOnDirectory(this.storeDir, configuration).use { chronoStore ->
+        val statisticsReport = ChronoStore.openOnDirectory(this.storeDir, configuration).use { chronoStore ->
             inputFile.inputStream().buffered().use { input ->
                 val commandSequence = generateSequence {
                     Command.readFromStreamOrNull(input)
@@ -72,14 +71,15 @@ object ChronoStoreTaxonomyDataWriterBenchmark {
 //                chronoStore.mergeService.performMajorCompaction()
                 println("Done")
             }
+
+            chronoStore.statisticsReport()
         }
 
         println()
         println()
         println()
 
-        val statistics = ChronoStoreStatistics.snapshot()
-        println(statistics.prettyPrint())
+        println(statisticsReport.prettyPrint())
     }
 
 }

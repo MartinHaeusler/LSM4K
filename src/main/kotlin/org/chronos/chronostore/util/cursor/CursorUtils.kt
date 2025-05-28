@@ -4,6 +4,20 @@ import org.chronos.chronostore.api.exceptions.CursorException
 
 object CursorUtils {
 
+    fun Cursor<*, *>.checkIsOpen() {
+        check(this.isOpen) {
+            "This cursor has already been closed: ${this}"
+        }
+    }
+
+    fun CursorInternal<*, *>.checkNoParent() {
+        check(this.parent == null) {
+            "This cursor is controlled by a parent cursor;" +
+                " please do not move it manually." +
+                " Use the parent cursor instead: ${this.parent}"
+        }
+    }
+
     /**
      * Executes the given close handlers.
      *

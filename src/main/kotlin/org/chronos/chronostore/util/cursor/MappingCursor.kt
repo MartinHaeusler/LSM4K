@@ -1,51 +1,108 @@
 package org.chronos.chronostore.util.cursor
 
-import org.chronos.chronostore.util.Order
+import org.chronos.chronostore.util.cursor.CursorUtils.checkIsOpen
 
-class MappingCursor<C : Cursor<K, V>, K, V, MK, MV>(
-    original: C,
-    val mapKey: (K) -> MK,
-    val mapKeyInverse: (MK) -> K,
-    val mapValue: (V) -> MV,
-) : WrappingCursor<C, MK, MV>(original) {
+class MappingCursor<K, V, MK, MV>(
+    private val innerCursor: CursorInternal<K, V>,
+    private val mapKey: (K) -> MK,
+    private val mapKeyInverse: (MK) -> K,
+    private val mapValue: (V) -> MV,
+) : CursorInternal<MK, MV> {
 
-    override fun doFirst(): Boolean {
-        return this.innerCursor.first()
+    override var parent: CursorInternal<*, *>? = null
+        set(value) {
+            if (field === value) {
+                return
+            }
+            check(field == null) {
+                "Cannot assign another parent to this cursor; a parent is already present." +
+                    " Existing parent: ${field}, proposed new parent: ${value}"
+            }
+            field = value
+        }
+
+    override val isOpen: Boolean
+        get() = this.innerCursor.isOpen
+
+    override val isValidPosition: Boolean
+        get() = this.innerCursor.isValidPosition
+
+    init {
+        innerCursor.parent = this
     }
 
-    override fun doLast(): Boolean {
-        return this.innerCursor.last()
+    override fun invalidatePositionInternal() {
+        this.checkIsOpen()
+        this.innerCursor.invalidatePositionInternal()
     }
 
-    override fun doMove(direction: Order): Boolean {
-        return this.innerCursor.move(direction)
+    override fun firstInternal(): Boolean {
+        this.checkIsOpen()
+        return this.innerCursor.firstInternal()
     }
 
-    override val keyOrNullInternal: MK?
-        get() = this.innerCursor.keyOrNull?.let(mapKey)
-
-    override val valueOrNullInternal: MV?
-        get() = this.innerCursor.valueOrNull?.let(mapValue)
-
-    override fun doSeekExactlyOrNext(key: MK): Boolean {
-        return this.innerCursor.seekExactlyOrNext(mapKeyInverse(key))
+    override fun lastInternal(): Boolean {
+        this.checkIsOpen()
+        return this.innerCursor.lastInternal()
     }
 
-    override fun doSeekExactlyOrPrevious(key: MK): Boolean {
-        return this.innerCursor.seekExactlyOrPrevious(mapKeyInverse(key))
+    override fun nextInternal(): Boolean {
+        this.checkIsOpen()
+        return this.innerCursor.nextInternal()
     }
 
+    override fun previousInternal(): Boolean {
+        this.checkIsOpen()
+        return this.innerCursor.previousInternal()
+    }
 
-    override fun peekNext(): Pair<MK, MV>? {
-        val nextEntry = this.innerCursor.peekNext()
+    override val keyOrNull: MK?
+        get() {
+            this.checkIsOpen()
+            return this.innerCursor.keyOrNull?.let(mapKey)
+        }
+
+    override val valueOrNull: MV?
+        get() {
+            this.checkIsOpen()
+            return this.innerCursor.valueOrNull?.let(mapValue)
+        }
+
+    override fun seekExactlyOrNextInternal(key: MK): Boolean {
+        this.checkIsOpen()
+        return this.innerCursor.seekExactlyOrNextInternal(mapKeyInverse(key))
+    }
+
+    override fun seekExactlyOrPreviousInternal(key: MK): Boolean {
+        this.checkIsOpen()
+        return this.innerCursor.seekExactlyOrPreviousInternal(mapKeyInverse(key))
+    }
+
+    override fun peekNextInternal(): Pair<MK, MV>? {
+        this.checkIsOpen()
+        val nextEntry = this.innerCursor.peekNextInternal()
             ?: return null
         return mapKey(nextEntry.first) to mapValue(nextEntry.second)
     }
 
     override fun peekPrevious(): Pair<MK, MV>? {
-        val previousEntry = this.innerCursor.peekPrevious()
+        this.checkIsOpen()
+        val previousEntry = this.innerCursor.peekPreviousInternal()
             ?: return null
         return mapKey(previousEntry.first) to mapValue(previousEntry.second)
+    }
+
+    override fun onClose(action: CloseHandler): Cursor<MK, MV> {
+        this.checkIsOpen()
+        this.innerCursor.onClose(action)
+        return this
+    }
+
+    override fun closeInternal() {
+        if (!this.isOpen) {
+            return
+        }
+        this.innerCursor.closeInternal()
     }
 
     override fun toString(): String {

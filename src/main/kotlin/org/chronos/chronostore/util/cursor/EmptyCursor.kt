@@ -1,83 +1,88 @@
 package org.chronos.chronostore.util.cursor
 
+import org.chronos.chronostore.util.cursor.CursorUtils.checkIsOpen
+
 class EmptyCursor<K, V>(
-    val getCursorName: () -> String
-) : Cursor<K, V> {
+    val getCursorName: () -> String,
+) : CursorInternal<K, V> {
 
-
-    override var modCount: Long = 0
+    override var parent: CursorInternal<*, *>? = null
+        set(value) {
+            if (field === value) {
+                return
+            }
+            check(field == null) {
+                "Cannot assign another parent to this cursor; a parent is already present." +
+                    " Existing parent: ${field}, proposed new parent: ${value}"
+            }
+            field = value
+        }
 
     override var isOpen: Boolean = true
 
     private val closeHandlers = mutableListOf<CloseHandler>()
 
-    override val isValidPosition: Boolean
-        get() = false
-
-    override fun invalidatePosition() {
-        check(this.isOpen, ::createAlreadyClosedMessage)
-        this.modCount++
-    }
-
-    override fun first(): Boolean {
-        check(this.isOpen, ::createAlreadyClosedMessage)
-        this.modCount++
-        return false
-    }
-
-    override fun last(): Boolean {
-        check(this.isOpen, ::createAlreadyClosedMessage)
-        this.modCount++
-        return false
-    }
-
-    override fun next(): Boolean {
-        check(this.isOpen, ::createAlreadyClosedMessage)
-        this.modCount++
-        return false
-    }
-
-    override fun previous(): Boolean {
-        check(this.isOpen, ::createAlreadyClosedMessage)
-        this.modCount++
-        return false
-    }
-
     override val keyOrNull: K?
         get() {
-            check(this.isOpen, ::createAlreadyClosedMessage)
+            this.checkIsOpen()
             return null
         }
 
     override val valueOrNull: V?
         get() {
-            check(this.isOpen, ::createAlreadyClosedMessage)
+            this.checkIsOpen()
             return null
         }
 
+    override val isValidPosition: Boolean
+        get() = false
+
+    override fun invalidatePositionInternal() {
+        this.checkIsOpen()
+    }
+
+    override fun firstInternal(): Boolean {
+        this.checkIsOpen()
+        return false
+    }
+
+    override fun lastInternal(): Boolean {
+        this.checkIsOpen()
+        return false
+    }
+
+    override fun nextInternal(): Boolean {
+        this.checkIsOpen()
+        return false
+    }
+
+    override fun previousInternal(): Boolean {
+        this.checkIsOpen()
+        return false
+    }
+
     override fun onClose(action: CloseHandler): Cursor<K, V> {
-        check(this.isOpen, ::createAlreadyClosedMessage)
+        this.checkIsOpen()
         this.closeHandlers += action
         return this
     }
 
-    override fun close() {
+    override fun closeInternal() {
+        if (!this.isOpen) {
+            return
+        }
         this.isOpen = false
         CursorUtils.executeCloseHandlers(this.closeHandlers)
     }
 
-    override fun seekExactlyOrNext(key: K): Boolean {
-        check(this.isOpen, ::createAlreadyClosedMessage)
+    override fun seekExactlyOrNextInternal(key: K): Boolean {
+        this.checkIsOpen()
         return false
     }
 
-    override fun seekExactlyOrPrevious(key: K): Boolean {
-        check(this.isOpen, ::createAlreadyClosedMessage)
+    override fun seekExactlyOrPreviousInternal(key: K): Boolean {
+        this.checkIsOpen()
         return false
-    }
-
-    private fun createAlreadyClosedMessage(): String {
-        return "This cursor on ${this.getCursorName()} has already been closed!"
     }
 
     override fun toString(): String {

@@ -5,7 +5,7 @@ import org.chronos.chronostore.async.taskmonitor.TaskMonitor
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.forEach
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor.Companion.mainTask
 import org.chronos.chronostore.util.logging.LogExtensions.perfTrace
-import org.chronos.chronostore.util.statistics.ChronoStoreStatistics
+import org.chronos.chronostore.util.statistics.StatisticsReporter
 import org.chronos.chronostore.util.unit.BinarySize.Companion.Bytes
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.locks.ReentrantReadWriteLock
@@ -36,6 +36,7 @@ import kotlin.math.min
 class LSMForestMemoryManager(
     private val maxForestSize: Long,
     private val flushThresholdSize: Long,
+    private val statisticsReporter: StatisticsReporter,
 ) {
 
     companion object {
@@ -104,8 +105,7 @@ class LSMForestMemoryManager(
             if (stallBegin >= 0) {
                 val stallEnd = System.currentTimeMillis()
                 val writeStallTime = stallEnd - stallBegin
-                ChronoStoreStatistics.TOTAL_WRITE_STALL_TIME_MILLIS.addAndGet(writeStallTime)
-                ChronoStoreStatistics.WRITE_STALL_EVENTS.incrementAndGet()
+                this.statisticsReporter.reportStallTime(writeStallTime)
                 log.perfTrace {
                     "Write to '${tree.path}' will no longer be stalled and may continue." +
                         " Stall time: ${writeStallTime}ms."

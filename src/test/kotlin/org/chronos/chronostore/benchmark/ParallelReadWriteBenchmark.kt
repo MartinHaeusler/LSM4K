@@ -3,7 +3,6 @@ package org.chronos.chronostore.benchmark
 import org.chronos.chronostore.api.TransactionalStore.Companion.withCursor
 import org.chronos.chronostore.test.util.ChronoStoreMode
 import org.chronos.chronostore.util.bytes.BasicBytes
-import org.chronos.chronostore.util.statistics.ChronoStoreStatistics
 import kotlin.concurrent.thread
 
 object ParallelReadWriteBenchmark {
@@ -105,7 +104,7 @@ object ParallelReadWriteBenchmark {
             }
 
             println("FINAL STATISTICS")
-            println(ChronoStoreStatistics.snapshot().prettyPrint())
+            println(chronoStore.statisticsReport().prettyPrint())
         }
     }
 

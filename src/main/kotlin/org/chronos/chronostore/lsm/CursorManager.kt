@@ -4,6 +4,7 @@ import org.chronos.chronostore.api.ChronoStoreTransaction
 import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.model.command.KeyAndTSN
 import org.chronos.chronostore.util.cursor.Cursor
+import org.chronos.chronostore.util.cursor.CursorInternal
 import org.chronos.chronostore.util.cursor.LevelOrTierCursor
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.concurrent.read
@@ -14,7 +15,7 @@ class CursorManager {
     private val fileNameToOpenCursors = mutableMapOf<String, MutableSet<CursorAndTransaction>>()
     private val lock = ReentrantReadWriteLock(true)
 
-    fun openCursorOnLevelOrTier(transaction: ChronoStoreTransaction, sortedFiles: List<LSMTreeFile>): Cursor<KeyAndTSN, Command> {
+    fun openCursorOnLevelOrTier(transaction: ChronoStoreTransaction, sortedFiles: List<LSMTreeFile>): CursorInternal<KeyAndTSN, Command> {
         this.lock.write {
             val levelOrTierCursor = LevelOrTierCursor(
                 sortedFiles = sortedFiles,
@@ -50,13 +51,13 @@ class CursorManager {
         }
     }
 
-    fun openCursorOnFile(transaction: ChronoStoreTransaction, lsmTreeFile: LSMTreeFile): Cursor<KeyAndTSN, Command> {
+    fun openCursorOnFile(transaction: ChronoStoreTransaction, lsmTreeFile: LSMTreeFile): CursorInternal<KeyAndTSN, Command> {
         this.lock.write {
             val rawCursor = lsmTreeFile.cursor()
             val cursorAndTransaction = CursorAndTransaction(rawCursor, transaction)
             val treeFileName = lsmTreeFile.virtualFile.name
             fileNameToOpenCursors.getOrPut(treeFileName, ::mutableSetOf) += cursorAndTransaction
-            return rawCursor.onClose { closeCursor(treeFileName, transaction, rawCursor) }
+            return rawCursor.onClose { closeCursor(treeFileName, transaction, rawCursor) } as CursorInternal<KeyAndTSN, Command>
         }
     }
 

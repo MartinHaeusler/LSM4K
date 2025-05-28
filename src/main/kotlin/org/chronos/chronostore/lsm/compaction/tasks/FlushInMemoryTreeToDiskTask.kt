@@ -9,7 +9,7 @@ import org.chronos.chronostore.impl.Killswitch
 import org.chronos.chronostore.lsm.FlushResult
 import org.chronos.chronostore.lsm.LSMTree
 import org.chronos.chronostore.util.logging.LogExtensions.ioDebug
-import org.chronos.chronostore.util.statistics.ChronoStoreStatistics
+import org.chronos.chronostore.util.statistics.StatisticsReporter
 import org.chronos.chronostore.util.unit.BinarySize.Companion.Bytes
 import java.util.concurrent.atomic.AtomicLong
 
@@ -17,6 +17,7 @@ class FlushInMemoryTreeToDiskTask(
     private val lsmTree: LSMTree,
     private val killswitch: Killswitch,
     private val scheduleMinorCompactionOnCompletion: Boolean,
+    private val statisticsReporter: StatisticsReporter,
 ) : AsyncTask {
 
     companion object {
@@ -81,10 +82,11 @@ class FlushInMemoryTreeToDiskTask(
         if (flushResult == null) {
             return
         }
-        ChronoStoreStatistics.FLUSH_TASK_EXECUTIONS.incrementAndGet()
-        ChronoStoreStatistics.FLUSH_TASK_WRITTEN_BYTES.getAndAdd(flushResult.bytesWritten)
-        ChronoStoreStatistics.FLUSH_TASK_WRITTEN_ENTRIES.getAndAdd(flushResult.entriesWritten.toLong())
-        ChronoStoreStatistics.FLUSH_TASK_TOTAL_TIME.getAndAdd(flushResult.runtimeMillis)
+        this.statisticsReporter.reportFlushTaskExecution(
+            executionTimeMillis = flushResult.runtimeMillis,
+            writtenBytes = flushResult.bytesWritten,
+            writtenEntries = flushResult.entriesWritten.toLong(),
+        )
     }
 
 }

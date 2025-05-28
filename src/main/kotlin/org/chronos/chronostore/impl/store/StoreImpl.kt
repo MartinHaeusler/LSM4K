@@ -14,6 +14,7 @@ import org.chronos.chronostore.manifest.StoreMetadata
 import org.chronos.chronostore.util.StoreId
 import org.chronos.chronostore.util.TSN
 import org.chronos.chronostore.util.TransactionId
+import org.chronos.chronostore.util.statistics.StatisticsReporter
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.Executor
 
@@ -26,6 +27,7 @@ class StoreImpl(
     forest: LSMForestMemoryManager,
     blockCache: BlockCache,
     fileHeaderCache: FileHeaderCache,
+    statisticsReporter: StatisticsReporter,
     driverFactory: RandomFileAccessDriverFactory,
     newFileSettings: ChronoStoreFileSettings,
     getSmallestOpenReadTSN: () -> TSN?,
@@ -52,6 +54,7 @@ class StoreImpl(
         getSmallestOpenReadTSN = getSmallestOpenReadTSN,
         initialStoreMetadata = initialStoreMetadata,
         killswitch = killswitch,
+        statisticsReporter = statisticsReporter,
     )
 
 

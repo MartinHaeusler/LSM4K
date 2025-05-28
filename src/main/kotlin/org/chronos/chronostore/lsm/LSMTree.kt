@@ -50,6 +50,7 @@ import org.chronos.chronostore.util.report.MemtableReport
 import org.chronos.chronostore.util.report.StoreFileReport
 import org.chronos.chronostore.util.report.StoreReport
 import org.chronos.chronostore.util.sequence.SequenceExtensions.toTreeMap
+import org.chronos.chronostore.util.statistics.StatisticsReporter
 import org.chronos.chronostore.util.unit.BinarySize
 import org.chronos.chronostore.util.unit.BinarySize.Companion.Bytes
 import org.pcollections.TreePMap
@@ -76,6 +77,7 @@ class LSMTree(
     private val blockCache: BlockCache,
     private val fileHeaderCache: FileHeaderCache,
     private val driverFactory: RandomFileAccessDriverFactory,
+    private val statisticsReporter: StatisticsReporter,
     val newFileSettings: ChronoStoreFileSettings,
     private val getSmallestOpenReadTSN: () -> TSN?,
     private val killswitch: Killswitch,
@@ -298,6 +300,7 @@ class LSMTree(
         }
     }
 
+    @Suppress("UNCHECKED_CAST")
     fun openCursor(transaction: ChronoStoreTransaction): Cursor<Bytes, Command> {
         val tsn = transaction.lastVisibleSerialNumber
         this.lock.read {
@@ -319,7 +322,7 @@ class LSMTree(
                 levelOrTierToFiles.getOrPut(levelOrTier, ::mutableListOf) += lsmTreeFile
             }
 
-            val cursors = mutableListOf<Cursor<KeyAndTSN, Command>>()
+            val cursors = mutableListOf<CursorInternal<KeyAndTSN, Command>>()
             for ((levelOrTier, files) in levelOrTierToFiles) {
                 if (files.isEmpty()) {
                     // level or tier is empty
@@ -340,18 +343,30 @@ class LSMTree(
 
 
             if (cursors.isEmpty()) {
-                return VersioningCursor(inMemoryCursor, tsn, includeDeletions = true)
+                return VersioningCursor(
+                    innerCursor = inMemoryCursor,
+                    tsn = tsn,
+                    includeDeletions = true,
+                    statisticsReporter = this.statisticsReporter,
+                )
             }
             if (inMemoryCursor !is EmptyCursor) {
                 cursors.add(inMemoryCursor)
             }
 
-            val versioningCursors = cursors.map { VersioningCursor(it, tsn, includeDeletions = true) }
+            val versioningCursors = cursors.map {
+                VersioningCursor(
+                    innerCursor = it,
+                    tsn = tsn,
+                    includeDeletions = true,
+                    statisticsReporter = this.statisticsReporter,
+                )
+            }
 
             return when (versioningCursors.size) {
                 0 -> throw IllegalArgumentException("List of cursors must not be empty!")
-                1 -> versioningCursors.first<Cursor<Bytes, Command>>()
-                else -> OverlayCursor(versioningCursors as List<Cursor<Bytes, Command?>>)
+                1 -> versioningCursors.first<CursorInternal<Bytes, Command>>()
+                else -> OverlayCursor(versioningCursors as List<CursorInternal<Bytes, Command?>>, this.statisticsReporter)
             }
         }
     }
@@ -440,6 +455,7 @@ class LSMTree(
                 lsmTree = this,
                 killswitch = this.killswitch,
                 scheduleMinorCompactionOnCompletion = scheduleMinorCompactionOnCompletion,
+                statisticsReporter = this.statisticsReporter,
             )
         )
         this.flushTaskQueue.schedule(completableTask)
@@ -471,6 +487,7 @@ class LSMTree(
                         StandardChronoStoreFileWriter(
                             outputStream = overWriter.outputStream,
                             settings = this.newFileSettings,
+                            statisticsReporter = this.statisticsReporter,
                         ).use { writer ->
                             log.perfTrace { "Flushing ${commands.size} commands from in-memory segment into '${file.path}'." }
                             writer.write(
@@ -571,6 +588,7 @@ class LSMTree(
             val writtenFiles = SplitChronoStoreFileWriter(
                 fileSplitter = fileSplitter,
                 newFileSettings = this.newFileSettings,
+                statisticsReporter = this.statisticsReporter,
                 openNextFile = ::createNextLsmFile,
             ).use { writer ->
                 val cursors = filesToMerge.map { it.cursor() }

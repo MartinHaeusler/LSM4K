@@ -6,6 +6,7 @@ import org.chronos.chronostore.lsm.filesplitter.FileSplitter
 import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.util.TSN
 import org.chronos.chronostore.util.bytes.Bytes
+import org.chronos.chronostore.util.statistics.StatisticsReporter
 
 /**
  * A [ChronoStoreFileWriter] which writes one **or more** files based on the given [fileSplitter].
@@ -15,6 +16,8 @@ class SplitChronoStoreFileWriter(
     private val fileSplitter: FileSplitter,
     /** The settings to use for new files created by this writer. */
     private val newFileSettings: ChronoStoreFileSettings,
+
+    private val statisticsReporter: StatisticsReporter,
     /** Function to open the next free file in the LSM tree. */
     private val openNextFile: () -> VirtualReadWriteFile,
 ) : ChronoStoreFileWriter {
@@ -70,7 +73,7 @@ class SplitChronoStoreFileWriter(
         nextFile.deleteOverWriterFileIfExists()
         nextFile.createOverWriter().use { overWriter ->
             // use the standard chronostore file writer...
-            StandardChronoStoreFileWriter(overWriter.outputStream, this.newFileSettings).use { writer ->
+            StandardChronoStoreFileWriter(overWriter.outputStream, this.newFileSettings, this.statisticsReporter).use { writer ->
                 // ... but use only a "prefix" of the iterator (it operates like a "takeWhile" on kotlin sequences)
                 val commandsInFileIterator = FileSplittingIterator(orderedCommands, this.fileSplitter)
 

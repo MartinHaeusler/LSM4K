@@ -6,6 +6,7 @@ import org.chronos.chronostore.test.util.junit.UnitTest
 import org.chronos.chronostore.util.ResourceContext.Companion.using
 import org.chronos.chronostore.util.cursor.Cursor
 import org.chronos.chronostore.util.cursor.OverlayCursor.Companion.overlayOnto
+import org.chronos.chronostore.util.statistics.StatisticsCollector
 import org.junit.jupiter.api.Test
 import strikt.api.expect
 import strikt.api.expectThat
@@ -31,7 +32,7 @@ class OverlayCursorTest {
         ).debug("Cursor B")
             .autoClose()
 
-        val overlayCursor = cursor1.overlayOnto(cursor2)
+        val overlayCursor = cursor1.overlayOnto(cursor2, StatisticsCollector())
 
         expect {
             that(overlayCursor.listAllEntriesAscending()).containsExactly(
@@ -81,7 +82,7 @@ class OverlayCursorTest {
 
         val overlay = cursorOn<String, Int>().autoClose()
 
-        val cursor = overlay.overlayOnto(base).autoClose()
+        val cursor = overlay.overlayOnto(base, StatisticsCollector()).autoClose()
 
         expectThat(cursor) {
             get { this.listAllEntriesAscending() }.containsExactly("a" to 1, "b" to 2, "z" to 26)
@@ -98,7 +99,7 @@ class OverlayCursorTest {
             "z" to 26,
         ).autoClose()
 
-        val cursor = overlay.overlayOnto(base).autoClose()
+        val cursor = overlay.overlayOnto(base, StatisticsCollector()).autoClose()
 
         expectThat(cursor) {
             get { this.listAllEntriesAscending() }.containsExactly("a" to 1, "b" to 2, "z" to 26)
@@ -118,7 +119,7 @@ class OverlayCursorTest {
         ).debug("Small Cursor")
             .autoClose()
 
-        val overlayCursor = smallCursor.overlayOnto(bigCursor)
+        val overlayCursor = smallCursor.overlayOnto(bigCursor, StatisticsCollector())
 
         expect {
             that(overlayCursor.listAllEntriesAscending()).containsExactly(
@@ -182,7 +183,7 @@ class OverlayCursorTest {
             "lorem" to null,
         )
 
-        val finalCursor = overlayCursor.overlayOnto(baseCursor).autoClose()
+        val finalCursor = overlayCursor.overlayOnto(baseCursor, StatisticsCollector()).autoClose()
 
         expectThat(finalCursor) {
             get { this.listAllEntriesAscending() }.isEmpty()
@@ -209,7 +210,7 @@ class OverlayCursorTest {
             "lorem" to null,
         )
 
-        val finalCursor = overlayCursor.overlayOnto(baseCursor).autoClose()
+        val finalCursor = overlayCursor.overlayOnto(baseCursor, StatisticsCollector()).autoClose()
 
         expectThat(finalCursor) {
             get { this.listAllEntriesAscending() }.containsExactly("foo2" to "bar2", "hello2" to "world2")
@@ -237,7 +238,7 @@ class OverlayCursorTest {
             "lorem" to null,
         )
 
-        val finalCursor = overlayCursor.overlayOnto(baseCursor).autoClose()
+        val finalCursor = overlayCursor.overlayOnto(baseCursor, StatisticsCollector()).autoClose()
 
         expectThat(finalCursor) {
             get { this.listAllEntriesAscending() }.containsExactly("foo2" to "bar2", "foo3" to "bar3", "hello2" to "world2", "hello3" to "world3")
@@ -269,7 +270,7 @@ class OverlayCursorTest {
             "t" to null,
         ).autoClose()
 
-        val cursor = overlayCursor.overlayOnto(baseCursor).autoClose()
+        val cursor = overlayCursor.overlayOnto(baseCursor, StatisticsCollector()).autoClose()
 
         expectThat(cursor.listAllEntriesAscending()).containsExactly(
             "b" to "b-overlay",

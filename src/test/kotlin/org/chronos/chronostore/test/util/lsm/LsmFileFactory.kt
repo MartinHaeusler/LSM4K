@@ -19,6 +19,7 @@ import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.util.FileIndex
 import org.chronos.chronostore.util.TSN
 import org.chronos.chronostore.util.iterator.IteratorExtensions.toMutableList
+import org.chronos.chronostore.util.statistics.StatisticsReporter
 import org.chronos.chronostore.util.unit.BinarySize.Companion.MiB
 
 object LsmFileFactory {
@@ -33,8 +34,9 @@ object LsmFileFactory {
         numberOfMerges: Long = 0,
         maxCompletelyWrittenTSN: TSN? = null,
         driverFactory: RandomFileAccessDriverFactory = FileChannelDriver.Factory,
-        fileHeaderCache: FileHeaderCache = FileHeaderCache.NONE,
-        blockLoader: BlockLoader = BlockLoader.basic(driverFactory, fileHeaderCache),
+        statisticsReporter: StatisticsReporter,
+        fileHeaderCache: FileHeaderCache = FileHeaderCache.none(statisticsReporter),
+        blockLoader: BlockLoader = BlockLoader.basic(driverFactory, statisticsReporter, fileHeaderCache),
         blockCache: BlockCache = BlockCache.none(blockLoader),
     ): LSMTreeFile {
         val file = this.file(LSMTree.createFileNameForIndex(index))
@@ -49,6 +51,7 @@ object LsmFileFactory {
             blockLoader = blockLoader,
             blockCache = blockCache,
             fileHeaderCache = fileHeaderCache,
+            statisticsReporter = statisticsReporter,
         )
     }
 
@@ -62,8 +65,9 @@ object LsmFileFactory {
         numberOfMerges: Long = 0,
         maxCompletelyWrittenTSN: TSN? = null,
         driverFactory: RandomFileAccessDriverFactory = FileChannelDriver.Factory,
-        fileHeaderCache: FileHeaderCache = FileHeaderCache.NONE,
-        blockLoader: BlockLoader = BlockLoader.basic(driverFactory, fileHeaderCache),
+        statisticsReporter: StatisticsReporter,
+        fileHeaderCache: FileHeaderCache = FileHeaderCache.none(statisticsReporter),
+        blockLoader: BlockLoader = BlockLoader.basic(driverFactory, statisticsReporter, fileHeaderCache),
         blockCache: BlockCache = BlockCache.none(blockLoader),
     ): LSMTreeFile {
         val file = this.file(LSMTree.createFileNameForIndex(index))
@@ -78,6 +82,7 @@ object LsmFileFactory {
             blockLoader = blockLoader,
             blockCache = blockCache,
             fileHeaderCache = fileHeaderCache,
+            statisticsReporter = statisticsReporter,
         )
     }
 
@@ -91,8 +96,9 @@ object LsmFileFactory {
         numberOfMerges: Long = 0,
         maxCompletelyWrittenTSN: TSN? = null,
         driverFactory: RandomFileAccessDriverFactory = FileChannelDriver.Factory,
-        fileHeaderCache: FileHeaderCache = FileHeaderCache.NONE,
-        blockLoader: BlockLoader = BlockLoader.basic(driverFactory, fileHeaderCache),
+        statisticsReporter: StatisticsReporter,
+        fileHeaderCache: FileHeaderCache = FileHeaderCache.none(statisticsReporter),
+        blockLoader: BlockLoader = BlockLoader.basic(driverFactory, statisticsReporter, fileHeaderCache),
         blockCache: BlockCache = BlockCache.none(blockLoader),
     ): LSMTreeFile {
         return this.createLsmTreeFile(
@@ -105,6 +111,7 @@ object LsmFileFactory {
             blockLoader = blockLoader,
             blockCache = blockCache,
             fileHeaderCache = fileHeaderCache,
+            statisticsReporter = statisticsReporter,
         )
     }
 
@@ -118,8 +125,9 @@ object LsmFileFactory {
         numberOfMerges: Long = 0,
         maxCompletelyWrittenTSN: TSN? = null,
         driverFactory: RandomFileAccessDriverFactory = FileChannelDriver.Factory,
-        fileHeaderCache: FileHeaderCache = FileHeaderCache.NONE,
-        blockLoader: BlockLoader = BlockLoader.basic(driverFactory, fileHeaderCache),
+        statisticsReporter: StatisticsReporter,
+        fileHeaderCache: FileHeaderCache = FileHeaderCache.none(statisticsReporter),
+        blockLoader: BlockLoader = BlockLoader.basic(driverFactory, statisticsReporter, fileHeaderCache),
         blockCache: BlockCache = BlockCache.none(blockLoader),
     ): LSMTreeFile {
         val file = this.file(LSMTree.createFileNameForIndex(index))
@@ -134,6 +142,7 @@ object LsmFileFactory {
             blockLoader = blockLoader,
             blockCache = blockCache,
             fileHeaderCache = fileHeaderCache,
+            statisticsReporter = statisticsReporter,
         )
     }
 
@@ -145,8 +154,9 @@ object LsmFileFactory {
         maxCompletelyWrittenTSN: TSN?,
         index: FileIndex,
         driverFactory: RandomFileAccessDriverFactory = FileChannelDriver.Factory,
-        fileHeaderCache: FileHeaderCache = FileHeaderCache.NONE,
-        blockLoader: BlockLoader = BlockLoader.basic(driverFactory, fileHeaderCache),
+        statisticsReporter: StatisticsReporter,
+        fileHeaderCache: FileHeaderCache = FileHeaderCache.none(statisticsReporter),
+        blockLoader: BlockLoader = BlockLoader.basic(driverFactory, statisticsReporter, fileHeaderCache),
         blockCache: BlockCache = BlockCache.none(blockLoader),
     ): LSMTreeFile {
         val driverFactory = when (file) {
@@ -158,7 +168,7 @@ object LsmFileFactory {
         file.deleteIfExists()
         file.deleteOverWriterFileIfExists()
         file.createOverWriter().use { overWriter ->
-            StandardChronoStoreFileWriter(overWriter.outputStream, fileSettings).use { fileWriter ->
+            StandardChronoStoreFileWriter(overWriter.outputStream, fileSettings, statisticsReporter).use { fileWriter ->
                 // for unit tests, we expect small data sets, so it's ok to sort them explicitly here
                 val contentList = content.toMutableList()
                 contentList.sorted()

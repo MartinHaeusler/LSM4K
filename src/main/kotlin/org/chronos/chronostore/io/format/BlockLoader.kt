@@ -5,6 +5,7 @@ import org.chronos.chronostore.io.fileaccess.RandomFileAccessDriverFactory
 import org.chronos.chronostore.io.format.datablock.DataBlock
 import org.chronos.chronostore.io.vfs.VirtualFile
 import org.chronos.chronostore.lsm.cache.FileHeaderCache
+import org.chronos.chronostore.util.statistics.StatisticsReporter
 import java.util.concurrent.CompletableFuture
 
 interface BlockLoader {
@@ -13,9 +14,14 @@ interface BlockLoader {
 
         fun basic(
             driverFactory: RandomFileAccessDriverFactory,
-            headerCache: FileHeaderCache = FileHeaderCache.NONE,
+            statisticsReporter: StatisticsReporter,
+            headerCache: FileHeaderCache = FileHeaderCache.none(statisticsReporter),
         ): BlockLoader {
-            return BasicBlockLoader(driverFactory, headerCache)
+            return BasicBlockLoader(
+                driverFactory = driverFactory,
+                headerCache = headerCache,
+                statisticsReporter = statisticsReporter
+            )
         }
 
     }

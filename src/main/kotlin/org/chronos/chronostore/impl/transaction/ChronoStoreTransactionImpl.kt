@@ -9,7 +9,7 @@ import org.chronos.chronostore.util.StoreId
 import org.chronos.chronostore.util.TSN
 import org.chronos.chronostore.util.Timestamp
 import org.chronos.chronostore.util.TransactionId
-import org.chronos.chronostore.util.statistics.ChronoStoreStatistics
+import org.chronos.chronostore.util.statistics.StatisticsReporter
 
 class ChronoStoreTransactionImpl(
     override val id: TransactionId,
@@ -17,6 +17,7 @@ class ChronoStoreTransactionImpl(
     override val mode: TransactionMode,
     val transactionManager: TransactionManager,
     val storeManager: StoreManager,
+    val statisticsReporter: StatisticsReporter,
     val createdAtWallClockTime: Timestamp,
 ) : ChronoStoreTransaction {
 
@@ -102,15 +103,19 @@ class ChronoStoreTransactionImpl(
     }
 
     override fun rollback() {
+        this.rollback(dangling = false)
+    }
+
+    private fun rollback(dangling: Boolean) {
         if (!this.isOpen) {
             return
         }
         this.isOpen = false
-        this.transactionManager.performRollback(this)
+        this.transactionManager.performRollback(this, dangling)
     }
 
     private fun bindStore(store: Store): TransactionalStoreImpl {
-        val txBoundStore = TransactionalStoreImpl(this, store)
+        val txBoundStore = TransactionalStoreImpl(this, store, this.statisticsReporter)
         this.openStoresByName[store.storeId] = txBoundStore
         return txBoundStore
     }
@@ -128,8 +133,7 @@ class ChronoStoreTransactionImpl(
                     " Please ensure that you commit() or rollback() your transactions after using them." +
                     " Use ChronoStore#transaction{ ... } to automate the process."
             }
-            ChronoStoreStatistics.TRANSACTION_DANGLING.incrementAndGet()
-            this.rollback()
+            this.rollback(dangling = true)
         }
     }
 

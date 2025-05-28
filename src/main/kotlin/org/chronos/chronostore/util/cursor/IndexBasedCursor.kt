@@ -1,15 +1,27 @@
 package org.chronos.chronostore.util.cursor
 
+import org.chronos.chronostore.util.cursor.CursorUtils.checkIsOpen
+
 class IndexBasedCursor<K : Comparable<K>, V>(
-    val minIndex: Int,
-    val maxIndex: Int,
-    val getEntryAtIndex: (Int) -> Pair<K, V>,
+    private val minIndex: Int,
+    private val maxIndex: Int,
+    private val getEntryAtIndex: (Int) -> Pair<K, V>,
     val name: String,
-) : Cursor<K, V> {
+) : CursorInternal<K, V> {
+
+    override var parent: CursorInternal<*, *>? = null
+        set(value) {
+            if (field === value) {
+                return
+            }
+            check(field == null) {
+                "Cannot assign another parent to this cursor; a parent is already present." +
+                    " Existing parent: ${field}, proposed new parent: ${value}"
+            }
+            field = value
+        }
 
     private var currentIndex = this.minIndex - 1
-
-    override var modCount: Long = 0
 
     override var isOpen: Boolean = true
 
@@ -17,68 +29,9 @@ class IndexBasedCursor<K : Comparable<K>, V>(
 
     private val closeHandlers = mutableListOf<CloseHandler>()
 
-    init {
-        require(minIndex >= 0) { "Argument 'minIndex' (${minIndex}) must not be negative!" }
-        require(maxIndex >= 0) { "Argument 'maxIndex' (${maxIndex}) must not be negative!" }
-        require(minIndex <= maxIndex) { "Argument 'minIndex' (${minIndex}) must not be greater than argument 'maxIndex' (${maxIndex})!" }
-    }
-
-    override val isValidPosition: Boolean
-        get() = this.currentIndex >= minIndex
-
-    override fun invalidatePosition() {
-        check(this.isOpen, ::createAlreadyClosedMessage)
-        this.currentIndex = -1
-        this.modCount++
-    }
-
-    override fun first(): Boolean {
-        check(this.isOpen, ::createAlreadyClosedMessage)
-        this.currentIndex = minIndex
-        this.currentEntry = null
-        this.modCount++
-        return true
-    }
-
-    override fun last(): Boolean {
-        check(this.isOpen, ::createAlreadyClosedMessage)
-        this.currentIndex = this.maxIndex
-        this.currentEntry = null
-        this.modCount++
-        return true
-    }
-
-    override fun next(): Boolean {
-        check(this.isOpen, ::createAlreadyClosedMessage)
-        this.modCount++
-        if (!this.isValidPosition) {
-            return false
-        }
-        if (this.currentIndex >= this.maxIndex) {
-            return false
-        }
-        this.currentIndex += 1
-        this.currentEntry = null
-        return true
-    }
-
-    override fun previous(): Boolean {
-        check(this.isOpen, ::createAlreadyClosedMessage)
-        this.modCount++
-        if (!this.isValidPosition) {
-            return false
-        }
-        if (this.currentIndex <= 0) {
-            return false
-        }
-        this.currentIndex -= 1
-        this.currentEntry = null
-        return true
-    }
-
     override val keyOrNull: K?
         get() {
-            check(this.isOpen, ::createAlreadyClosedMessage)
+            this.checkIsOpen()
             if (!this.isValidPosition) {
                 return null
             }
@@ -90,7 +43,7 @@ class IndexBasedCursor<K : Comparable<K>, V>(
 
     override val valueOrNull: V?
         get() {
-            check(this.isOpen, ::createAlreadyClosedMessage)
+            this.checkIsOpen()
             if (!this.isValidPosition) {
                 return null
             }
@@ -100,55 +53,108 @@ class IndexBasedCursor<K : Comparable<K>, V>(
             return entry.second
         }
 
+    init {
+        require(minIndex >= 0) { "Argument 'minIndex' (${minIndex}) must not be negative!" }
+        require(maxIndex >= 0) { "Argument 'maxIndex' (${maxIndex}) must not be negative!" }
+        require(minIndex <= maxIndex) { "Argument 'minIndex' (${minIndex}) must not be greater than argument 'maxIndex' (${maxIndex})!" }
+    }
+
+    override val isValidPosition: Boolean
+        get() = this.currentIndex >= minIndex
+
+    override fun invalidatePositionInternal() {
+        this.checkIsOpen()
+        this.currentIndex = -1
+    }
+
+    override fun firstInternal(): Boolean {
+        this.checkIsOpen()
+        this.currentIndex = minIndex
+        this.currentEntry = null
+        return true
+    }
+
+    override fun lastInternal(): Boolean {
+        this.checkIsOpen()
+        this.currentIndex = this.maxIndex
+        this.currentEntry = null
+        return true
+    }
+
+    override fun nextInternal(): Boolean {
+        this.checkIsOpen()
+        if (!this.isValidPosition) {
+            return false
+        }
+        if (this.currentIndex >= this.maxIndex) {
+            return false
+        }
+        this.currentIndex += 1
+        this.currentEntry = null
+        return true
+    }
+
+    override fun previousInternal(): Boolean {
+        this.checkIsOpen()
+        if (!this.isValidPosition) {
+            return false
+        }
+        if (this.currentIndex <= 0) {
+            return false
+        }
+        this.currentIndex -= 1
+        this.currentEntry = null
+        return true
+    }
+
     override fun onClose(action: CloseHandler): Cursor<K, V> {
-        check(this.isOpen, ::createAlreadyClosedMessage)
+        this.checkIsOpen()
         this.closeHandlers += action
         return this
     }
 
-    override fun close() {
+    override fun closeInternal() {
+        if (!this.isOpen) {
+            return
+        }
         this.isOpen = false
         CursorUtils.executeCloseHandlers(this.closeHandlers)
     }
 
-    override fun seekExactlyOrNext(key: K): Boolean {
-        check(this.isOpen, ::createAlreadyClosedMessage)
+    override fun seekExactlyOrNextInternal(key: K): Boolean {
+        this.checkIsOpen()
         if (key == this.keyOrNull) {
             // we're already there
             return true
         }
-        if (!this.first()) {
+        if (!this.firstInternal()) {
             return false
         }
         while (this.key < key) {
-            if (!this.next()) {
-                this.invalidatePosition()
+            if (!this.nextInternal()) {
+                this.invalidatePositionInternal()
                 return false
             }
         }
         return true
     }
 
-    override fun seekExactlyOrPrevious(key: K): Boolean {
-        check(this.isOpen, ::createAlreadyClosedMessage)
+    override fun seekExactlyOrPreviousInternal(key: K): Boolean {
+        this.checkIsOpen()
         if (key == this.keyOrNull) {
             // we're already there
             return true
         }
-        if (!this.last()) {
+        if (!this.lastInternal()) {
             return false
         }
         while (this.key > key) {
-            if (!this.previous()) {
-                this.invalidatePosition()
+            if (!this.previousInternal()) {
+                this.invalidatePositionInternal()
                 return false
             }
         }
         return true
-    }
-
-    private fun createAlreadyClosedMessage(): String {
-        return "This cursor on ${this.name} has already been closed!"
     }
 
     override fun toString(): String {

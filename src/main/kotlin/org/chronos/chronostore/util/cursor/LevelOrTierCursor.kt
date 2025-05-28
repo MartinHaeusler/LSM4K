@@ -3,16 +3,45 @@ package org.chronos.chronostore.util.cursor
 import org.chronos.chronostore.lsm.LSMTreeFile
 import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.model.command.KeyAndTSN
-import org.chronos.chronostore.util.Order
+import org.chronos.chronostore.util.cursor.CursorUtils.checkIsOpen
 
 class LevelOrTierCursor(
     private val sortedFiles: List<LSMTreeFile>,
     private val createNewCursor: (LSMTreeFile) -> Cursor<KeyAndTSN, Command> = LSMTreeFile::cursor,
-) : AbstractCursor<KeyAndTSN, Command>() {
+) : CursorInternal<KeyAndTSN, Command> {
+
+    override var parent: CursorInternal<*, *>? = null
+        set(value) {
+            if (field === value) {
+                return
+            }
+            check(field == null) {
+                "Cannot assign another parent to this cursor; a parent is already present." +
+                    " Existing parent: ${field}, proposed new parent: ${value}"
+            }
+            field = value
+        }
+
+    override var isOpen: Boolean = true
+    private val closeHandlers = mutableListOf<CloseHandler>()
 
     private var currentFileListIndex: Int? = null
-    private var currentFileCursor: Cursor<KeyAndTSN, Command>? = null
+    private var currentFileCursor: CursorInternal<KeyAndTSN, Command>? = null
 
+    override val keyOrNull: KeyAndTSN?
+        get() {
+            this.checkIsOpen()
+            return this.currentFileCursor?.keyOrNull
+        }
+
+    override val valueOrNull: Command?
+        get() {
+            this.checkIsOpen()
+            return this.currentFileCursor?.valueOrNull
+        }
+
+    override val isValidPosition: Boolean
+        get() = this.currentFileCursor != null
 
     init {
         require(sortedFiles.isNotEmpty()) {
@@ -20,32 +49,29 @@ class LevelOrTierCursor(
         }
     }
 
-    override val keyOrNullInternal: KeyAndTSN?
-        get() = this.currentFileCursor?.keyOrNull
-
-    override val valueOrNullInternal: Command?
-        get() = this.currentFileCursor?.valueOrNull
-
-    override fun closeInternal() {
-        this.currentFileCursor?.close()
+    override fun invalidatePositionInternal() {
+        this.checkIsOpen()
+        this.dropCurrentCursor()
     }
 
     override fun firstInternal(): Boolean {
+        this.checkIsOpen()
         val cursor = this.ensureCursorOn(0)
-        return cursor.first()
+        return cursor.firstInternal()
     }
 
     override fun lastInternal(): Boolean {
-        val cursor = this.ensureCursorOn(this.sortedFiles.lastIndex)
-        return cursor.last()
+        this.checkIsOpen()
+        return ensureCursorOn(sortedFiles.lastIndex).lastInternal()
     }
 
-    override fun moveInternal(direction: Order): Boolean {
+    override fun nextInternal(): Boolean {
+        this.checkIsOpen()
         val cursor = this.currentFileCursor
             ?: throw IllegalStateException("No cursor currently open!")
 
         // move that cursor in the given direction
-        val moved = cursor.move(direction)
+        val moved = cursor.nextInternal()
         if (moved) {
             // move worked, everything is ok
             return true
@@ -53,37 +79,51 @@ class LevelOrTierCursor(
 
         // the move did not work. That means the current cursor has
         // hit the start or end of its file. We may need to move on
-        // to the next / previous file instead.
+        // to the next file instead.
 
         val currentFileIndex = this.currentFileListIndex
             ?: throw IllegalStateException("No current file list index!")
 
-        return when (direction) {
-            Order.ASCENDING -> {
-                // are we at the last file?
-                if (currentFileIndex >= this.sortedFiles.lastIndex) {
-                    // we're indeed at the last file. Nothing we can do, can't move there.
-                    // also, we keep the current cursor.
-                    false
-                } else {
-                    // we're NOT at the last file. Grab the cursor for the next file, skipping over empty files.
-                    this.moveToNextHigherFile(currentFileIndex)
-                }
-            }
+        // are we at the last file?
+        return if (currentFileIndex >= this.sortedFiles.lastIndex) {
+            // we're indeed at the last file. Nothing we can do, can't move there.
+            // also, we keep the current cursor.
+            false
+        } else {
+            // we're NOT at the last file. Grab the cursor for the next file, skipping over empty files.
+            this.moveToNextHigherFile(currentFileIndex)
+        }
+    }
 
-            Order.DESCENDING -> {
-                // are we at the first file?
-                if (currentFileIndex <= 0) {
-                    // we're indeed at the first file. Nothing we can do, can't move there.
-                    // also, we keep the current cursor.
-                    false
-                } else {
-                    // we're NOT at the first file. Grab the cursor for the previous file, skipping over empty files.
-                    this.moveToNextLowerFile(currentFileIndex)
-                }
-            }
+
+    override fun previousInternal(): Boolean {
+        this.checkIsOpen()
+        val cursor = this.currentFileCursor
+            ?: throw IllegalStateException("No cursor currently open!")
+
+        // move that cursor in the given direction
+        val moved = cursor.previousInternal()
+        if (moved) {
+            // move worked, everything is ok
+            return true
         }
 
+        // the move did not work. That means the current cursor has
+        // hit the start or end of its file. We may need to move on
+        // to the previous file instead.
+
+        val currentFileIndex = this.currentFileListIndex
+            ?: throw IllegalStateException("No current file list index!")
+
+        // are we at the first file?
+        return if (currentFileIndex <= 0) {
+            // we're indeed at the first file. Nothing we can do, can't move there.
+            // also, we keep the current cursor.
+            false
+        } else {
+            // we're NOT at the first file. Grab the cursor for the previous file, skipping over empty files.
+            this.moveToNextLowerFile(currentFileIndex)
+        }
     }
 
     private fun moveToNextHigherFile(startFileIndex: Int): Boolean {
@@ -92,10 +132,10 @@ class LevelOrTierCursor(
             currentFileIndex++
             if (currentFileIndex > this.sortedFiles.lastIndex) {
                 // there is no newer non-empty file, go back to our start file
-                return this.ensureCursorOn(startFileIndex).last()
+                return this.ensureCursorOn(startFileIndex).lastInternal()
             }
             val nextFileCursor = this.ensureCursorOn(currentFileIndex)
-            if (!nextFileCursor.first()) {
+            if (!nextFileCursor.firstInternal()) {
                 // the next file is empty, skip it
                 continue
             } else {
@@ -111,10 +151,10 @@ class LevelOrTierCursor(
             currentFileIndex--
             if (currentFileIndex < 0) {
                 // there is no newer non-empty file, go back to our start file
-                return this.ensureCursorOn(startFileIndex).last()
+                return this.ensureCursorOn(startFileIndex).lastInternal()
             }
             val previousFileCursor = this.ensureCursorOn(currentFileIndex)
-            if (!previousFileCursor.last()) {
+            if (!previousFileCursor.lastInternal()) {
                 // the previous file is empty, skip it
                 continue
             } else {
@@ -125,6 +165,7 @@ class LevelOrTierCursor(
     }
 
     override fun seekExactlyOrPreviousInternal(key: KeyAndTSN): Boolean {
+        this.checkIsOpen()
         for (fileListIndex in this.sortedFiles.indices.reversed()) {
             val file = this.sortedFiles[fileListIndex]
             val metadata = file.header.metaData
@@ -142,13 +183,16 @@ class LevelOrTierCursor(
                 // we've been looking for a key in between files which doesn't exist,
                 // so we have to use the next-smaller key, which is the end key of this file.
                 val cursor = this.ensureCursorOn(fileListIndex)
-                cursor.lastOrThrow()
+                check(cursor.lastInternal()) {
+                    "Illegal Iterator state - move 'last()' failed!"
+                }
+
                 return true
             }
 
             // the key might be in here
             val cursor = this.ensureCursorOn(fileListIndex)
-            val found = cursor.seekExactlyOrPrevious(key)
+            val found = cursor.seekExactlyOrPreviousInternal(key)
             if (found) {
                 return true
             } else {
@@ -162,6 +206,7 @@ class LevelOrTierCursor(
     }
 
     override fun seekExactlyOrNextInternal(key: KeyAndTSN): Boolean {
+        this.checkIsOpen()
         for (fileListIndex in this.sortedFiles.indices) {
             val file = this.sortedFiles[fileListIndex]
             val metadata = file.header.metaData
@@ -179,13 +224,15 @@ class LevelOrTierCursor(
                 // we've been looking for a key in between files which doesn't exist,
                 // so we have to use the next-higher key, which is the start key of this file.
                 val cursor = this.ensureCursorOn(fileListIndex)
-                cursor.firstOrThrow()
+                check(cursor.firstInternal()) {
+                    "Illegal Iterator state - move 'first()' failed!"
+                }
                 return true
             }
 
             // the key might be in here
             val cursor = this.ensureCursorOn(fileListIndex)
-            val found = cursor.seekExactlyOrNext(key)
+            val found = cursor.seekExactlyOrNextInternal(key)
             if (found) {
                 return true
             } else {
@@ -198,7 +245,7 @@ class LevelOrTierCursor(
         return false
     }
 
-    private fun ensureCursorOn(fileListIndex: Int): Cursor<KeyAndTSN, Command> {
+    private fun ensureCursorOn(fileListIndex: Int): CursorInternal<KeyAndTSN, Command> {
         require(fileListIndex in this.sortedFiles.indices) {
             "Argument 'fileListIndex' (${fileListIndex}) is out of range [0..${this.sortedFiles.lastIndex}]!"
         }
@@ -214,15 +261,35 @@ class LevelOrTierCursor(
 
         val file = this.sortedFiles[fileListIndex]
 
-        val newCursor = this.createNewCursor(file)
+        val newCursor = this.createNewCursor(file) as CursorInternal<KeyAndTSN, Command>
+        newCursor.parent = this
         this.currentFileCursor = newCursor
         this.currentFileListIndex = fileListIndex
         return newCursor
     }
 
     private fun dropCurrentCursor() {
-        this.currentFileCursor?.close()
+        this.currentFileCursor?.closeInternal()
         this.currentFileCursor = null
     }
 
+    override fun onClose(action: CloseHandler): LevelOrTierCursor {
+        this.checkIsOpen()
+        this.closeHandlers += action
+        return this
+    }
+
+    override fun closeInternal() {
+        if (!this.isOpen) {
+            return
+        }
+        this.isOpen = false
+        val currentInnerCursor = this.currentFileCursor
+        val innerClose = if (currentInnerCursor == null) {
+            null
+        } else {
+            currentInnerCursor::closeInternal
+        }
+        CursorUtils.executeCloseHandlers(innerClose, this.closeHandlers)
+    }
 }

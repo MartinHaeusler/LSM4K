@@ -10,6 +10,7 @@ import org.chronos.chronostore.util.bits.BitTricks.writeStableInt
 import org.chronos.chronostore.util.bits.BitTricks.writeStableLong
 import org.chronos.chronostore.util.bytes.Bytes.Companion.wrap
 import org.chronos.chronostore.util.hash.Hashable
+import org.chronos.chronostore.util.statistics.StatisticsReporter
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.io.OutputStream
@@ -101,24 +102,28 @@ sealed interface Bytes :
             bytes.writeWithoutSizeTo(this)
         }
 
-        fun Bytes.compressWith(algorithm: CompressionAlgorithm): Bytes {
+        fun Bytes.compressWith(algorithm: CompressionAlgorithm, statisticsReporter: StatisticsReporter): Bytes {
             require(!this.isEmpty()) { "The empty Bytes object cannot be compressed!" }
             if (algorithm == CompressionAlgorithm.NONE) {
                 return this
             }
-            return BasicBytes(algorithm.compress(this.toSharedArrayUnsafe()))
+            return BasicBytes(algorithm.compress(this.toSharedArrayUnsafe(), statisticsReporter))
         }
 
-        fun Bytes.decompressWith(algorithm: CompressionAlgorithm): Bytes {
+        fun Bytes.decompressWith(algorithm: CompressionAlgorithm, statisticsReporter: StatisticsReporter): Bytes {
             require(!this.isEmpty()) { "The empty Bytes object cannot be decompressed!" }
             if (algorithm == CompressionAlgorithm.NONE) {
                 return this
             }
-            return wrap(algorithm.decompress(toSharedArrayUnsafe()))
+            return wrap(algorithm.decompress(toSharedArrayUnsafe(), statisticsReporter))
         }
 
 
-        fun Bytes.decompressWith(algorithm: CompressionAlgorithm, uncompressedSize: Int): Bytes {
+        fun Bytes.decompressWith(
+            algorithm: CompressionAlgorithm,
+            uncompressedSize: Int,
+            statisticsReporter: StatisticsReporter,
+        ): Bytes {
             require(!this.isEmpty()) { "The empty Bytes object cannot be decompressed!" }
             require(uncompressedSize > 0) { "The uncompressedSize (${uncompressedSize}) must be greater than zero!" }
             if (algorithm == CompressionAlgorithm.NONE) {
@@ -135,7 +140,7 @@ sealed interface Bytes :
 
             val target = ByteArray(uncompressedSize)
 
-            algorithm.decompress(compressedBytes, compressedBytesOffset, compressedBytesLength, target)
+            algorithm.decompress(compressedBytes, compressedBytesOffset, compressedBytesLength, target, statisticsReporter)
 
             return wrap(target)
         }

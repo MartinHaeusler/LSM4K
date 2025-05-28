@@ -3,24 +3,67 @@ package org.chronos.chronostore.util.cursor
 import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.model.command.KeyAndTSN
 import org.chronos.chronostore.model.command.OpCode
-import org.chronos.chronostore.util.Order
 import org.chronos.chronostore.util.TSN
 import org.chronos.chronostore.util.bytes.Bytes
-import org.chronos.chronostore.util.statistics.ChronoStoreStatistics
+import org.chronos.chronostore.util.cursor.CursorUtils.checkIsOpen
+import org.chronos.chronostore.util.statistics.StatisticsReporter
 
 class VersioningCursor(
-    treeCursor: Cursor<KeyAndTSN, Command>,
+    private val innerCursor: CursorInternal<KeyAndTSN, Command>,
     private val tsn: TSN,
     private val includeDeletions: Boolean,
-) : WrappingCursor<Cursor<KeyAndTSN, Command>, Bytes, Command>(treeCursor), Cursor<Bytes, Command> {
+    private val statisticsReporter: StatisticsReporter,
+) : CursorInternal<Bytes, Command> {
+
+    override var parent: CursorInternal<*, *>? = null
+        set(value) {
+            if (field === value) {
+                return
+            }
+            check(field == null) {
+                "Cannot assign another parent to this cursor; a parent is already present." +
+                    " Existing parent: ${field}, proposed new parent: ${value}"
+            }
+            field = value
+        }
+
+    override val isOpen: Boolean
+        get() {
+            return this.innerCursor.isOpen
+        }
+
+    override val keyOrNull: Bytes?
+        get() {
+            this.checkIsOpen()
+            return this.getTemporalKeyOrNull()?.key
+        }
+
+    override val valueOrNull: Command?
+        get() {
+            this.checkIsOpen()
+            return this.innerCursor.valueOrNull
+        }
+
+    override val isValidPosition: Boolean
+        get() {
+            this.checkIsOpen()
+            return this.innerCursor.isValidPosition
+        }
 
     init {
-        ChronoStoreStatistics.VERSIONING_CURSORS.incrementAndGet()
+        this.innerCursor.parent = this
+        this.statisticsReporter.reportCursorOpened(VersioningCursor::class.java)
     }
 
-    override fun doFirst(): Boolean {
-        ChronoStoreStatistics.VERSIONING_CURSOR_FIRST_SEEKS.incrementAndGet()
-        if (!this.innerCursor.first()) {
+    override fun invalidatePositionInternal() {
+        this.checkIsOpen()
+        this.innerCursor.invalidatePositionInternal()
+    }
+
+    override fun firstInternal(): Boolean {
+        this.checkIsOpen()
+        this.statisticsReporter.reportCursorOperationFirst(VersioningCursor::class.java)
+        if (!this.innerCursor.firstInternal()) {
             return false
         }
         // the first key in the keyspace may already be an output key. Let's check...
@@ -33,8 +76,9 @@ class VersioningCursor(
         return this.seekToNextHigherTemporalEntry()
     }
 
-    override fun doLast(): Boolean {
-        ChronoStoreStatistics.VERSIONING_CURSOR_LAST_SEEKS.incrementAndGet()
+    override fun lastInternal(): Boolean {
+        this.checkIsOpen()
+        this.statisticsReporter.reportCursorOperationLast(VersioningCursor::class.java)
         if (!this.innerCursor.last()) {
             return false
         }
@@ -49,24 +93,25 @@ class VersioningCursor(
         return this.seekToNextLowerTemporalEntry()
     }
 
-    override fun doMove(direction: Order): Boolean {
-        return when (direction) {
-            Order.ASCENDING -> {
-                ChronoStoreStatistics.VERSIONING_CURSOR_NEXT_SEEKS.incrementAndGet()
-                this.seekToNextHigherTemporalEntry()
-            }
-            Order.DESCENDING -> {
-                ChronoStoreStatistics.VERSIONING_CURSOR_PREVIOUS_SEEKS.incrementAndGet()
-                this.seekToNextLowerTemporalEntry()
-            }
-        }
+    override fun nextInternal(): Boolean {
+        this.checkIsOpen()
+        this.statisticsReporter.reportCursorOperationNext(VersioningCursor::class.java)
+        return this.seekToNextHigherTemporalEntry()
     }
 
-    override fun doSeekExactlyOrPrevious(key: Bytes): Boolean {
-        ChronoStoreStatistics.VERSIONING_CURSOR_EXACTLY_OR_PREVIOUS_SEEKS.incrementAndGet()
+    override fun previousInternal(): Boolean {
+        this.checkIsOpen()
+        this.statisticsReporter.reportCursorOperationPrevious(VersioningCursor::class.java)
+        return this.seekToNextLowerTemporalEntry()
+    }
+
+
+    override fun seekExactlyOrPreviousInternal(key: Bytes): Boolean {
+        this.checkIsOpen()
+        this.statisticsReporter.reportCursorOperationSeekExactlyOrPrevious(VersioningCursor::class.java)
         val temporalKey = this.convertUserKeyToUnqualifiedTemporalKey(key)
 
-        if (!this.innerCursor.seekExactlyOrPrevious(temporalKey)) {
+        if (!this.innerCursor.seekExactlyOrPreviousInternal(temporalKey)) {
             return false
         }
         val currentKey = this.innerCursor.key
@@ -77,9 +122,10 @@ class VersioningCursor(
         return true
     }
 
-    override fun doSeekExactlyOrNext(key: Bytes): Boolean {
-        ChronoStoreStatistics.VERSIONING_CURSOR_EXACTLY_OR_NEXT_SEEKS.incrementAndGet()
-        if (!this.innerCursor.first()) {
+    override fun seekExactlyOrNextInternal(key: Bytes): Boolean {
+        this.checkIsOpen()
+        this.statisticsReporter.reportCursorOperationSeekExactlyOrNext(VersioningCursor::class.java)
+        if (!this.innerCursor.firstInternal()) {
             return false
         }
 
@@ -91,9 +137,9 @@ class VersioningCursor(
         // we know that equality is not an option (otherwise we would have found something),
         // so we retry with "seekExactlyOrNext".
 
-        if (!this.innerCursor.seekExactlyOrPrevious(temporalKey)) {
+        if (!this.innerCursor.seekExactlyOrPreviousInternal(temporalKey)) {
             // we found nothing with exactlyOrPrevious. We might still find something larger...
-            if (!this.innerCursor.seekExactlyOrNext(temporalKey)) {
+            if (!this.innerCursor.seekExactlyOrNextInternal(temporalKey)) {
                 return false
             }
         } else {
@@ -115,20 +161,6 @@ class VersioningCursor(
         return true
     }
 
-    private fun convertUserKeyToUnqualifiedTemporalKey(userKey: Bytes): KeyAndTSN {
-        return KeyAndTSN(userKey, this.tsn)
-    }
-
-    override val keyOrNullInternal: Bytes?
-        get() {
-            return this.getTemporalKeyOrNull()?.key
-        }
-
-    override val valueOrNullInternal: Command?
-        get() {
-            return this.innerCursor.valueOrNull
-        }
-
     private fun getTemporalKeyOrNull(): KeyAndTSN? {
         return this.innerCursor.keyOrNull
     }
@@ -137,7 +169,7 @@ class VersioningCursor(
         var currentKey: KeyAndTSN
         var nextHigherKey: KeyAndTSN?
         do {
-            if (!this.innerCursor.next()) {
+            if (!this.innerCursor.nextInternal()) {
                 return false
             }
             currentKey = this.getTemporalKeyOrNull()
@@ -153,7 +185,7 @@ class VersioningCursor(
         do {
             nextHigherKey = this.getTemporalKeyOrNull()
                 ?: return false
-            if (!this.innerCursor.previous()) {
+            if (!this.innerCursor.previousInternal()) {
                 return false
             }
             currentKey = this.getTemporalKeyOrNull()
@@ -186,17 +218,35 @@ class VersioningCursor(
     }
 
     private fun peekNextKey(): KeyAndTSN? {
-        if(this.getTemporalKeyOrNull() == null){
+        if (this.getTemporalKeyOrNull() == null) {
             // cursor state is invalid
             return null
         }
-        return this.innerCursor.peekNext()?.first
+        return this.innerCursor.peekNextInternal()?.first
     }
 
     private fun valueIsDeletionMarker(): Boolean {
         val currentValue = this.innerCursor.valueOrNull
             ?: return false
         return currentValue.opCode == OpCode.DEL
+    }
+
+    private fun convertUserKeyToUnqualifiedTemporalKey(userKey: Bytes): KeyAndTSN {
+        return KeyAndTSN(userKey, this.tsn)
+    }
+
+    override fun closeInternal() {
+        if (!this.isOpen) {
+            return
+        }
+        this.statisticsReporter.reportCursorClosed(VersioningCursor::class.java)
+        this.innerCursor.closeInternal()
+    }
+
+    override fun onClose(action: CloseHandler): Cursor<Bytes, Command> {
+        this.checkIsOpen()
+        this.innerCursor.onClose(action)
+        return this
     }
 
     override fun toString(): String {

@@ -14,6 +14,7 @@ import org.chronos.chronostore.test.util.VFSMode
 import org.chronos.chronostore.test.util.VirtualFileSystemTest
 import org.chronos.chronostore.util.bytes.BasicBytes
 import org.chronos.chronostore.util.bytes.Bytes
+import org.chronos.chronostore.util.statistics.StatisticsCollector
 import org.chronos.chronostore.util.unit.BinarySize.Companion.KiB
 import org.chronos.chronostore.util.unit.BinarySize.Companion.MiB
 import strikt.api.expect
@@ -25,6 +26,7 @@ class ChronoStoreFileTest {
 
     @VirtualFileSystemTest
     fun canCreateAndReadEmptyFile(mode: VFSMode) {
+        val stats = StatisticsCollector()
         mode.withVFS { vfs ->
             val file = vfs.file("test.chronostore")
 
@@ -32,6 +34,7 @@ class ChronoStoreFileTest {
                 val writer = StandardChronoStoreFileWriter(
                     outputStream = overWriter.outputStream,
                     settings = ChronoStoreFileSettings(CompressionAlgorithm.NONE, 16.MiB),
+                    statisticsReporter = stats,
                 )
                 writer.write(
                     numberOfMerges = 0,
@@ -48,7 +51,7 @@ class ChronoStoreFileTest {
             }
 
             val factory = MemorySegmentFileDriver.Factory
-            val blockLoader = BlockLoader.basic(factory)
+            val blockLoader = BlockLoader.basic(factory, stats)
 
             factory.createDriver(file).use { driver ->
                 val fileHeader = ChronoStoreFileFormat.loadFileHeader(driver)
@@ -92,6 +95,7 @@ class ChronoStoreFileTest {
 
     @VirtualFileSystemTest
     fun canCreateAndReadFileWith1Key(mode: VFSMode) {
+        val stats = StatisticsCollector()
         mode.withVFS { vfs ->
 
             val file = vfs.file("test.chronostore")
@@ -101,6 +105,7 @@ class ChronoStoreFileTest {
                 val writer = StandardChronoStoreFileWriter(
                     outputStream = overWriter.outputStream.buffered(),
                     settings = ChronoStoreFileSettings(CompressionAlgorithm.NONE, 16.KiB),
+                    statisticsReporter = stats,
                 )
                 val commands = listOf(Command.put(theKey, 1000L, BasicBytes("hello")))
                 writer.write(
@@ -118,7 +123,7 @@ class ChronoStoreFileTest {
             }
 
             val factory = FileChannelDriver.Factory
-            val blockLoader = BlockLoader.basic(factory)
+            val blockLoader = BlockLoader.basic(factory, stats)
 
             factory.createDriver(file).use { driver ->
                 val header = ChronoStoreFileFormat.loadFileHeader(driver)
@@ -150,6 +155,8 @@ class ChronoStoreFileTest {
 
     @VirtualFileSystemTest
     fun canCreateAndReadFileWith1000VersionsOfSameKey(mode: VFSMode) {
+        val stats = StatisticsCollector()
+
         mode.withVFS { vfs ->
             val file = vfs.file("test.chronostore")
 
@@ -158,6 +165,7 @@ class ChronoStoreFileTest {
                 val writer = StandardChronoStoreFileWriter(
                     outputStream = overWriter.outputStream.buffered(),
                     settings = ChronoStoreFileSettings(CompressionAlgorithm.NONE, 16.KiB),
+                    statisticsReporter = stats,
                 )
                 val random = Random(System.currentTimeMillis())
                 val commands = (0..<1000).asSequence().map { i ->
@@ -182,7 +190,7 @@ class ChronoStoreFileTest {
             }
 
             val factory = FileChannelDriver.Factory
-            val blockLoader = BlockLoader.basic(factory)
+            val blockLoader = BlockLoader.basic(factory, stats)
 
             factory.createDriver(file).use { driver ->
                 val header = ChronoStoreFileFormat.loadFileHeader(driver)
@@ -255,6 +263,7 @@ class ChronoStoreFileTest {
 
     @VirtualFileSystemTest
     fun canIterateOverFileWith1000VersionsOfSameKeyWithCursor(mode: VFSMode) {
+        val stats = StatisticsCollector()
         mode.withVFS { vfs ->
             val file = vfs.file("test.chronostore")
 
@@ -263,6 +272,7 @@ class ChronoStoreFileTest {
                 val writer = StandardChronoStoreFileWriter(
                     outputStream = overWriter.outputStream.buffered(),
                     settings = ChronoStoreFileSettings(CompressionAlgorithm.NONE, 16.KiB),
+                    statisticsReporter = stats,
                 )
                 val random = Random(System.currentTimeMillis())
                 val commands = (0..<1000).asSequence().map { i ->
@@ -287,7 +297,7 @@ class ChronoStoreFileTest {
             }
 
             val factory = FileChannelDriver.Factory
-            val blockLoader = BlockLoader.basic(factory)
+            val blockLoader = BlockLoader.basic(factory, stats)
 
             val header = factory.createDriver(file).use { driver ->
                 ChronoStoreFileFormat.loadFileHeader(driver)
@@ -306,6 +316,7 @@ class ChronoStoreFileTest {
 
     @VirtualFileSystemTest
     fun canCreateAndReadFileWithFixedEntries(mode: VFSMode) {
+        val stats = StatisticsCollector()
         mode.withVFS { vfs ->
             val file = vfs.file("test.chronostore")
 
@@ -323,6 +334,7 @@ class ChronoStoreFileTest {
                 StandardChronoStoreFileWriter(
                     outputStream = overWriter.outputStream.buffered(),
                     settings = ChronoStoreFileSettings(CompressionAlgorithm.SNAPPY, 16.KiB),
+                    statisticsReporter = stats,
                 ).use { writer ->
                     writer.write(
                         numberOfMerges = 0L,
@@ -335,7 +347,7 @@ class ChronoStoreFileTest {
             }
 
             val driverFactory = FileChannelDriver.Factory
-            val blockLoader = BlockLoader.basic(driverFactory)
+            val blockLoader = BlockLoader.basic(driverFactory, stats)
 
             driverFactory.createDriver(file).use { driver ->
                 val header = ChronoStoreFileFormat.loadFileHeader(driver)
@@ -399,6 +411,7 @@ class ChronoStoreFileTest {
 
     @VirtualFileSystemTest
     fun canCreateAndReadFileWithFixedEntriesAfterMerge(mode: VFSMode) {
+        val stats = StatisticsCollector()
         mode.withVFS { vfs ->
             val file = vfs.file("test.chronostore")
 
@@ -416,6 +429,7 @@ class ChronoStoreFileTest {
                 StandardChronoStoreFileWriter(
                     outputStream = overWriter.outputStream.buffered(),
                     settings = ChronoStoreFileSettings(CompressionAlgorithm.SNAPPY, 16.KiB),
+                    statisticsReporter = stats,
                 ).use { writer ->
                     writer.write(
                         numberOfMerges = 0L,
@@ -432,6 +446,7 @@ class ChronoStoreFileTest {
                 val writer = StandardChronoStoreFileWriter(
                     outputStream = overWriter.outputStream.buffered(),
                     settings = ChronoStoreFileSettings(CompressionAlgorithm.NONE, 16.MiB),
+                    statisticsReporter = stats,
                 )
                 writer.write(
                     numberOfMerges = 0,
@@ -443,7 +458,7 @@ class ChronoStoreFileTest {
             }
 
             val driverFactory = FileChannelDriver.Factory
-            val blockLoader = BlockLoader.basic(driverFactory)
+            val blockLoader = BlockLoader.basic(driverFactory, stats)
 
             driverFactory.createDriver(file).use { driver ->
                 val header = ChronoStoreFileFormat.loadFileHeader(driver)
