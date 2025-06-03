@@ -3,12 +3,12 @@ package org.chronos.chronostore.api
 import org.chronos.chronostore.api.ChronoStore.Companion.openInMemory
 import org.chronos.chronostore.api.ChronoStore.Companion.openOnDirectory
 import org.chronos.chronostore.api.exceptions.TransactionLockAcquisitionException
+import org.chronos.chronostore.api.statistics.StatisticsManager
 import org.chronos.chronostore.impl.ChronoStoreImpl
 import org.chronos.chronostore.io.vfs.VirtualFileSystem
 import org.chronos.chronostore.io.vfs.disk.DiskBasedVirtualFileSystem
 import org.chronos.chronostore.io.vfs.inmemory.InMemoryVirtualFileSystem
 import org.chronos.chronostore.util.report.ChronoStoreReport
-import org.chronos.chronostore.util.statistics.report.StatisticsReport
 import java.io.File
 import kotlin.time.Duration
 
@@ -410,14 +410,9 @@ interface ChronoStore : AutoCloseable {
     /** Creates a read-only snapshot report about the structure of the store. */
     fun statusReport(): ChronoStoreReport
 
-    /** Creates a read-only snapshot report about runtime statistics. */
-    fun statisticsReport(): StatisticsReport
-
     /**
-     * Resets the statistics reporting.
-     *
-     * All metrics will be set back to zero, and the collection start time will be set to the current timestamp.
+     * Gets the statistics manager.
      */
-    fun resetStatistics()
+    val statistics: StatisticsManager
 
 }

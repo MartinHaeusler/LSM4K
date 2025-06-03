@@ -1,14 +1,13 @@
-package org.chronos.chronostore.util.statistics.report
+package org.chronos.chronostore.api.statistics
 
 import org.chronos.chronostore.api.ChronoStore
 import org.chronos.chronostore.api.TransactionMode
+import org.chronos.chronostore.api.statistics.CursorStatisticsReport.Companion.sum
+import org.chronos.chronostore.api.statistics.TransactionStatisticsReport.Companion.sum
 import org.chronos.chronostore.io.format.cursor.ChronoStoreFileCursor
 import org.chronos.chronostore.util.Timestamp
-import org.chronos.chronostore.util.cursor.Cursor
 import org.chronos.chronostore.util.cursor.OverlayCursor
 import org.chronos.chronostore.util.cursor.VersioningCursor
-import org.chronos.chronostore.util.statistics.report.CursorStatisticsReport.Companion.sum
-import org.chronos.chronostore.util.statistics.report.TransactionStatisticsReport.Companion.sum
 import org.chronos.chronostore.util.unit.BinarySize.Companion.Bytes
 import java.util.*
 import kotlin.time.Duration.Companion.milliseconds
@@ -23,8 +22,8 @@ data class StatisticsReport(
     /** When did the tracking of events end? */
     val trackingEndTimestamp: Timestamp,
 
-    /** Cursor statistics by cursor class. */
-    val cursorStatistics: Map<Class<out Cursor<*, *>>, CursorStatisticsReport>,
+    /** Cursor statistics by cursor class name. */
+    val cursorStatistics: Map<String, CursorStatisticsReport>,
 
     /** Transaction statistics by [TransactionMode]. */
     val transactionStatistics: Map<TransactionMode, TransactionStatisticsReport>,
@@ -81,13 +80,13 @@ data class StatisticsReport(
     val allCursorStatistics: CursorStatisticsReport = this.cursorStatistics.values.sum()
 
     val fileCursorStatistics: CursorStatisticsReport
-        get() = this.getFileCursorStatistics(ChronoStoreFileCursor::class.java)
+        get() = this.getCursorStatistics(ChronoStoreFileCursor.CURSOR_NAME)
 
     val overlayCursorStatistics: CursorStatisticsReport
-        get() = this.getFileCursorStatistics(OverlayCursor::class.java)
+        get() = this.getCursorStatistics(OverlayCursor.CURSOR_NAME)
 
     val versioningCursorStatistics: CursorStatisticsReport
-        get() = this.getFileCursorStatistics(VersioningCursor::class.java)
+        get() = this.getCursorStatistics(VersioningCursor.CURSOR_NAME)
 
     val allTransactionStatistics: TransactionStatisticsReport = this.transactionStatistics.values.sum()
 
@@ -100,7 +99,7 @@ data class StatisticsReport(
     val exclusiveTransactionStatistics: TransactionStatisticsReport
         get() = this.getTransactionStatistics(TransactionMode.EXCLUSIVE)
 
-    fun getFileCursorStatistics(cursorType: Class<out Cursor<*, *>>): CursorStatisticsReport {
+    fun getCursorStatistics(cursorType: String): CursorStatisticsReport {
         return this.cursorStatistics[cursorType] ?: CursorStatisticsReport.empty(cursorType)
     }
 

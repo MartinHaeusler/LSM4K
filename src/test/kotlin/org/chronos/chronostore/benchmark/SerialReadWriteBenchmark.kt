@@ -39,6 +39,7 @@ object SerialReadWriteBenchmark {
         )
 
         ChronoStoreMode.ONDISK.withChronoStore(config) { chronoStore ->
+            chronoStore.statistics.startCollection()
             chronoStore.readWriteTransaction { tx ->
                 tx.createNewStore("test")
                 tx.commit()
@@ -64,7 +65,7 @@ object SerialReadWriteBenchmark {
                     }
                     if (c % 100 == 0) {
                         val runtime = System.currentTimeMillis() - startTime
-                        val stallTime = chronoStore.statisticsReport().totalWriteStallTimeMillis
+                        val stallTime = chronoStore.statistics.report()!!.totalWriteStallTimeMillis
                         val stallTimePercent = (stallTime / runtime.toDouble()) * 100
                         log.info { "Commit #${c} successful. Stall time: ${stallTime}ms (${stallTimePercent}%)." }
                     }
@@ -111,7 +112,7 @@ object SerialReadWriteBenchmark {
             }.let { log.info { "Read complete. Time: ${it}ms, Total data read: ${Bytes.formatSize(totalSize)}" } }
 
             log.info { "FINAL STATISTICS" }
-            println(chronoStore.statisticsReport().prettyPrint())
+            println(chronoStore.statistics.report()!!.prettyPrint())
         }
     }
 

@@ -2,21 +2,44 @@ package org.chronos.chronostore.util.statistics
 
 import org.chronos.chronostore.api.ChronoStore
 import org.chronos.chronostore.api.TransactionMode
-import org.chronos.chronostore.util.cursor.Cursor
-import org.chronos.chronostore.util.statistics.report.StatisticsReport
+import org.chronos.chronostore.api.statistics.StatisticsManager
+import org.chronos.chronostore.api.statistics.StatisticsReport
+import org.chronos.chronostore.util.Timestamp
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
 /**
  * Collects and [reports][report] on statistics about a [ChronoStore] instance.
  */
-class StatisticsCollector : StatisticsReporter {
+class StatisticsCollector : StatisticsReporter, StatisticsManager {
+
+    companion object {
+
+        fun active(): StatisticsCollector {
+            val collector = StatisticsCollector()
+            collector.startCollection()
+            return collector
+        }
+
+        fun inactive(): StatisticsCollector {
+            return StatisticsCollector()
+        }
+
+    }
+
+    // =================================================================================================================
+    // STATE
+    // =================================================================================================================
+
+    /** The most recent final report before stopping the collection of statistics. */
+    private var mostRecentReport: StatisticsReport? = null
 
     /** When did the tracking of events start? */
-    private var trackingStart = System.currentTimeMillis()
+    @Volatile
+    private var trackingStart: Timestamp? = null
 
-    /** Cursor statistics by cursor class. */
-    private val cursorStatisticsCollectors = ConcurrentHashMap<Class<out Cursor<*, *>>, CursorStatisticsCollector>()
+    /** Cursor statistics by cursor class name. */
+    private val cursorStatisticsCollectors = ConcurrentHashMap<String, CursorStatisticsCollector>()
 
     /** Transaction statistics by [TransactionMode]. */
     private val transactionStatisticCollectors = TransactionMode.entries.associateWith { TransactionStatisticsCollector(it) }
@@ -67,120 +90,68 @@ class StatisticsCollector : StatisticsReporter {
     /** How many output bytes did we deliver in total for decompression? */
     private val decompressionOutputBytes = AtomicLong(0L)
 
-    override fun reportCursorOpened(cursorType: Class<out Cursor<*, *>>) {
-        this.getCursorStats(cursorType).reportCursorOpened()
+    // =================================================================================================================
+    // MANAGEMENT AND REPORTING
+    // The public user-facing API which allows the user to start and stop the collection as well as generate a report.
+    // =================================================================================================================
+
+    override val isCollectionActive: Boolean
+        get() = this.trackingStart != null
+
+    override fun report(): StatisticsReport? {
+        return this.generateReportForCurrentState()
+            ?: this.mostRecentReport
     }
 
-    override fun reportCursorClosed(cursorType: Class<out Cursor<*, *>>) {
-        this.getCursorStats(cursorType).reportCursorClosed()
-    }
-
-    override fun reportCursorOperationFirst(cursorType: Class<out Cursor<*, *>>) {
-        this.getCursorStats(cursorType).reportCursorOperationFirst()
-    }
-
-    override fun reportCursorOperationLast(cursorType: Class<out Cursor<*, *>>) {
-        this.getCursorStats(cursorType).reportCursorOperationLast()
-    }
-
-    override fun reportCursorOperationNext(cursorType: Class<out Cursor<*, *>>) {
-        this.getCursorStats(cursorType).reportCursorOperationNext()
-    }
-
-    override fun reportCursorOperationPrevious(cursorType: Class<out Cursor<*, *>>) {
-        this.getCursorStats(cursorType).reportCursorOperationPrevious()
-    }
-
-    override fun reportCursorOperationSeekExactlyOrNext(cursorType: Class<out Cursor<*, *>>) {
-        this.getCursorStats(cursorType).reportCursorOperationSeekExactlyOrNext()
-    }
-
-    override fun reportCursorOperationSeekExactlyOrPrevious(cursorType: Class<out Cursor<*, *>>) {
-        this.getCursorStats(cursorType).reportCursorOperationSeekExactlyOrPrevious()
-    }
-
-    override fun reportBlockCacheRequest() {
-        this.blockCacheStatisticsCollector.reportCacheRequest()
-    }
-
-    override fun reportBlockCacheMiss() {
-        this.blockCacheStatisticsCollector.reportCacheMiss()
-    }
-
-    override fun reportBlockCacheEviction() {
-        this.blockCacheStatisticsCollector.reportCacheEviction()
-    }
-
-    override fun reportBlockLoadTime(millis: Long) {
-        this.blockLoads.incrementAndGet()
-        this.blockLoadTime.getAndAdd(millis)
-    }
-
-    override fun reportFileHeaderCacheRequest() {
-        this.fileHeaderCacheStatisticsCollector.reportCacheRequest()
-    }
-
-    override fun reportFileHeaderCacheEviction() {
-        this.fileHeaderCacheStatisticsCollector.reportCacheEviction()
-    }
-
-    override fun reportFileHeaderCacheMiss() {
-        this.fileHeaderCacheStatisticsCollector.reportCacheMiss()
-    }
-
-    override fun reportStallTime(millis: Long) {
-        this.totalWriteStallTimeMillis.addAndGet(millis)
-        this.writeStallEvents.incrementAndGet()
-    }
-
-    override fun reportTransactionOpened(mode: TransactionMode) {
-        this.transactionStatisticCollectors.getValue(mode).reportTransactionOpened()
-    }
-
-    override fun reportTransactionCommit(mode: TransactionMode) {
-        this.transactionStatisticCollectors.getValue(mode).reportTransactionCommit()
-    }
-
-    override fun reportTransactionRollback(mode: TransactionMode) {
-        this.transactionStatisticCollectors.getValue(mode).reportTransactionRollback()
-    }
-
-    override fun reportTransactionDangling(mode: TransactionMode) {
-        this.transactionStatisticCollectors.getValue(mode).reportTransactionDangling()
-    }
-
-    override fun reportFlushTaskExecution(executionTimeMillis: Long, writtenBytes: Long, writtenEntries: Long) {
-        this.flushTaskTotalTime.getAndAdd(executionTimeMillis)
-        this.flushTaskWrittenEntries.getAndAdd(writtenEntries)
-        this.flushTaskWrittenBytes.getAndAdd(writtenBytes)
-        this.flushTaskExecutions.incrementAndGet()
-
-    }
-
-    override fun reportCompressionInvocation(inputBytes: Long, outputBytes: Long) {
-        this.compressionInvocations.incrementAndGet()
-        this.compressionInputBytes.getAndAdd(inputBytes)
-        this.compressionOutputBytes.getAndAdd(outputBytes)
-    }
-
-    override fun reportDecompressionInvocation(inputBytes: Long, outputBytes: Long) {
-        this.decompressionInvocations.incrementAndGet()
-        this.decompressionInputBytes.getAndAdd(inputBytes)
-        this.decompressionOutputBytes.getAndAdd(outputBytes)
-    }
-
-    private fun getCursorStats(cursorType: Class<out Cursor<*, *>>): CursorStatisticsCollector {
-        return this.cursorStatisticsCollectors.computeIfAbsent(cursorType) {
-            CursorStatisticsCollector(it)
+    override fun startCollection(): Boolean {
+        if (this.isCollectionActive) {
+            return false
         }
+        this.restartCollection()
+        return true
     }
 
-    /**
-     * Generates an immutable snapshot report about the current statistics.
-     */
-    fun report(): StatisticsReport {
+    override fun stopCollection(): Boolean {
+        if (!this.isCollectionActive) {
+            return false
+        }
+        this.mostRecentReport = this.generateReportForCurrentState()
+        this.reset()
+        return true
+    }
+
+    override fun restartCollection() {
+        this.reset()
+        this.trackingStart = System.currentTimeMillis()
+    }
+
+    private fun reset() {
+        this.trackingStart = null
+        this.cursorStatisticsCollectors.clear()
+        this.transactionStatisticCollectors.values.forEach { it.reset() }
+        this.blockCacheStatisticsCollector.reset()
+        this.fileHeaderCacheStatisticsCollector.reset()
+        this.blockLoads.set(0)
+        this.blockLoadTime.set(0)
+        this.totalWriteStallTimeMillis.set(0)
+        this.writeStallEvents.set(0)
+        this.flushTaskExecutions.set(0)
+        this.flushTaskWrittenBytes.set(0)
+        this.flushTaskWrittenEntries.set(0)
+        this.flushTaskTotalTime.set(0)
+        this.compressionInvocations.set(0)
+        this.compressionInputBytes.set(0)
+        this.compressionOutputBytes.set(0)
+        this.decompressionInvocations.set(0)
+        this.decompressionInputBytes.set(0)
+        this.decompressionOutputBytes.set(0)
+    }
+
+    private fun generateReportForCurrentState(): StatisticsReport? {
+        val startTimestamp = this.trackingStart
+            ?: return null
         return StatisticsReport(
-            trackingStartTimestamp = this.trackingStart,
+            trackingStartTimestamp = startTimestamp,
             trackingEndTimestamp = System.currentTimeMillis(),
             cursorStatistics = this.cursorStatisticsCollectors.mapValues { it.value.report() },
             transactionStatistics = this.transactionStatisticCollectors.mapValues { it.value.report() },
@@ -203,25 +174,186 @@ class StatisticsCollector : StatisticsReporter {
         )
     }
 
-    fun reset() {
-        this.trackingStart = System.currentTimeMillis()
-        this.cursorStatisticsCollectors.clear()
-        this.transactionStatisticCollectors.values.forEach { it.reset() }
-        this.blockCacheStatisticsCollector.reset()
-        this.fileHeaderCacheStatisticsCollector.reset()
-        this.blockLoads.set(0)
-        this.blockLoadTime.set(0)
-        this.totalWriteStallTimeMillis.set(0)
-        this.writeStallEvents.set(0)
-        this.flushTaskExecutions.set(0)
-        this.flushTaskWrittenBytes.set(0)
-        this.flushTaskWrittenEntries.set(0)
-        this.flushTaskTotalTime.set(0)
-        this.compressionInvocations.set(0)
-        this.compressionInputBytes.set(0)
-        this.compressionOutputBytes.set(0)
-        this.decompressionInvocations.set(0)
-        this.decompressionInputBytes.set(0)
-        this.decompressionOutputBytes.set(0)
+    // =================================================================================================================
+    // DATA COLLECTION
+    // These methods are used by the various components to report upon their actions.
+    // =================================================================================================================
+
+    override fun reportCursorOpened(cursorType: String) {
+        if (!this.isCollectionActive) {
+            return
+        }
+        this.getCursorStats(cursorType).reportCursorOpened()
     }
+
+    override fun reportCursorClosed(cursorType: String) {
+        if (!this.isCollectionActive) {
+            return
+        }
+        this.getCursorStats(cursorType).reportCursorClosed()
+    }
+
+    override fun reportCursorOperationFirst(cursorType: String) {
+        if (!this.isCollectionActive) {
+            return
+        }
+        this.getCursorStats(cursorType).reportCursorOperationFirst()
+    }
+
+    override fun reportCursorOperationLast(cursorType: String) {
+        if (!this.isCollectionActive) {
+            return
+        }
+        this.getCursorStats(cursorType).reportCursorOperationLast()
+    }
+
+    override fun reportCursorOperationNext(cursorType: String) {
+        if (!this.isCollectionActive) {
+            return
+        }
+        this.getCursorStats(cursorType).reportCursorOperationNext()
+    }
+
+    override fun reportCursorOperationPrevious(cursorType: String) {
+        if (!this.isCollectionActive) {
+            return
+        }
+        this.getCursorStats(cursorType).reportCursorOperationPrevious()
+    }
+
+    override fun reportCursorOperationSeekExactlyOrNext(cursorType: String) {
+        if (!this.isCollectionActive) {
+            return
+        }
+        this.getCursorStats(cursorType).reportCursorOperationSeekExactlyOrNext()
+    }
+
+    override fun reportCursorOperationSeekExactlyOrPrevious(cursorType: String) {
+        if (!this.isCollectionActive) {
+            return
+        }
+        this.getCursorStats(cursorType).reportCursorOperationSeekExactlyOrPrevious()
+    }
+
+    override fun reportBlockCacheRequest() {
+        if (!this.isCollectionActive) {
+            return
+        }
+        this.blockCacheStatisticsCollector.reportCacheRequest()
+    }
+
+    override fun reportBlockCacheMiss() {
+        if (!this.isCollectionActive) {
+            return
+        }
+        this.blockCacheStatisticsCollector.reportCacheMiss()
+    }
+
+    override fun reportBlockCacheEviction() {
+        if (!this.isCollectionActive) {
+            return
+        }
+        this.blockCacheStatisticsCollector.reportCacheEviction()
+    }
+
+    override fun reportBlockLoadTime(millis: Long) {
+        if (!this.isCollectionActive) {
+            return
+        }
+        this.blockLoads.incrementAndGet()
+        this.blockLoadTime.getAndAdd(millis)
+    }
+
+    override fun reportFileHeaderCacheRequest() {
+        if (!this.isCollectionActive) {
+            return
+        }
+        this.fileHeaderCacheStatisticsCollector.reportCacheRequest()
+    }
+
+    override fun reportFileHeaderCacheEviction() {
+        if (!this.isCollectionActive) {
+            return
+        }
+        this.fileHeaderCacheStatisticsCollector.reportCacheEviction()
+    }
+
+    override fun reportFileHeaderCacheMiss() {
+        if (!this.isCollectionActive) {
+            return
+        }
+        this.fileHeaderCacheStatisticsCollector.reportCacheMiss()
+    }
+
+    override fun reportStallTime(millis: Long) {
+        if (!this.isCollectionActive) {
+            return
+        }
+        this.totalWriteStallTimeMillis.addAndGet(millis)
+        this.writeStallEvents.incrementAndGet()
+    }
+
+    override fun reportTransactionOpened(mode: TransactionMode) {
+        if (!this.isCollectionActive) {
+            return
+        }
+        this.transactionStatisticCollectors.getValue(mode).reportTransactionOpened()
+    }
+
+    override fun reportTransactionCommit(mode: TransactionMode) {
+        if (!this.isCollectionActive) {
+            return
+        }
+        this.transactionStatisticCollectors.getValue(mode).reportTransactionCommit()
+    }
+
+    override fun reportTransactionRollback(mode: TransactionMode) {
+        if (!this.isCollectionActive) {
+            return
+        }
+        this.transactionStatisticCollectors.getValue(mode).reportTransactionRollback()
+    }
+
+    override fun reportTransactionDangling(mode: TransactionMode) {
+        if (!this.isCollectionActive) {
+            return
+        }
+        this.transactionStatisticCollectors.getValue(mode).reportTransactionDangling()
+    }
+
+    override fun reportFlushTaskExecution(executionTimeMillis: Long, writtenBytes: Long, writtenEntries: Long) {
+        if (!this.isCollectionActive) {
+            return
+        }
+        this.flushTaskTotalTime.getAndAdd(executionTimeMillis)
+        this.flushTaskWrittenEntries.getAndAdd(writtenEntries)
+        this.flushTaskWrittenBytes.getAndAdd(writtenBytes)
+        this.flushTaskExecutions.incrementAndGet()
+    }
+
+    override fun reportCompressionInvocation(inputBytes: Long, outputBytes: Long) {
+        if (!this.isCollectionActive) {
+            return
+        }
+        this.compressionInvocations.incrementAndGet()
+        this.compressionInputBytes.getAndAdd(inputBytes)
+        this.compressionOutputBytes.getAndAdd(outputBytes)
+    }
+
+    override fun reportDecompressionInvocation(inputBytes: Long, outputBytes: Long) {
+        if (!this.isCollectionActive) {
+            return
+        }
+        this.decompressionInvocations.incrementAndGet()
+        this.decompressionInputBytes.getAndAdd(inputBytes)
+        this.decompressionOutputBytes.getAndAdd(outputBytes)
+    }
+
+    private fun getCursorStats(cursorType: String): CursorStatisticsCollector {
+        return this.cursorStatisticsCollectors.computeIfAbsent(cursorType) {
+            CursorStatisticsCollector(it)
+        }
+    }
+
+
 }

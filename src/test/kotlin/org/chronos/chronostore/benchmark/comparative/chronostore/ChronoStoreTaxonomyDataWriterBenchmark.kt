@@ -35,6 +35,7 @@ object ChronoStoreTaxonomyDataWriterBenchmark {
         )
 
         val statisticsReport = ChronoStore.openOnDirectory(this.storeDir, configuration).use { chronoStore ->
+            chronoStore.statistics.startCollection()
             inputFile.inputStream().buffered().use { input ->
                 val commandSequence = generateSequence {
                     Command.readFromStreamOrNull(input)
@@ -72,7 +73,7 @@ object ChronoStoreTaxonomyDataWriterBenchmark {
                 println("Done")
             }
 
-            chronoStore.statisticsReport()
+            chronoStore.statistics.report()!!
         }
 
         println()

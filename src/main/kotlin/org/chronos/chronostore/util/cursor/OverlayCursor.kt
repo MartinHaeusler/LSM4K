@@ -16,6 +16,8 @@ class OverlayCursor<K : Comparable<K>, V>(
 
     companion object {
 
+        const val CURSOR_NAME = "OverlayCursor"
+
         @Suppress("UNCHECKED_CAST")
         @JvmName("overlayOntoNonNullable")
         fun <K : Comparable<K>, V> Cursor<K, V>.overlayOnto(base: Cursor<K, V>, statisticsReporter: StatisticsReporter): Cursor<K, V> {
@@ -93,7 +95,7 @@ class OverlayCursor<K : Comparable<K>, V>(
             cursor.parent = this
         }
 
-        this.statisticsReporter.reportCursorOpened(OverlayCursor::class.java)
+        this.statisticsReporter.reportCursorOpened(CURSOR_NAME)
     }
 
     override fun invalidatePositionInternal() {
@@ -107,7 +109,7 @@ class OverlayCursor<K : Comparable<K>, V>(
     override fun firstInternal(): Boolean {
         this.checkIsOpen()
 
-        this.statisticsReporter.reportCursorOperationFirst(OverlayCursor::class.java)
+        this.statisticsReporter.reportCursorOperationFirst(CURSOR_NAME)
 
         // reset all cursors to the start
         this.cursorsByKey = this.createCursorsByKeyMapForDirection(ASCENDING)
@@ -132,7 +134,7 @@ class OverlayCursor<K : Comparable<K>, V>(
     override fun lastInternal(): Boolean {
         this.checkIsOpen()
 
-        this.statisticsReporter.reportCursorOperationLast(OverlayCursor::class.java)
+        this.statisticsReporter.reportCursorOperationLast(CURSOR_NAME)
 
         this.cursorsByKey = this.createCursorsByKeyMapForDirection(DESCENDING)
         for (cursor in this.cursorsByPriority) {
@@ -312,7 +314,7 @@ class OverlayCursor<K : Comparable<K>, V>(
     override fun nextInternal(): Boolean {
         this.checkIsOpen()
 
-        this.statisticsReporter.reportCursorOperationNext(OverlayCursor::class.java)
+        this.statisticsReporter.reportCursorOperationNext(CURSOR_NAME)
 
         if (!this.isValidPosition) {
             return false
@@ -324,7 +326,7 @@ class OverlayCursor<K : Comparable<K>, V>(
     override fun previousInternal(): Boolean {
         this.checkIsOpen()
 
-        this.statisticsReporter.reportCursorOperationPrevious(OverlayCursor::class.java)
+        this.statisticsReporter.reportCursorOperationPrevious(CURSOR_NAME)
 
         if (!this.isValidPosition) {
             return false
@@ -336,7 +338,7 @@ class OverlayCursor<K : Comparable<K>, V>(
     override fun seekExactlyOrNextInternal(key: K): Boolean {
         this.checkIsOpen()
 
-        this.statisticsReporter.reportCursorOperationSeekExactlyOrNext(OverlayCursor::class.java)
+        this.statisticsReporter.reportCursorOperationSeekExactlyOrNext(CURSOR_NAME)
 
         // reset all cursors to the start
         this.cursorsByKey = this.createCursorsByKeyMapForDirection(ASCENDING)
@@ -365,7 +367,7 @@ class OverlayCursor<K : Comparable<K>, V>(
     override fun seekExactlyOrPreviousInternal(key: K): Boolean {
         this.checkIsOpen()
 
-        this.statisticsReporter.reportCursorOperationSeekExactlyOrPrevious(OverlayCursor::class.java)
+        this.statisticsReporter.reportCursorOperationSeekExactlyOrPrevious(CURSOR_NAME)
 
         // order has changed, re-insert the non-empty ones into the tree
         // (we don't care about the invalid ones, they point to empty keyspaces)
@@ -404,7 +406,7 @@ class OverlayCursor<K : Comparable<K>, V>(
             return
         }
 
-        this.statisticsReporter.reportCursorClosed(OverlayCursor::class.java)
+        this.statisticsReporter.reportCursorClosed(CURSOR_NAME)
 
         this.isOpen = false
         val subCursorCloseHandlers = this.cursorsByPriority.map { it::closeInternal as CloseHandler }

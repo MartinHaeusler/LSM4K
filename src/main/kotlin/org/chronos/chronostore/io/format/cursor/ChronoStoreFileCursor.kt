@@ -20,8 +20,9 @@ class ChronoStoreFileCursor(
 
     companion object {
 
-        private const val COMMAND_BUFFER_SIZE = 10
+        const val CURSOR_NAME = "FileCursor"
 
+        private const val COMMAND_BUFFER_SIZE = 10
 
     }
 

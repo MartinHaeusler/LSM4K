@@ -1,4 +1,4 @@
-package org.chronos.chronostore.util.statistics.report
+package org.chronos.chronostore.api.statistics
 
 /**
  * An immutable snapshot report containing statistics about a single cache.

@@ -15,6 +15,12 @@ class VersioningCursor(
     private val statisticsReporter: StatisticsReporter,
 ) : CursorInternal<Bytes, Command> {
 
+    companion object {
+
+        const val CURSOR_NAME = "VersioningCursor"
+
+    }
+
     override var parent: CursorInternal<*, *>? = null
         set(value) {
             if (field === value) {
@@ -52,7 +58,7 @@ class VersioningCursor(
 
     init {
         this.innerCursor.parent = this
-        this.statisticsReporter.reportCursorOpened(VersioningCursor::class.java)
+        this.statisticsReporter.reportCursorOpened(CURSOR_NAME)
     }
 
     override fun invalidatePositionInternal() {
@@ -62,7 +68,7 @@ class VersioningCursor(
 
     override fun firstInternal(): Boolean {
         this.checkIsOpen()
-        this.statisticsReporter.reportCursorOperationFirst(VersioningCursor::class.java)
+        this.statisticsReporter.reportCursorOperationFirst(CURSOR_NAME)
         if (!this.innerCursor.firstInternal()) {
             return false
         }
@@ -78,7 +84,7 @@ class VersioningCursor(
 
     override fun lastInternal(): Boolean {
         this.checkIsOpen()
-        this.statisticsReporter.reportCursorOperationLast(VersioningCursor::class.java)
+        this.statisticsReporter.reportCursorOperationLast(CURSOR_NAME)
         if (!this.innerCursor.last()) {
             return false
         }
@@ -95,20 +101,20 @@ class VersioningCursor(
 
     override fun nextInternal(): Boolean {
         this.checkIsOpen()
-        this.statisticsReporter.reportCursorOperationNext(VersioningCursor::class.java)
+        this.statisticsReporter.reportCursorOperationNext(CURSOR_NAME)
         return this.seekToNextHigherTemporalEntry()
     }
 
     override fun previousInternal(): Boolean {
         this.checkIsOpen()
-        this.statisticsReporter.reportCursorOperationPrevious(VersioningCursor::class.java)
+        this.statisticsReporter.reportCursorOperationPrevious(CURSOR_NAME)
         return this.seekToNextLowerTemporalEntry()
     }
 
 
     override fun seekExactlyOrPreviousInternal(key: Bytes): Boolean {
         this.checkIsOpen()
-        this.statisticsReporter.reportCursorOperationSeekExactlyOrPrevious(VersioningCursor::class.java)
+        this.statisticsReporter.reportCursorOperationSeekExactlyOrPrevious(CURSOR_NAME)
         val temporalKey = this.convertUserKeyToUnqualifiedTemporalKey(key)
 
         if (!this.innerCursor.seekExactlyOrPreviousInternal(temporalKey)) {
@@ -124,7 +130,7 @@ class VersioningCursor(
 
     override fun seekExactlyOrNextInternal(key: Bytes): Boolean {
         this.checkIsOpen()
-        this.statisticsReporter.reportCursorOperationSeekExactlyOrNext(VersioningCursor::class.java)
+        this.statisticsReporter.reportCursorOperationSeekExactlyOrNext(CURSOR_NAME)
         if (!this.innerCursor.firstInternal()) {
             return false
         }
@@ -239,7 +245,7 @@ class VersioningCursor(
         if (!this.isOpen) {
             return
         }
-        this.statisticsReporter.reportCursorClosed(VersioningCursor::class.java)
+        this.statisticsReporter.reportCursorClosed(CURSOR_NAME)
         this.innerCursor.closeInternal()
     }
 

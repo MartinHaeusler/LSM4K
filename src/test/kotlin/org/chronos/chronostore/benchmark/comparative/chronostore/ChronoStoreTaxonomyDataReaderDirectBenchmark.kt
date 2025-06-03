@@ -35,7 +35,7 @@ object ChronoStoreTaxonomyDataReaderDirectBenchmark {
 
 
         this.driverFactory.createDriver(inputFile).use { driver ->
-            val stats = StatisticsCollector()
+            val stats = StatisticsCollector.active()
             val fileHeaderCache = FileHeaderCache.create(100.MiB, stats)
             val header = fileHeaderCache.getFileHeader(inputFile) { ChronoStoreFileFormat.loadFileHeader(driver) }
             ChronoStoreFileCursor(inputFile, header, BlockLoader.basic(this.driverFactory, stats, fileHeaderCache)).use { cursor ->
@@ -43,7 +43,7 @@ object ChronoStoreTaxonomyDataReaderDirectBenchmark {
                 val commands = countCommands(cursor)
                 val timeAfterRead = System.currentTimeMillis()
                 println("Read all ${commands} in file '${inputFile.path}' in ${timeAfterRead - timeBeforeRead}ms.")
-                println(stats.report().prettyPrint())
+                println(stats.report()!!.prettyPrint())
             }
         }
     }

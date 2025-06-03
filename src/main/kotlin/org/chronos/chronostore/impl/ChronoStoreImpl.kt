@@ -2,6 +2,7 @@ package org.chronos.chronostore.impl
 
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.chronos.chronostore.api.*
+import org.chronos.chronostore.api.statistics.StatisticsManager
 import org.chronos.chronostore.async.executor.AsyncTaskManagerImpl
 import org.chronos.chronostore.async.taskmonitor.TaskMonitor
 import org.chronos.chronostore.impl.store.StoreImpl
@@ -27,7 +28,6 @@ import org.chronos.chronostore.util.TSN
 import org.chronos.chronostore.util.report.ChronoStoreReport
 import org.chronos.chronostore.util.sequence.SequenceExtensions.toTreeMap
 import org.chronos.chronostore.util.statistics.StatisticsCollector
-import org.chronos.chronostore.util.statistics.report.StatisticsReport
 import org.chronos.chronostore.wal.WALReadBuffer
 import org.chronos.chronostore.wal.WriteAheadLog
 import java.util.concurrent.CompletableFuture
@@ -396,8 +396,8 @@ class ChronoStoreImpl(
     }
 
     // =================================================================================================================
-    // LAYOUT REPORTING
-    // Reports the current layout of this ChronoStore instance as a read-only snapshot.
+    // STATUS & STATISTICS REPORTING
+    // Controls collection of statistics and generates reports on them.
     // =================================================================================================================
 
     override fun statusReport(): ChronoStoreReport {
@@ -416,13 +416,8 @@ class ChronoStoreImpl(
         )
     }
 
-    override fun statisticsReport(): StatisticsReport {
-        return this.statisticsCollector.report()
-    }
-
-    override fun resetStatistics() {
-        this.statisticsCollector.reset()
-    }
+    override val statistics: StatisticsManager
+        get() = this.statisticsCollector
 
     // =================================================================================================================
     // FLUSHING, COMPACTING & GARBAGE COLLECTION

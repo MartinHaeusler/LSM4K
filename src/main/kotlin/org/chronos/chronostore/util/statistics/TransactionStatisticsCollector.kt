@@ -1,7 +1,7 @@
 package org.chronos.chronostore.util.statistics
 
 import org.chronos.chronostore.api.TransactionMode
-import org.chronos.chronostore.util.statistics.report.TransactionStatisticsReport
+import org.chronos.chronostore.api.statistics.TransactionStatisticsReport
 import java.util.concurrent.atomic.AtomicLong
 
 /**

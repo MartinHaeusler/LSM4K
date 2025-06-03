@@ -1,6 +1,6 @@
 package org.chronos.chronostore.util.statistics
 
-import org.chronos.chronostore.util.statistics.report.CacheStatisticsReport
+import org.chronos.chronostore.api.statistics.CacheStatisticsReport
 import java.util.concurrent.atomic.AtomicLong
 
 /**

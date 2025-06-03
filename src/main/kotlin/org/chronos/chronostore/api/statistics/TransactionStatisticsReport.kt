@@ -1,4 +1,4 @@
-package org.chronos.chronostore.util.statistics.report
+package org.chronos.chronostore.api.statistics
 
 import org.chronos.chronostore.api.TransactionMode
 

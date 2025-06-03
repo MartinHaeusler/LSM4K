@@ -1,4 +1,4 @@
-package org.chronos.chronostore.util.statistics.report
+package org.chronos.chronostore.api.statistics
 
 import org.chronos.chronostore.util.cursor.Cursor
 
@@ -7,7 +7,7 @@ import org.chronos.chronostore.util.cursor.Cursor
  */
 class CursorStatisticsReport(
     /** The type of cursor for which this collector gathers statistics. */
-    val cursorType: Class<out Cursor<*, *>>,
+    val cursorType: String,
 
     /** Indicates how many cursors of this [cursorType] have been opened. */
     val cursorsOpened: Long,
@@ -36,9 +36,9 @@ class CursorStatisticsReport(
 
     companion object {
 
-        val EMPTY = empty(Cursor::class.java)
+        val EMPTY = empty("Cursor")
 
-        fun empty(cursorType: Class<out Cursor<*, *>>): CursorStatisticsReport {
+        fun empty(cursorType: String): CursorStatisticsReport {
             return CursorStatisticsReport(
                 cursorType = cursorType,
                 cursorsOpened = 0L,
@@ -88,7 +88,7 @@ class CursorStatisticsReport(
 
     operator fun plus(other: CursorStatisticsReport): CursorStatisticsReport {
         return CursorStatisticsReport(
-            cursorType = Cursor::class.java,
+            cursorType = "Cursor",
             cursorsOpened = this.cursorsOpened + other.cursorsOpened,
             cursorsClosed = this.cursorsClosed + other.cursorsClosed,
             cursorOperationsFirst = this.cursorOperationsFirst + other.cursorOperationsFirst,

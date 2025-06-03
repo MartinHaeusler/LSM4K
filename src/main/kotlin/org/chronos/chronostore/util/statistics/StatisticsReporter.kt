@@ -1,25 +1,24 @@
 package org.chronos.chronostore.util.statistics
 
 import org.chronos.chronostore.api.TransactionMode
-import org.chronos.chronostore.util.cursor.Cursor
 
 interface StatisticsReporter {
 
-    fun reportCursorOpened(cursorType: Class<out Cursor<*, *>>)
+    fun reportCursorOpened(cursorType: String)
 
-    fun reportCursorClosed(cursorType: Class<out Cursor<*, *>>)
+    fun reportCursorClosed(cursorType: String)
 
-    fun reportCursorOperationFirst(cursorType: Class<out Cursor<*, *>>)
+    fun reportCursorOperationFirst(cursorType: String)
 
-    fun reportCursorOperationLast(cursorType: Class<out Cursor<*, *>>)
+    fun reportCursorOperationLast(cursorType: String)
 
-    fun reportCursorOperationNext(cursorType: Class<out Cursor<*, *>>)
+    fun reportCursorOperationNext(cursorType: String)
 
-    fun reportCursorOperationPrevious(cursorType: Class<out Cursor<*, *>>)
+    fun reportCursorOperationPrevious(cursorType: String)
 
-    fun reportCursorOperationSeekExactlyOrNext(cursorType: Class<out Cursor<*, *>>)
+    fun reportCursorOperationSeekExactlyOrNext(cursorType: String)
 
-    fun reportCursorOperationSeekExactlyOrPrevious(cursorType: Class<out Cursor<*, *>>)
+    fun reportCursorOperationSeekExactlyOrPrevious(cursorType: String)
 
     fun reportBlockCacheRequest()
 

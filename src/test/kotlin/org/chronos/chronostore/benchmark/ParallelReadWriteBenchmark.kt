@@ -23,6 +23,8 @@ object ParallelReadWriteBenchmark {
 
         val uniqueKeys = (0 until NUMBER_OF_UNIQUE_KEYS).map { "key#${it}" }
         ChronoStoreMode.ONDISK.withChronoStore { chronoStore ->
+            chronoStore.statistics.startCollection()
+
             chronoStore.readWriteTransaction { tx ->
                 tx.createNewStore("test")
                 tx.commit()
@@ -104,7 +106,7 @@ object ParallelReadWriteBenchmark {
             }
 
             println("FINAL STATISTICS")
-            println(chronoStore.statisticsReport().prettyPrint())
+            println(chronoStore.statistics.report()!!.prettyPrint())
         }
     }
 

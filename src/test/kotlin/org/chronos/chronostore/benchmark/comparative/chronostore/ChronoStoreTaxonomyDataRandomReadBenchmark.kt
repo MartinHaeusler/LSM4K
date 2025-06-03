@@ -30,6 +30,7 @@ object ChronoStoreTaxonomyDataRandomReadBenchmark {
             blockCacheSize = 4.GiB,
         )
         val statisticsReport = ChronoStore.openOnDirectory(inputDir, configuration).use { chronoStore ->
+            chronoStore.statistics.startCollection()
             measureTimeMillis {
                 chronoStore.readWriteTransaction { tx ->
                     val store = tx.getStore("data")
@@ -64,7 +65,7 @@ object ChronoStoreTaxonomyDataRandomReadBenchmark {
                 }
             }
 
-            chronoStore.statisticsReport()
+            chronoStore.statistics.report()!!
         }
 
         val timeAfterRead = System.currentTimeMillis()

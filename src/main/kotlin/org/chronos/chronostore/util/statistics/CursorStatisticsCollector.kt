@@ -1,7 +1,7 @@
 package org.chronos.chronostore.util.statistics
 
+import org.chronos.chronostore.api.statistics.CursorStatisticsReport
 import org.chronos.chronostore.util.cursor.Cursor
-import org.chronos.chronostore.util.statistics.report.CursorStatisticsReport
 import java.util.concurrent.atomic.AtomicLong
 
 /**
@@ -9,7 +9,7 @@ import java.util.concurrent.atomic.AtomicLong
  */
 class CursorStatisticsCollector(
     /** The type of cursor for which this collector gathers statistics. */
-    val cursorType: Class<out Cursor<*, *>>,
+    val cursorType: String,
 ) {
 
     /** Indicates how many cursors of this [cursorType] have been opened. */
@@ -82,7 +82,7 @@ class CursorStatisticsCollector(
     }
 
     override fun toString(): String {
-        return "CursorStatistics[${this.cursorType.name}]"
+        return "CursorStatistics[${this.cursorType}]"
     }
 
     fun report(): CursorStatisticsReport {
