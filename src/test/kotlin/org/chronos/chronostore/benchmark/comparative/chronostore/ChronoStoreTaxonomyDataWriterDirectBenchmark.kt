@@ -15,7 +15,7 @@ import java.io.File
 
 object ChronoStoreTaxonomyDataWriterDirectBenchmark {
 
-    private val compressionAlgorithm = CompressionAlgorithm.NONE
+    private val compressionAlgorithm = CompressionAlgorithm.forCompressorName("none")
     private val blockSize = 16.MiB
 
     @JvmStatic
@@ -31,7 +31,7 @@ object ChronoStoreTaxonomyDataWriterDirectBenchmark {
             }
 
             val vfs = DiskBasedVirtualFileSystem(File("/home/martin/Documents/chronostore-test"), DiskBasedVirtualFileSystemSettings())
-            val outputFile = vfs.file("taxonomy_${compressionAlgorithm.name.lowercase()}.chronostore")
+            val outputFile = vfs.file("taxonomy_${compressionAlgorithm.compressor.uniqueName.lowercase()}.chronostore")
 
             outputFile.deleteOverWriterFileIfExists()
 

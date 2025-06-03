@@ -7,7 +7,6 @@ import org.chronos.chronostore.model.command.Command
 import org.chronos.chronostore.util.IOExtensions.size
 import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.unit.BinarySize.Companion.MiB
-import org.xerial.snappy.Snappy
 import java.io.File
 
 object ChronoStoreTaxonomyDataWriterBenchmark {
@@ -17,9 +16,6 @@ object ChronoStoreTaxonomyDataWriterBenchmark {
 
     @JvmStatic
     fun main(args: Array<String>) {
-        // access snappy to get native initialization out of the way.
-        // This only happens once per JVM restart and we don't want to include it in the benchmark.
-        Snappy.getNativeLibraryVersion()
 
         println("STARTING BENCHMARK")
 

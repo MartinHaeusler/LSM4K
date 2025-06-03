@@ -3,7 +3,6 @@ package org.chronos.chronostore.api
 import com.cronutils.model.Cron
 import org.chronos.chronostore.api.compaction.CompactionStrategy
 import org.chronos.chronostore.io.fileaccess.*
-import org.chronos.chronostore.io.format.CompressionAlgorithm
 import org.chronos.chronostore.io.vfs.disk.DiskBasedVirtualFileSystemSettings
 import org.chronos.chronostore.io.vfs.disk.FileSyncMode
 import org.chronos.chronostore.util.cron.CronUtils.cron
@@ -45,8 +44,13 @@ class ChronoStoreConfiguration(
      */
     val maxMemtableFlushThreads: Int = 4,
 
-    /** When writing new files: the compression algorithm to use. All old files will remain readable if this setting is changed.*/
-    val compressionAlgorithm: CompressionAlgorithm = CompressionAlgorithm.SNAPPY,
+    /**
+     * When writing new files: the compression algorithm to use. All old files will remain readable if this setting is changed.
+     *
+     * Please note that the corresponding dependency must be added to the classpath when using other compression algorithms,
+     * otherwise runtime errors will occur!
+     */
+    val compressionAlgorithm: String = "gzip",
 
     /**
      * The maximum (uncompressed) size of a single data block.

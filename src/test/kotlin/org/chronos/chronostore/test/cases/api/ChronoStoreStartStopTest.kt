@@ -1,6 +1,7 @@
 package org.chronos.chronostore.test.cases.api
 
 import org.chronos.chronostore.api.ChronoStore
+import org.chronos.chronostore.api.ChronoStoreConfiguration
 import org.chronos.chronostore.api.exceptions.FileMissingException
 import org.chronos.chronostore.test.extensions.ChronoStoreTestExtensions.flushAllStoresSynchronous
 import org.chronos.chronostore.test.extensions.ChronoStoreTestExtensions.flushStoreSynchronous
@@ -28,7 +29,7 @@ class ChronoStoreStartStopTest {
     fun canReopenStoreWithExistingData(mode: VFSMode) {
         mode.withVFS { vfs ->
             // open chronostore, add some data
-            ChronoStore.openOnVirtualFileSystem(vfs).use { chronoStore ->
+            ChronoStore.openOnVirtualFileSystem(vfs, ChronoStoreConfiguration(compressionAlgorithm = "gzip")).use { chronoStore ->
                 chronoStore.readWriteTransaction { tx ->
                     tx.createNewStore("foo")
                     tx.createNewStore("bar")

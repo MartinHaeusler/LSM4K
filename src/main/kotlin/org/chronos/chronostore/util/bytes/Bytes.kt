@@ -2,6 +2,7 @@ package org.chronos.chronostore.util.bytes
 
 import com.google.common.hash.BloomFilter
 import com.google.common.hash.Hasher
+import org.chronos.chronostore.compressor.NoCompressor
 import org.chronos.chronostore.impl.annotations.PersistentClass
 import org.chronos.chronostore.io.format.CompressionAlgorithm
 import org.chronos.chronostore.io.vfs.InputSource
@@ -104,7 +105,7 @@ sealed interface Bytes :
 
         fun Bytes.compressWith(algorithm: CompressionAlgorithm, statisticsReporter: StatisticsReporter): Bytes {
             require(!this.isEmpty()) { "The empty Bytes object cannot be compressed!" }
-            if (algorithm == CompressionAlgorithm.NONE) {
+            if (algorithm.compressor is NoCompressor) {
                 return this
             }
             return BasicBytes(algorithm.compress(this.toSharedArrayUnsafe(), statisticsReporter))
@@ -112,7 +113,7 @@ sealed interface Bytes :
 
         fun Bytes.decompressWith(algorithm: CompressionAlgorithm, statisticsReporter: StatisticsReporter): Bytes {
             require(!this.isEmpty()) { "The empty Bytes object cannot be decompressed!" }
-            if (algorithm == CompressionAlgorithm.NONE) {
+            if (algorithm.compressor is NoCompressor) {
                 return this
             }
             return wrap(algorithm.decompress(toSharedArrayUnsafe(), statisticsReporter))
@@ -126,7 +127,7 @@ sealed interface Bytes :
         ): Bytes {
             require(!this.isEmpty()) { "The empty Bytes object cannot be decompressed!" }
             require(uncompressedSize > 0) { "The uncompressedSize (${uncompressedSize}) must be greater than zero!" }
-            if (algorithm == CompressionAlgorithm.NONE) {
+            if (algorithm.compressor is NoCompressor) {
                 return this
             }
             val output = TrackingBytesOutput()

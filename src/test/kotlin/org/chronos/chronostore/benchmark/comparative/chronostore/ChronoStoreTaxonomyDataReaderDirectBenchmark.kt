@@ -9,7 +9,6 @@ import org.chronos.chronostore.io.vfs.disk.DiskBasedVirtualFileSystemSettings
 import org.chronos.chronostore.lsm.cache.FileHeaderCache
 import org.chronos.chronostore.util.statistics.StatisticsCollector
 import org.chronos.chronostore.util.unit.BinarySize.Companion.MiB
-import org.xerial.snappy.Snappy
 import java.io.File
 
 object ChronoStoreTaxonomyDataReaderDirectBenchmark {
@@ -21,9 +20,6 @@ object ChronoStoreTaxonomyDataReaderDirectBenchmark {
 
     @JvmStatic
     fun main(args: Array<String>) {
-        // access snappy to get native initialization out of the way.
-        // This only happens once per JVM restart and we don't want to include it in the benchmark.
-        Snappy.getNativeLibraryVersion()
 
         println("Attach profiler now! Press any key to continue")
         System.`in`.read()

@@ -1,5 +1,6 @@
 package org.chronos.chronostore.test.cases.io.format
 
+import org.chronos.chronostore.compressor.NoCompressor
 import org.chronos.chronostore.io.fileaccess.FileChannelDriver
 import org.chronos.chronostore.io.fileaccess.MemorySegmentFileDriver
 import org.chronos.chronostore.io.format.*
@@ -33,7 +34,7 @@ class ChronoStoreFileTest {
             file.withOverWriter { overWriter ->
                 val writer = StandardChronoStoreFileWriter(
                     outputStream = overWriter.outputStream,
-                    settings = ChronoStoreFileSettings(CompressionAlgorithm.NONE, 16.MiB),
+                    settings = ChronoStoreFileSettings(CompressionAlgorithm(NoCompressor()), 16.MiB),
                     statisticsReporter = stats,
                 )
                 writer.write(
@@ -77,7 +78,7 @@ class ChronoStoreFileTest {
                             get { this.headHistoryRatio }.isEqualTo(1.0)
                             get { this.createdAt }.isGreaterThan(0L)
                             get { this.settings }.and {
-                                get { this.compression }.isEqualTo(CompressionAlgorithm.NONE)
+                                get { this.compression }.isEqualTo(CompressionAlgorithm(NoCompressor()))
                                 get { this.maxBlockSize }.isEqualTo(16.MiB)
                             }
                         }
@@ -104,7 +105,7 @@ class ChronoStoreFileTest {
             file.withOverWriter { overWriter ->
                 val writer = StandardChronoStoreFileWriter(
                     outputStream = overWriter.outputStream.buffered(),
-                    settings = ChronoStoreFileSettings(CompressionAlgorithm.NONE, 16.KiB),
+                    settings = ChronoStoreFileSettings(CompressionAlgorithm(NoCompressor()), 16.KiB),
                     statisticsReporter = stats,
                 )
                 val commands = listOf(Command.put(theKey, 1000L, BasicBytes("hello")))
@@ -164,7 +165,7 @@ class ChronoStoreFileTest {
             file.withOverWriter { overWriter ->
                 val writer = StandardChronoStoreFileWriter(
                     outputStream = overWriter.outputStream.buffered(),
-                    settings = ChronoStoreFileSettings(CompressionAlgorithm.NONE, 16.KiB),
+                    settings = ChronoStoreFileSettings(CompressionAlgorithm(NoCompressor()), 16.KiB),
                     statisticsReporter = stats,
                 )
                 val random = Random(System.currentTimeMillis())
@@ -271,7 +272,7 @@ class ChronoStoreFileTest {
             file.withOverWriter { overWriter ->
                 val writer = StandardChronoStoreFileWriter(
                     outputStream = overWriter.outputStream.buffered(),
-                    settings = ChronoStoreFileSettings(CompressionAlgorithm.NONE, 16.KiB),
+                    settings = ChronoStoreFileSettings(CompressionAlgorithm(NoCompressor()), 16.KiB),
                     statisticsReporter = stats,
                 )
                 val random = Random(System.currentTimeMillis())
@@ -333,7 +334,7 @@ class ChronoStoreFileTest {
             file.withOverWriter { overWriter ->
                 StandardChronoStoreFileWriter(
                     outputStream = overWriter.outputStream.buffered(),
-                    settings = ChronoStoreFileSettings(CompressionAlgorithm.SNAPPY, 16.KiB),
+                    settings = ChronoStoreFileSettings(CompressionAlgorithm.forCompressorName("snappy"), 16.KiB),
                     statisticsReporter = stats,
                 ).use { writer ->
                     writer.write(
@@ -388,7 +389,7 @@ class ChronoStoreFileTest {
                         get { this.maxCompletelyWrittenTSN }.isEqualTo(673456434L)
                         get { this.settings }.and {
                             get { this.maxBlockSize }.isEqualTo(16.KiB)
-                            get { this.compression }.isEqualTo(CompressionAlgorithm.SNAPPY)
+                            get { this.compression }.isEqualTo(CompressionAlgorithm.forCompressorName("snappy"))
                         }
                     }
                 }
@@ -428,7 +429,7 @@ class ChronoStoreFileTest {
             file.withOverWriter { overWriter ->
                 StandardChronoStoreFileWriter(
                     outputStream = overWriter.outputStream.buffered(),
-                    settings = ChronoStoreFileSettings(CompressionAlgorithm.SNAPPY, 16.KiB),
+                    settings = ChronoStoreFileSettings(CompressionAlgorithm.forCompressorName("snappy"), 16.KiB),
                     statisticsReporter = stats,
                 ).use { writer ->
                     writer.write(
@@ -445,7 +446,7 @@ class ChronoStoreFileTest {
             emptyFile.withOverWriter { overWriter ->
                 val writer = StandardChronoStoreFileWriter(
                     outputStream = overWriter.outputStream.buffered(),
-                    settings = ChronoStoreFileSettings(CompressionAlgorithm.NONE, 16.MiB),
+                    settings = ChronoStoreFileSettings(CompressionAlgorithm.forCompressorName("snappy"), 16.MiB),
                     statisticsReporter = stats,
                 )
                 writer.write(
@@ -499,7 +500,7 @@ class ChronoStoreFileTest {
                         get { this.maxCompletelyWrittenTSN }.isNull()
                         get { this.settings }.and {
                             get { this.maxBlockSize }.isEqualTo(16.KiB)
-                            get { this.compression }.isEqualTo(CompressionAlgorithm.SNAPPY)
+                            get { this.compression }.isEqualTo(CompressionAlgorithm.forCompressorName("snappy"))
                         }
                     }
                 }

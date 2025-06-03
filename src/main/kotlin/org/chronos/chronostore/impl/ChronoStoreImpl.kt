@@ -8,6 +8,7 @@ import org.chronos.chronostore.async.taskmonitor.TaskMonitor
 import org.chronos.chronostore.impl.store.StoreImpl
 import org.chronos.chronostore.io.format.BlockLoader
 import org.chronos.chronostore.io.format.ChronoStoreFileSettings
+import org.chronos.chronostore.io.format.CompressionAlgorithm
 import org.chronos.chronostore.io.format.FileHeader
 import org.chronos.chronostore.io.prefetcher.BlockPrefetchingManager
 import org.chronos.chronostore.io.structure.ChronoStoreStructure
@@ -149,7 +150,10 @@ class ChronoStoreImpl(
         fileHeaderCache = this.fileHeaderCache,
         forest = this.forest,
         driverFactory = this.configuration.randomFileAccessDriverFactory,
-        newFileSettings = ChronoStoreFileSettings(configuration.compressionAlgorithm, configuration.maxBlockSize),
+        newFileSettings = ChronoStoreFileSettings(
+            compression = CompressionAlgorithm.forCompressorName(configuration.compressionAlgorithm),
+            maxBlockSize = configuration.maxBlockSize,
+        ),
         manifestFile = this.manifestFile,
         configuration = this.configuration,
         getSmallestOpenReadTSN = { this.transactionManager.getSmallestOpenReadTSN() },

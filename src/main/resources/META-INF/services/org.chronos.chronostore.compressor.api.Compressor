@@ -1,0 +1,2 @@
+org.chronos.chronostore.compressor.NoCompressor
+org.chronos.chronostore.compressor.GzipCompressor

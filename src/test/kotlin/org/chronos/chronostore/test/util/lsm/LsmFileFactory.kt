@@ -28,7 +28,7 @@ object LsmFileFactory {
         index: FileIndex,
         content: Iterable<Command>,
         fileSettings: ChronoStoreFileSettings = ChronoStoreFileSettings(
-            compression = CompressionAlgorithm.SNAPPY,
+            compression = CompressionAlgorithm.forCompressorName("snappy"),
             maxBlockSize = 8.MiB
         ),
         numberOfMerges: Long = 0,
@@ -59,7 +59,7 @@ object LsmFileFactory {
         index: FileIndex,
         content: Iterator<Command>,
         fileSettings: ChronoStoreFileSettings = ChronoStoreFileSettings(
-            compression = CompressionAlgorithm.SNAPPY,
+            compression = CompressionAlgorithm.forCompressorName("snappy"),
             maxBlockSize = 8.MiB
         ),
         numberOfMerges: Long = 0,
@@ -90,7 +90,7 @@ object LsmFileFactory {
         index: FileIndex,
         content: Iterable<Command>,
         fileSettings: ChronoStoreFileSettings = ChronoStoreFileSettings(
-            compression = CompressionAlgorithm.SNAPPY,
+            compression = CompressionAlgorithm.forCompressorName("snappy"),
             maxBlockSize = 8.MiB
         ),
         numberOfMerges: Long = 0,
@@ -119,7 +119,7 @@ object LsmFileFactory {
         index: FileIndex,
         content: Iterator<Command>,
         fileSettings: ChronoStoreFileSettings = ChronoStoreFileSettings(
-            compression = CompressionAlgorithm.SNAPPY,
+            compression = CompressionAlgorithm.forCompressorName("snappy"),
             maxBlockSize = 8.MiB
         ),
         numberOfMerges: Long = 0,

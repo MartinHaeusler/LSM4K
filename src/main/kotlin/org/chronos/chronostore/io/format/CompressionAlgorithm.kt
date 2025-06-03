@@ -1,169 +1,41 @@
 package org.chronos.chronostore.io.format
 
-import com.github.luben.zstd.Zstd
-import net.jpountz.lz4.LZ4FrameInputStream
-import net.jpountz.lz4.LZ4FrameOutputStream
+import org.chronos.chronostore.compressor.api.Compressor
+import org.chronos.chronostore.compressor.api.Compressors
 import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.bytes.Bytes.Companion.compressWith
 import org.chronos.chronostore.util.bytes.Bytes.Companion.decompressWith
 import org.chronos.chronostore.util.statistics.StatisticsReporter
-import org.xerial.snappy.Snappy
-import java.io.ByteArrayInputStream
-import java.io.ByteArrayOutputStream
-import java.nio.ByteBuffer
-import java.util.zip.GZIPInputStream
-import java.util.zip.GZIPOutputStream
 
-
-enum class CompressionAlgorithm(
-    val algorithmIndex: Int,
+/**
+ * Thin wrapper around a [Compressor] which allows for statistics collection and integration with the [Bytes] interface.
+ */
+class CompressionAlgorithm(
+    val compressor: Compressor,
 ) {
 
-    NONE(0) {
-
-        override fun compress(bytes: ByteArray): ByteArray {
-            // for consistency with the other algorithms, we do this check here,
-            // even though it is of no consequence for this method.
-            require(bytes.isNotEmpty()) { "An empty byte array cannot be compressed!" }
-            // no-op by definition.
-            return bytes
-        }
-
-        override fun decompress(bytes: ByteArray): ByteArray {
-            // for consistency with the other algorithms, we do this check here,
-            // even though it is of no consequence for this method.
-            require(bytes.isNotEmpty()) { "An empty byte array cannot be decompressed!" }
-            // no-op by definition.
-            return bytes
-        }
-
-        override fun decompress(bytes: ByteArray, offset: Int, length: Int, target: ByteArray) {
-            require(bytes.isNotEmpty()) { "An empty byte array cannot be decompressed!" }
-            require(offset >= 0) { "Argument 'offset' (${offset}) must not be negative!" }
-            require(length >= 0) { "Argument 'length' (${length}) must not be negative!" }
-            require(target.isNotEmpty()) { "An empty array cannot be the decompression target!" }
-            System.arraycopy(bytes, offset, target, 0, length)
-        }
-
-    },
-
-    SNAPPY(10) {
-
-        override fun compress(bytes: ByteArray): ByteArray {
-            require(bytes.isNotEmpty()) { "An empty byte array cannot be compressed!" }
-            return Snappy.compress(bytes)
-        }
-
-        override fun decompress(bytes: ByteArray): ByteArray {
-            require(bytes.isNotEmpty()) { "An empty byte array cannot be decompressed!" }
-            return Snappy.uncompress(bytes)
-        }
-
-        override fun decompress(bytes: ByteArray, offset: Int, length: Int, target: ByteArray) {
-            require(bytes.isNotEmpty()) { "An empty byte array cannot be decompressed!" }
-            require(offset >= 0) { "Argument 'offset' (${offset}) must not be negative!" }
-            require(length >= 0) { "Argument 'length' (${length}) must not be negative!" }
-            require(target.isNotEmpty()) { "An empty array cannot be the decompression target!" }
-            Snappy.uncompress(bytes, offset, length, target, 0)
-        }
-
-    },
-
-    GZIP(40) {
-
-        override fun compress(bytes: ByteArray): ByteArray {
-            require(bytes.isNotEmpty()) { "An empty byte array cannot be compressed!" }
-            // we expect GZIP to have a compression rate of about 50%, so we provide
-            // half the size of the input to the output stream as initial size.
-            val baos = ByteArrayOutputStream(bytes.size / 2)
-            GZIPOutputStream(baos).use { gzipOut -> gzipOut.write(bytes) }
-            return baos.toByteArray()
-        }
-
-        override fun decompress(bytes: ByteArray): ByteArray {
-            require(bytes.isNotEmpty()) { "An empty byte array cannot be decompressed!" }
-            return GZIPInputStream(bytes.inputStream()).use<GZIPInputStream, ByteArray> { gzipInput -> gzipInput.readAllBytes() }
-        }
-
-        override fun decompress(bytes: ByteArray, offset: Int, length: Int, target: ByteArray) {
-            require(bytes.isNotEmpty()) { "An empty byte array cannot be decompressed!" }
-            require(offset >= 0) { "Argument 'offset' (${offset}) must not be negative!" }
-            require(length >= 0) { "Argument 'length' (${length}) must not be negative!" }
-            require(target.isNotEmpty()) { "An empty array cannot be the decompression target!" }
-            bytes.inputStream(offset, length).use { gzipInput -> gzipInput.readNBytes(target, 0, target.size) }
-        }
-
-    },
-
-    ZSTD(50) {
-
-        override fun compress(bytes: ByteArray): ByteArray {
-            require(bytes.isNotEmpty()) { "An empty byte array cannot be compressed!" }
-            return Zstd.compress(bytes)
-        }
-
-        @Suppress("DEPRECATION") // API has no replacement for "decompressedSize()"...
-        override fun decompress(bytes: ByteArray): ByteArray {
-            require(bytes.isNotEmpty()) { "An empty byte array cannot be decompressed!" }
-            return Zstd.decompress(bytes, Zstd.decompressedSize(bytes).toInt())
-        }
-
-        override fun decompress(bytes: ByteArray, offset: Int, length: Int, target: ByteArray) {
-            require(bytes.isNotEmpty()) { "An empty byte array cannot be decompressed!" }
-            require(offset >= 0) { "Argument 'offset' (${offset}) must not be negative!" }
-            require(length >= 0) { "Argument 'length' (${length}) must not be negative!" }
-            require(target.isNotEmpty()) { "An empty array cannot be the decompression target!" }
-            Zstd.decompress(ByteBuffer.wrap(target), ByteBuffer.wrap(bytes, offset, length))
-        }
-
-    },
-
-    LZ4(60) {
-
-        override fun compress(bytes: ByteArray): ByteArray {
-            require(bytes.isNotEmpty()) { "An empty byte array cannot be compressed!" }
-            ByteArrayOutputStream().use { baos ->
-                LZ4FrameOutputStream(baos).use { lz4Out ->
-                    lz4Out.write(bytes)
-                }
-                return baos.toByteArray()
-            }
-        }
-
-        override fun decompress(bytes: ByteArray): ByteArray {
-            require(bytes.isNotEmpty()) { "An empty byte array cannot be compressed!" }
-            ByteArrayInputStream(bytes).use { bais ->
-                LZ4FrameInputStream(bais).use { lz4In ->
-                    return lz4In.readAllBytes()
-                }
-            }
-        }
-
-        override fun decompress(bytes: ByteArray, offset: Int, length: Int, target: ByteArray) {
-            require(bytes.isNotEmpty()) { "An empty byte array cannot be decompressed!" }
-            require(offset >= 0) { "Argument 'offset' (${offset}) must not be negative!" }
-            require(length >= 0) { "Argument 'length' (${length}) must not be negative!" }
-            require(target.isNotEmpty()) { "An empty array cannot be the decompression target!" }
-            ByteArrayInputStream(bytes, offset, length).use { bais ->
-                LZ4FrameInputStream(bais).use { lz4In ->
-                    lz4In.readNBytes(target, 0, target.size)
-                }
-            }
-        }
-
-    },
-
-    ;
+    // =================================================================================================================
+    // STATIC
+    // =================================================================================================================
 
     companion object {
 
-        fun fromAlgorithmIndex(algorithmIndex: Int): CompressionAlgorithm {
-            for (algorithm in entries) {
-                if (algorithm.algorithmIndex == algorithmIndex) {
-                    return algorithm
-                }
-            }
-            throw IllegalArgumentException("Could not find CompressionAlgorithm for int ${algorithmIndex}!")
+        /**
+         * Creates a new [org.chronos.chronostore.io.format.CompressionAlgorithm] using the compressor with the given [compressorName].
+         *
+         * The compressor name has to correspond (exactly) to the [Compressor.uniqueName] specified by the compressor.
+         *
+         * @param compressorName The name of the compressor to use.
+         *
+         * @return The new compression algorithm.
+         *
+         * @throws IllegalArgumentException if there is no registered compressor for the given [compressorName].
+         *                                  If you're confident that the name is correct, please ensure that you
+         *                                  have the corresponding library dependency in your build.
+         */
+        fun forCompressorName(compressorName: String): CompressionAlgorithm {
+            val compressor = Compressors.getCompressorForName(compressorName)
+            return CompressionAlgorithm(compressor)
         }
 
     }
@@ -193,30 +65,41 @@ enum class CompressionAlgorithm(
     // =================================================================================================================
 
     fun compress(bytes: ByteArray, statisticsReporter: StatisticsReporter): ByteArray {
-        val compressed = this.compress(bytes)
+        val compressed = this.compressor.compress(bytes)
         statisticsReporter.reportCompressionInvocation(bytes.size, compressed.size)
         return compressed
     }
 
     fun decompress(bytes: ByteArray, statisticsReporter: StatisticsReporter): ByteArray {
-        val decompressed = this.decompress(bytes)
+        val decompressed = this.compressor.decompress(bytes)
         statisticsReporter.reportDecompressionInvocation(bytes.size, decompressed.size)
         return decompressed
     }
 
     fun decompress(bytes: ByteArray, offset: Int, length: Int, target: ByteArray, statisticsReporter: StatisticsReporter) {
-        decompress(bytes = bytes, offset = offset, length = length, target = target)
+        this.compressor.decompress(bytes = bytes, offset = offset, length = length, target = target)
         statisticsReporter.reportDecompressionInvocation(length, target.size)
     }
 
     // =================================================================================================================
-    // ABSTRACT METHODS
+    // HASH CODE, EQUALS, TOSTRING
     // =================================================================================================================
 
-    protected abstract fun compress(bytes: ByteArray): ByteArray
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (javaClass != other?.javaClass) return false
 
-    protected abstract fun decompress(bytes: ByteArray): ByteArray
+        other as CompressionAlgorithm
 
-    protected abstract fun decompress(bytes: ByteArray, offset: Int, length: Int, target: ByteArray)
+        return compressor == other.compressor
+    }
+
+    override fun hashCode(): Int {
+        return compressor.hashCode()
+    }
+
+    override fun toString(): String {
+        return "CompressionAlgorithm[${this.compressor.uniqueName}]"
+    }
 
 }

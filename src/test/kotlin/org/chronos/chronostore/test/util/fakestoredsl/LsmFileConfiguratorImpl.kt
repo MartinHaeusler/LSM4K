@@ -100,7 +100,7 @@ class LsmFileConfiguratorImpl(
 
     override var sizeOnDisk: BinarySize = 0.Bytes
 
-    override var compression: CompressionAlgorithm = CompressionAlgorithm.SNAPPY
+    override var compression: CompressionAlgorithm = CompressionAlgorithm.forCompressorName("snappy")
 
     override var maxBlockSize: BinarySize = BinarySize(1, SizeUnit.MEBIBYTE)
 

@@ -3,7 +3,6 @@ import com.github.benmanes.gradle.versions.updates.DependencyUpdatesTask
 plugins {
     kotlin("jvm") version libs.versions.kotlin
     alias(libs.plugins.versions)
-    application
 }
 
 group = "org.example"
@@ -15,18 +14,14 @@ repositories {
 
 dependencies {
     implementation(libs.bundles.loggingApi)
-
-    implementation(libs.guava)
-
     implementation(libs.bundles.jackson)
 
-    // compression
-    implementation(libs.snappy)
-    implementation(libs.lz4J)
-    implementation(libs.zstdJni)
+    // COMPRESSION SPI
+    implementation(project(":compressor-api"))
 
+    // UTILS
+    implementation(libs.guava)
     implementation(libs.pcollections)
-
     implementation(libs.cronUtils)
 
     // TESTING
@@ -34,6 +29,10 @@ dependencies {
     testImplementation(libs.logback)
     testImplementation(libs.strikt)
     testImplementation(libs.awaitility)
+    testImplementation(project(":compressor-snappy"))
+    testImplementation(project(":compressor-lz4"))
+    testImplementation(project(":compressor-zstd"))
+
 
     // for benchmarking purposes, include some other key-value stores
     testImplementation(libs.bundles.xodus)
@@ -52,11 +51,6 @@ java {
         languageVersion.set(JavaLanguageVersion.of(libs.versions.java.get()))
     }
 }
-
-application {
-    mainClass.set("MainKt")
-}
-
 
 // ================================================================================================
 // VERSION UPDATES
