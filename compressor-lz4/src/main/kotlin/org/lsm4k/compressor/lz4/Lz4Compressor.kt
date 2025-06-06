@@ -11,13 +11,20 @@ import java.io.ByteArrayOutputStream
  */
 class Lz4Compressor : Compressor {
 
+    companion object {
+
+        @JvmField
+        val UNIQUE_NAME = "lz4"
+
+    }
+
     @Suppress("unused")
     constructor() {
         // the default constructor is required for service loader API
     }
 
     override val uniqueName: String
-        get() = "lz4"
+        get() = UNIQUE_NAME
 
     override fun compress(bytes: ByteArray): ByteArray {
         require(bytes.isNotEmpty()) { "An empty byte array cannot be compressed!" }

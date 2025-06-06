@@ -23,7 +23,7 @@ java {
 dependencies {
     implementation(libs.bundles.loggingApi)
 
-    testImplementation(kotlin("test"))
+    testImplementation(libs.bundles.testing)
 }
 
 tasks.test {

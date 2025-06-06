@@ -44,7 +44,7 @@ xodus-environment = { group = "org.jetbrains.xodus", name = "xodus-environment",
 [bundles]
 jackson = ["jackson-core", "jackson-databind", "jackson-module-kotlin", "jackson-datatype-pcollections", "jackson-datatype-duration"]
 loggingApi = ["slf4j", "kotlinLogging"]
-jUnit5 = ["junit-jupiter", "junit-engine"]
+testing = ["junit-jupiter", "junit-engine", "strikt", "awaitility", "logback"]
 xodus = ["xodus-openAPI", "xodus-environment"]
 
 [plugins]

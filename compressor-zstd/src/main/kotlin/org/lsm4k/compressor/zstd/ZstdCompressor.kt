@@ -9,13 +9,20 @@ import java.nio.ByteBuffer
  */
 class ZstdCompressor : Compressor {
 
+    companion object {
+
+        @JvmStatic
+        val UNIQUE_NAME = "zstd"
+
+    }
+
     @Suppress("unused")
     constructor() {
         // the default constructor is required for service loader API
     }
 
     override val uniqueName: String
-        get() = "zstd"
+        get() = UNIQUE_NAME
 
     override fun compress(bytes: ByteArray): ByteArray {
         require(bytes.isNotEmpty()) { "An empty byte array cannot be compressed!" }

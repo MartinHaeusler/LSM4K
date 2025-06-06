@@ -5,7 +5,7 @@ plugins {
     alias(libs.plugins.versions)
 }
 
-group = "org.example"
+group = "org.lsm4k"
 version = "1.0-SNAPSHOT"
 
 repositories {
@@ -25,10 +25,8 @@ dependencies {
     implementation(libs.cronUtils)
 
     // TESTING
-    testImplementation(libs.bundles.jUnit5)
+    testImplementation(libs.bundles.testing)
     testImplementation(libs.logback)
-    testImplementation(libs.strikt)
-    testImplementation(libs.awaitility)
     testImplementation(project(":compressor-snappy"))
     testImplementation(project(":compressor-lz4"))
     testImplementation(project(":compressor-zstd"))

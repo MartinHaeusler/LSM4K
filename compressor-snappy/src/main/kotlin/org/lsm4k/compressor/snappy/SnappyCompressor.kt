@@ -15,6 +15,9 @@ class SnappyCompressor : Compressor {
             Snappy.getNativeLibraryVersion()
         }
 
+        @JvmStatic
+        val UNIQUE_NAME = "snappy"
+
     }
 
     @Suppress("unused")
@@ -23,7 +26,7 @@ class SnappyCompressor : Compressor {
     }
 
     override val uniqueName: String
-        get() = "snappy"
+        get() = UNIQUE_NAME
 
     override fun compress(bytes: ByteArray): ByteArray {
         require(bytes.isNotEmpty()) { "An empty byte array cannot be compressed!" }

@@ -24,7 +24,7 @@ dependencies {
     api(project(":compressor-api"))
     implementation(libs.lz4J)
 
-    testImplementation(kotlin("test"))
+    testImplementation(libs.bundles.testing)
 }
 
 tasks.test {

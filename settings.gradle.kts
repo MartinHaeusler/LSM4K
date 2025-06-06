@@ -1,4 +1,4 @@
-rootProject.name = "LSM4k"
+rootProject.name = "LSM4K"
 
 include("compressor-api")
 include("compressor-snappy")
