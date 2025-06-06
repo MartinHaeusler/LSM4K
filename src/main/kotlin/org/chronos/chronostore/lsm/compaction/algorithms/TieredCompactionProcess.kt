@@ -110,11 +110,6 @@ class TieredCompactionProcess(
             return Pair(heightReductionTriggerFiles, CompactionTrigger.TIER_HEIGHT_REDUCTION)
         }
 
-        val tierZeroReductionTriggerFiles = selectFilesForTierZeroReductionTrigger()
-        if (tierZeroReductionTriggerFiles.size > 1) {
-            return Pair(tierZeroReductionTriggerFiles, CompactionTrigger.TIER_TIER0)
-        }
-
         // none of the triggers produced any outcome
         return Pair(emptyList(), null)
     }

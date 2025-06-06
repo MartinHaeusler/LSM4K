@@ -8,9 +8,7 @@ import org.chronos.chronostore.test.util.CompactionTestUtils.executeTieredCompac
 import org.chronos.chronostore.test.util.VFSMode
 import org.chronos.chronostore.test.util.VirtualFileSystemTest
 import org.chronos.chronostore.test.util.fakestoredsl.FakeStoreDSL.Companion.createFakeTieredStore
-import org.chronos.chronostore.util.bytes.Bytes
 import org.chronos.chronostore.util.unit.BinarySize.Companion.MiB
-import org.junit.jupiter.params.ParameterizedTest
 import strikt.api.expectThat
 import strikt.assertions.*
 
@@ -200,73 +198,6 @@ class TieredCompactionProcessTest {
                 get { this.keepTombstones }.isFalse() // tree height trigger always starts with the oldest data
                 get { this.fileIndices }.containsExactlyInAnyOrder(0, 1, 2)
                 get { this.trigger }.isEqualTo(CompactionTrigger.TIER_HEIGHT_REDUCTION)
-            }
-        }
-    }
-
-    @ParameterizedTest
-    @VirtualFileSystemTest
-    fun canMergeFilesUpwards(mode: VFSMode) {
-        mode.withVFS { vfs ->
-            // set up a fake store with some files
-            vfs.createManifestFile()
-            val store = vfs.createFakeTieredStore {
-                tier(0) {
-                    file(0) {
-                        sizeOnDisk = 100.MiB
-                        minKey = Bytes.of("e")
-                        maxKey = Bytes.of("t")
-                    }
-                    file(1) {
-                        sizeOnDisk = 100.MiB
-                        minKey = Bytes.of("e")
-                        maxKey = Bytes.of("t")
-                    }
-                    file(2) {
-                        sizeOnDisk = 100.MiB
-                        minKey = Bytes.of("e")
-                        maxKey = Bytes.of("t")
-                    }
-                    file(3) {
-                        sizeOnDisk = 100.MiB
-                        minKey = Bytes.of("e")
-                        maxKey = Bytes.of("t")
-                    }
-                    file(4) {
-                        sizeOnDisk = 100.MiB
-                        minKey = Bytes.of("e")
-                        maxKey = Bytes.of("t")
-                    }
-                    file(5) {
-                        sizeOnDisk = 100.MiB
-                        minKey = Bytes.of("e")
-                        maxKey = Bytes.of("t")
-                    }
-                    file(6) {
-                        sizeOnDisk = 100.MiB
-                        minKey = Bytes.of("e")
-                        maxKey = Bytes.of("t")
-                    }
-                    file(7) {
-                        sizeOnDisk = 100.MiB
-                        minKey = Bytes.of("e")
-                        maxKey = Bytes.of("t")
-                    }
-                }
-            }
-
-            // run the compaction
-            store.executeTieredCompactionSynchronously(
-                strategy = TieredCompactionStrategy(
-                    numberOfTiers = 3,
-                )
-            )
-
-            // inspect the merges which have been executed by the compaction
-            expectThat(store.executedMerges).single().and {
-                get { this.keepTombstones }.isFalse()
-                get { this.fileIndices }.containsExactlyInAnyOrder(0, 1, 2, 3, 4, 5, 6, 7)
-                get { this.trigger }.isEqualTo(CompactionTrigger.TIER_TIER0)
             }
         }
     }
