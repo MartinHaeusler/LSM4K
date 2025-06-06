@@ -1,5 +1,0 @@
-package org.chronos.chronostore.impl.transaction
-
-import org.chronos.chronostore.api.TransactionalReadWriteStore
-
-interface TransactionalReadWriteStoreInternal: TransactionalStoreInternal, TransactionalReadWriteStore

@@ -1,4 +1,4 @@
-rootProject.name = "ChronoStore"
+rootProject.name = "LSM4k"
 
 include("compressor-api")
 include("compressor-snappy")

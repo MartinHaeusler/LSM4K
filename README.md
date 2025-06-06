@@ -1,10 +1,11 @@
-# ChronoStore
+# LSM4K
 
-A Transactional LSM-based Key-Value Storage Engine
+A Transactional LSM-based Key-Value Storage Engine for Kotlin (and other JVM
+languages).
 
 ## Introduction
 
-ChronoStore is a high-performance Key-Value store for the Java Virtual Machine.
+LSM4k is a high-performance Key-Value store for the Java Virtual Machine.
 It is written in Kotlin
 with a Kotlin-first API in mind. Other JVM languages (such as Java, Scala,
 Groovy, etc.) may leverage it
@@ -13,17 +14,17 @@ as well, but expect some friction in the API.
 ### Basic Usage
 
 ```kotlin
-// open a new ChronoStore instance on a directory of your choice
-ChronoStore.openOnDirectory(directory).use { chronoStore ->
+// open a new DatabaseEngine instance on a directory of your choice
+DatabaseEngine.openOnDirectory(directory).use { engine ->
     // option 1 to open transactions: using the structured lambda
-    chronoStore.transaction { tx ->
+  engine.readWriteTransaction { tx ->
         // create a new named store
         tx.createNewStore("example")
         tx.commit()
     }
 
     // option 2 to open transactions: using beginTransaction()
-    chronoStore.beginTransaction().use { tx ->
+  engine.beginReadWriteTransaction().use { tx ->
         val store = tx.getStore("example")
         // insert or update using "put(key, value)"
         store.put(Bytes.of("hello"), Bytes.of("world"))
@@ -69,7 +70,7 @@ ChronoStore.openOnDirectory(directory).use { chronoStore ->
 
 ### Transactional API
 
-Transactions are at the heart of ChronoStore. All transactions are ACID:
+Transactions are at the heart of LSM4K. All transactions are ACID:
 
 - **Atomic**: All changes in a transaction are committed, or none of them.
 - **Consistent**: Every transaction reads a consistent snapshot of the data.
@@ -94,9 +95,9 @@ results.
 
 ### Log-Structured-Merge (LSM) Tree
 
-ChronoStore follows the Log-Structured-Merge-Tree architecture instead of
+LSM4k follows the Log-Structured-Merge-Tree architecture instead of
 classical B+ trees.
-This allows ChronoStore to...
+This allows LSM4K to...
 
 - ... work in a strictly **append-only** fashion. Existing data is never
   overwritten, only new
@@ -113,7 +114,7 @@ This allows ChronoStore to...
 
 ### Compression
 
-Compression is another main pillar of ChronoStore. All LSM files utilize
+Compression is another main pillar of LSM4K. All LSM files utilize
 [Snappy](https://github.com/xerial/snappy-java) compression by default which
 offers a good balance
 between (de-)compression speed and file size. Employing compression allows for *
@@ -124,17 +125,17 @@ uncompressed data from disk.
 
 ### Write-Ahead-Log
 
-ChronoStore utilizes a Write-Ahead-Log (WAL) to ensure atomic and durable
+LSM4K utilizes a Write-Ahead-Log (WAL) to ensure atomic and durable
 writes. The WAL format is
 resilient against truncation and modification. Even in the event of a crash,
 process kill or power
-outage, ChronoStore will be able to recover to a working and consistent state.
+outage, LSM4K will be able to recover to a working and consistent state.
 In case of actual
 file corruption due to faulty drives or direct manipulation from outside,
-ChronoStore is able to
+LSM4K is able to
 detect and report the corruption and exit gracefully.
 
-To prevent the Write-Ahead-Log from growing indefinitely, ChronoStore employs
+To prevent the Write-Ahead-Log from growing indefinitely, LSM4K employs
 periodic WAL shortening
 which drops already-processed files that are no longer needed for recovery as
 part of its Checkpoint
@@ -158,7 +159,7 @@ itself. It needs to be executed
 regularly in order to maintain adequate read performance. You can configure
 a global compaction strategy which will be used by all new stores. This strategy
 can then be overridden
-on a per-store basis. Like many other LSM implementations, ChronoStore offers
+on a per-store basis. Like many other LSM implementations, LSM4K offers
 two compaction algorithms:
 Tiered Compaction and Leveled Compaction.
 
@@ -183,7 +184,7 @@ lower levels).
 
 ### Block Cache
 
-ChronoStore employs a sophisticated second-level cache for data blocks which is
+LSM4K employs a sophisticated second-level cache for data blocks which is
 shared among all
 transactions for maximum read performance. You can control the desired size of
 the cache via the
@@ -191,7 +192,7 @@ configuration.
 
 ### Designed for Larger-Than-RAM data
 
-While ChronoStore aims to make the best use of the available RAM allocated to it
+While LSM4K aims to make the best use of the available RAM allocated to it
 and its caches,
 it never assumes that all data in the store will fully fit into main memory. You
 can very well
@@ -222,8 +223,8 @@ should match the concurrent requests supported by your storage device.
 
 ### In-Memory Mode
 
-ChronoStore is built on top of a (simplistic) Virtual File System. This allows
-ChronoStore to offer a
+LSM4K is built on top of a (very simple) Virtual File System. This allows
+LSM4K to offer a
 full in-memory mode without any changes in its public API. This mode is
 particularly useful for automated
 test suites, as they usually operate on smaller datasets, are executed
@@ -233,17 +234,17 @@ completed its execution.
 
 ### Bloom Filters
 
-Like many other LSM trees, ChronoStore employs Bloom Filters, a probabilistic
+Like many other LSM trees, LSM4K employs Bloom Filters, a probabilistic
 data structure which can
 tell if a key **may** be contained in a file or is **certainly not** contained.
-This allows ChronoStore
+This allows LSM4K
 to skip over entire files when searching for a key. A bloom filter is created
 for each LSM file and is
 stored in its header.
 
 ### Minimal-Copy Approach
 
-ChronoStore employs a data management approach that minimizes copying. There are
+LSM4K employs a data management approach that minimizes copying. There are
 exactly two places
 where copies can occur:
 
@@ -256,7 +257,7 @@ where copies can occur:
 
 Notably, **no** data copying takes place when data is served from the Block
 Cache to a transaction.
-ChronoStore makes extensive use of the immutable `Bytes` interface which allows
+LSM4K makes extensive use of the immutable `Bytes` interface which allows
 to read data, but
 prevents modification. Furthermore, `Bytes` (unlike raw byte arrays) internally
 provides zero-copy
@@ -279,7 +280,7 @@ should not occur often.
 
 In order to maximize ease of use, ease of configuration, ease of deployment and
 ease of debugging,
-ChronoStore operates fully on-heap. It only allocates temporary off-heap buffers
+LSM4K operates fully on-heap. It only allocates temporary off-heap buffers
 when it needs to
 communicate with the file system, or when it calls into native APIs for
 compression. These buffers
@@ -293,7 +294,7 @@ compared to an off-heap solution.
 
 ## Building
 
-ChronoStore is built with Gradle:
+LSM4K is built with Gradle:
 
 ```shell
   ./gradlew build
