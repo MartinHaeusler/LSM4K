@@ -667,7 +667,6 @@ class LSMTree(
             CompactionTrigger.TIER_SPACE_AMPLIFICATION,
             CompactionTrigger.TIER_SIZE_RATIO,
             CompactionTrigger.TIER_HEIGHT_REDUCTION,
-            CompactionTrigger.TIER_TIER0,
                 -> createTieredCompactionManifestOperation(
                 filesToMerge = filesToMerge,
                 outputLevelOrTier = outputLevelOrTier,
