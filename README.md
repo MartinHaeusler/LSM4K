@@ -287,7 +287,7 @@ While a transaction in this mode is active, the following concurrent transaction
 |------------------------|-----------|
 | Read-Only              | ✅ Yes     |
 | Read-Write             | ✅ Yes     |
-| Exclusive              | ✅ No      |
+| Exclusive              | ❌ No      |
 
 Starting a Read-Write Transaction in Kotlin:
 
@@ -344,8 +344,8 @@ While a transaction in this mode is active, the following concurrent transaction
 | Concurrent Transaction | Permitted |
 |------------------------|-----------|
 | Read-Only              | ✅ Yes     |
-| Read-Write             | ✅ No      |
-| Exclusive              | ✅ No      |
+| Read-Write             | ❌ No      |
+| Exclusive              | ❌ No      |
 
 Starting an exclusive transaction in Kotlin:
 
