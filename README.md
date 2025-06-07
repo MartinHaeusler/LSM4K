@@ -157,12 +157,12 @@ There may be multiple concurrent transactions of this type at any point in time.
 
 The following operations are allowed / not allowed:
 
-| Operation               | Example                                                    | Permitted |
-|-------------------------|------------------------------------------------------------|-----------|
-| Read from Stores        | `store.get(...)`, `store.openCursor()`                     | ✅ Yes     |
-| Transient modifications | `store.put(...)`, `store.delete()`                         | ✅ Yes     |
-| Create stores           | `transaction.createNewStore(...)`, `store.deleteStore(...) | ❌ No      |
-| Commit changes          | `transaction.commit()`                                     | ❌ No      |
+| Operation               | Example                                                     | Permitted |
+|-------------------------|-------------------------------------------------------------|-----------|
+| Read from Stores        | `store.get(...)`, `store.openCursor()`                      | ✅ Yes     |
+| Transient modifications | `store.put(...)`, `store.delete()`                          | ✅ Yes     |
+| Create stores           | `transaction.createNewStore(...)`, `store.deleteStore(...)` | ❌ No      |
+| Commit changes          | `transaction.commit()`                                      | ❌ No      |
 
 Attempting to perform an action which is not permitted will result in an exception.
 While a transaction in this mode is active, the following concurrent transactions are allowed / not allowed:
@@ -226,12 +226,12 @@ Snapshot isolation level.
 
 The following operations are allowed / not allowed:
 
-| Operation               | Example                                                    | Permitted |
-|-------------------------|------------------------------------------------------------|-----------|
-| Read from Stores        | `store.get(...)`, `store.openCursor()`                     | ✅ Yes     |
-| Transient modifications | `store.put(...)`, `store.delete()`                         | ✅ Yes     |
-| Create stores           | `transaction.createNewStore(...)`, `store.deleteStore(...) | ✅ Yes     |
-| Commit changes          | `transaction.commit()`                                     | ✅ Yes     |
+| Operation               | Example                                                     | Permitted |
+|-------------------------|-------------------------------------------------------------|-----------|
+| Read from Stores        | `store.get(...)`, `store.openCursor()`                      | ✅ Yes     |
+| Transient modifications | `store.put(...)`, `store.delete()`                          | ✅ Yes     |
+| Create stores           | `transaction.createNewStore(...)`, `store.deleteStore(...)` | ✅ Yes     |
+| Commit changes          | `transaction.commit()`                                      | ✅ Yes     |
 
 Attempting to perform an action which is not permitted will result in an exception.
 While a transaction in this mode is active, the following concurrent transactions are allowed / not allowed:
@@ -283,12 +283,12 @@ and only if strict Serializable write semantics are required.
 
 The following operations are allowed / not allowed:
 
-| Operation               | Example                                                    | Permitted |
-|-------------------------|------------------------------------------------------------|-----------|
-| Read from Stores        | `store.get(...)`, `store.openCursor()`                     | ✅ Yes     |
-| Transient modifications | `store.put(...)`, `store.delete()`                         | ✅ Yes     |
-| Create stores           | `transaction.createNewStore(...)`, `store.deleteStore(...) | ✅ Yes     |
-| Commit changes          | `transaction.commit()`                                     | ✅ Yes     |
+| Operation               | Example                                                     | Permitted |
+|-------------------------|-------------------------------------------------------------|-----------|
+| Read from Stores        | `store.get(...)`, `store.openCursor()`                      | ✅ Yes     |
+| Transient modifications | `store.put(...)`, `store.delete()`                          | ✅ Yes     |
+| Create stores           | `transaction.createNewStore(...)`, `store.deleteStore(...)` | ✅ Yes     |
+| Commit changes          | `transaction.commit()`                                      | ✅ Yes     |
 
 Attempting to perform an action which is not permitted will result in an exception.
 
