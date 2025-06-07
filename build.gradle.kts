@@ -48,6 +48,8 @@ java {
     toolchain {
         languageVersion.set(JavaLanguageVersion.of(libs.versions.java.get()))
     }
+    withJavadocJar()
+    withSourcesJar()
 }
 
 // ================================================================================================
