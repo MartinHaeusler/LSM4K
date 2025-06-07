@@ -41,18 +41,37 @@ sealed interface Bytes :
 
         private val SIZE_SUFFIXES = listOf("KiB", "MiB", "GiB", "TiB", "PiB", "XiB")
 
+        /**
+         * The empty [Bytes] object.
+         */
         val EMPTY: Bytes = BasicBytes(ByteArray(0))
 
-        val TRUE: Bytes = BasicBytes(byteArrayOf(1))
-
-        val FALSE: Bytes = BasicBytes(byteArrayOf(0))
-
+        /**
+         * Converts the given list of [bytes] into its [Bytes] representation.
+         *
+         * @param bytes The bytes to convert
+         *
+         * @return the [Bytes] representation.
+         */
+        @JvmStatic
         fun of(vararg bytes: Byte): Bytes {
             return BasicBytes(byteArrayOf(*bytes))
         }
 
-        fun of(text: String): Bytes {
-            return BasicBytes(text.toByteArray())
+        /**
+         * Convenience method that converts the given [text] to its [Bytes] representation.
+         *
+         * If no explicit [charset] is given, UTF-8 will be used.
+         *
+         * @param text The text to convert
+         * @param charset The charset to use. Defaults to UTF-8.
+         *
+         * @return The [Bytes] representation of the text.
+         */
+        @JvmStatic
+        @JvmOverloads
+        fun of(text: String, charset: Charset = Charsets.UTF_8): Bytes {
+            return BasicBytes(text.toByteArray(charset))
         }
 
         /**
@@ -68,11 +87,21 @@ sealed interface Bytes :
          *
          * @return The newly created [Bytes] object.
          */
+        @JvmStatic
         fun wrap(byteArray: ByteArray): Bytes {
             return BasicBytes(byteArray)
         }
 
+        /**
+         * Formats a given number of bytes into a human-readable representation.
+         *
+         * @param size The size (in bytes) to convert. Must not be negative.
+         *
+         * @return The size in a human-readable representation.
+         */
+        @JvmStatic
         fun formatSize(size: Long): String {
+            require(size >= 0) { "Argument 'size' (${size}) must not be negative!" }
             var scaled = size.toDouble()
             val iter = SIZE_SUFFIXES.iterator()
             var suffix: String? = ""
@@ -83,6 +112,7 @@ sealed interface Bytes :
             return String.format("%.2f%s", scaled, suffix)
         }
 
+        @JvmStatic
         fun random(random: Random, length: Int): Bytes {
             val bytes = ByteArray(length)
             random.nextBytes(bytes)
@@ -98,6 +128,7 @@ sealed interface Bytes :
         fun BloomFilter<ByteArray>.put(bytes: Bytes) {
             this.put(bytes.toSharedArrayUnsafe())
         }
+
 
         fun OutputStream.writeBytesWithoutSize(bytes: Bytes) {
             bytes.writeWithoutSizeTo(this)
@@ -372,5 +403,38 @@ sealed interface Bytes :
      * and no other bytes. This is mostly relevant for [SliceBytes].
      */
     fun own(): Bytes
+
+    /**
+     * Checks if this object starts with the given [prefix].
+     *
+     * @param prefix The prefix in question. If the prefix [isEmpty], this method will return `true` by definition.
+     *
+     * @return `true` if the object starts with the given prefix, otherwise `false`.
+     */
+    fun startsWith(prefix: Bytes): Boolean {
+        if (prefix.isEmpty()) {
+            // everything starts with the empty prefix.
+            return true
+        }
+        val sizeCompare = this.size.compareTo(prefix.size)
+        return when {
+            // our bytes are shorter than the prefix -> that won't work.
+            sizeCompare < 0 -> false
+            // our bytes are longer than the prefix -> need to check.
+            sizeCompare > 0 -> this.checkIsPrefixInternal(prefix)
+            // prefix has same length as our bytes, it is only a prefix
+            // if it matches our bytes exactly
+            else -> prefix == this
+        }
+    }
+
+    private fun checkIsPrefixInternal(prefix: Bytes): Boolean {
+        for (index in prefix.indices) {
+            if (this[index] != prefix[index]) {
+                return false
+            }
+        }
+        return true
+    }
 
 }

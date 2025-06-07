@@ -94,38 +94,142 @@ class LeveledCompactionStrategy(
      * The target size of the next-higher level is [levelSizeMultiplier] times the
      * target size of the current level.
      */
-    val levelSizeMultiplier: Double = 10.0,
+    val levelSizeMultiplier: Double = DEFAULT_LEVEL_SIZE_MULTIPLIER,
 
     /**
      * The number of files allowed in level 0.
      *
      * Any further insertion will trigger a compaction.
      */
-    val level0FileNumberCompactionTrigger: Int = 5,
+    val level0FileNumberCompactionTrigger: Int = DEFAULT_LEVEL_0_FILE_NUMBER_COMPACTION_TRIGGER,
 
     /**
      * The maximum number of levels to use in the LSM tree.
      */
-    val maxLevels: Int = 8,
+    val maxLevels: Int = DEFAULT_MAX_LEVELS,
 
     /**
      * The minimum size of the highest level of the LSM tree which needs to be reached before
      * the relative level size compaction triggers are used.
      */
-    val baseLevelMinSize: BinarySize = 200.MiB,
+    val baseLevelMinSize: BinarySize = DEFAULT_BASE_LEVEL_MIN_SIZE,
 
     /**
      * The strategy to apply when selecting which files from within a level should be compacted first.
      */
-    val fileSelectionStrategy: FileSelectionStrategy = FileSelectionStrategy.DEFAULT,
+    val fileSelectionStrategy: FileSelectionStrategy = DEFAULT_FILE_SELECTION_STRATEGY,
 
     /**
      * The strategy to apply when deciding when to split an outbound data stream into multiple LSM files.
      *
      * Defaults to [FileSeparationStrategy.SizeBased].
      */
-    override val fileSeparationStrategy: FileSeparationStrategy = FileSeparationStrategy.SizeBased(),
+    override val fileSeparationStrategy: FileSeparationStrategy = DEFAULT_FILE_SEPARATION_STRATEGY,
 ) : CompactionStrategy {
+
+    companion object {
+
+        private val DEFAULT_LEVEL_SIZE_MULTIPLIER: Double = 10.0
+
+        private val DEFAULT_LEVEL_0_FILE_NUMBER_COMPACTION_TRIGGER: Int = 5
+
+        private val DEFAULT_MAX_LEVELS: Int = 8
+
+        private val DEFAULT_BASE_LEVEL_MIN_SIZE: BinarySize = 200.MiB
+
+        private val DEFAULT_FILE_SELECTION_STRATEGY: FileSelectionStrategy = FileSelectionStrategy.DEFAULT
+
+        private val DEFAULT_FILE_SEPARATION_STRATEGY: FileSeparationStrategy = FileSeparationStrategy.SizeBased()
+
+        @JvmStatic
+        fun builder(): Builder {
+            return Builder()
+        }
+
+    }
+
+    /**
+     * A Builder for a [org.lsm4k.api.compaction.LeveledCompactionStrategy].
+     */
+    class Builder {
+
+        private var levelSizeMultiplier: Double = DEFAULT_LEVEL_SIZE_MULTIPLIER
+
+        private var level0FileNumberCompactionTrigger: Int = DEFAULT_LEVEL_0_FILE_NUMBER_COMPACTION_TRIGGER
+
+        private var maxLevels: Int = DEFAULT_MAX_LEVELS
+
+        private var baseLevelMinSize: BinarySize = DEFAULT_BASE_LEVEL_MIN_SIZE
+
+        private var fileSelectionStrategy: FileSelectionStrategy = DEFAULT_FILE_SELECTION_STRATEGY
+
+        private var fileSeparationStrategy: FileSeparationStrategy = DEFAULT_FILE_SEPARATION_STRATEGY
+
+        /**
+         * @see [org.lsm4k.api.compaction.LeveledCompactionStrategy.levelSizeMultiplier]
+         */
+        fun withLevelSizeMultiplier(levelSizeMultiplier: Double): Builder {
+            this.levelSizeMultiplier = levelSizeMultiplier
+            return this
+        }
+
+        /**
+         * @see [org.lsm4k.api.compaction.LeveledCompactionStrategy.level0FileNumberCompactionTrigger]
+         */
+        fun withLevel0FileNumberCompactionTrigger(level0FileNumberCompactionTrigger: Int): Builder {
+            this.level0FileNumberCompactionTrigger = level0FileNumberCompactionTrigger
+            return this
+        }
+
+        /**
+         * @see [org.lsm4k.api.compaction.LeveledCompactionStrategy.maxLevels]
+         */
+        fun withMaxLevels(maxLevels: Int): Builder {
+            this.maxLevels = maxLevels
+            return this
+        }
+
+        /**
+         * @see [org.lsm4k.api.compaction.LeveledCompactionStrategy.baseLevelMinSize]
+         */
+        fun withBaseLevelMinSize(baseLevelMinSize: BinarySize): Builder {
+            this.baseLevelMinSize = baseLevelMinSize
+            return this
+        }
+
+        /**
+         * @see [org.lsm4k.api.compaction.LeveledCompactionStrategy.fileSelectionStrategy]
+         */
+        fun withFileSelectionStrategy(fileSelectionStrategy: FileSelectionStrategy): Builder {
+            this.fileSelectionStrategy = fileSelectionStrategy
+            return this
+        }
+
+        /**
+         * @see [org.lsm4k.api.compaction.LeveledCompactionStrategy.fileSeparationStrategy]
+         */
+        fun withFileSeparationStrategy(fileSeparationStrategy: FileSeparationStrategy): Builder {
+            this.fileSeparationStrategy = fileSeparationStrategy
+            return this
+        }
+
+        /**
+         * Finalizes the [org.lsm4k.api.compaction.TieredCompactionStrategy] and returns it.
+         *
+         * @return The finalized strategy.
+         */
+        fun build(): LeveledCompactionStrategy {
+            return LeveledCompactionStrategy(
+                levelSizeMultiplier = this.levelSizeMultiplier,
+                level0FileNumberCompactionTrigger = this.level0FileNumberCompactionTrigger,
+                maxLevels = this.maxLevels,
+                baseLevelMinSize = this.baseLevelMinSize,
+                fileSelectionStrategy = this.fileSelectionStrategy,
+                fileSeparationStrategy = this.fileSeparationStrategy,
+            )
+        }
+
+    }
 
     enum class FileSelectionStrategy {
 

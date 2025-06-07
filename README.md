@@ -16,7 +16,8 @@ as well, but expect some friction in the API.
 ```kotlin
 // open a new DatabaseEngine instance on a directory of your choice
 DatabaseEngine.openOnDirectory(directory).use { engine ->
-  // option 1 to open transactions: using the structured lambda
+  // option 1 to open transactions: using the structured lambda 
+  // (this is the preferred way) 
   engine.readWriteTransaction { tx ->
     // create a new named store
     tx.createNewStore("example")
@@ -24,6 +25,7 @@ DatabaseEngine.openOnDirectory(directory).use { engine ->
   }
 
   // option 2 to open transactions: using beginTransaction()
+  // (Java users can use try-with-resources instead of ".use()")
   engine.beginReadWriteTransaction().use { tx ->
     val store = tx.getStore("example")
     // insert or update using "put(key, value)"
@@ -37,6 +39,7 @@ DatabaseEngine.openOnDirectory(directory).use { engine ->
     store.get(Bytes.of("notThere"))?.asString() // gives null
 
     // you can iterate over the data in the store via cursors
+    // (Java users: please use 'useCursor(...)' instead)
     store.withCursor { cursor ->
       // navigate using:
       // - first / last
@@ -66,6 +69,59 @@ DatabaseEngine.openOnDirectory(directory).use { engine ->
 } // instance gets closed here automatically
 ```
 
+## Configuration
+
+LSM4K comes with a sensible default configuration which allows for minimal dependencies
+and should get you started. You can configure and fine-tune various aspects. Kotlin users
+can either use the builder pattern (see below) or instantiate the configuration with
+named arguments directly:
+
+```kotlin
+val config = LSM4KConfiguration(
+  blockCacheSize = 4.GiB,
+  // ... other settings by name ...
+)
+```
+
+Java users don't have the luxury of named arguments. You can use the provided builder pattern
+instead (which also works for Kotlin if you prefer this solution):
+
+```java
+var config = LSM4KConfiguration.builder()
+        .withBlockCacheSize(4, SizeUnit.GIB)
+        // ... other settings
+        .build();
+```
+
+For the full list of settings and their defaults, please refer to your IDE code completion,
+the JavaDoc or the source code directly.
+
+Once you have established a configuration, you can pass it into the factory method as
+the second argument.
+
+In Kotlin:
+
+```kotlin
+// create config as shown above
+val config = LSM4KConfiguration()
+
+DatabaseEngine.openOnDirectory(directory, config).use { engine ->
+  // use the engine
+}
+```
+
+In Java:
+
+```java
+// create config as shown above
+LSM4KConfiguration config = LSM4KConfiguration.builder().build();
+
+try(
+DatabaseEngine engine = DatabaseEngine.openOnDirectory(directory, config)){
+        // use the engine
+        }
+```
+
 ## Features
 
 ### Transactional API
@@ -80,18 +136,213 @@ Transactions are at the heart of LSM4K. All transactions are ACID:
   to be durable on disk.
 
 They adhere to **snapshot isolation**, which means that every transaction `T`
-can only read
-the changes of transactions which have completed before `T` has started. All
-reads performed
-by `T` are **repeatable**: no matter what other transactions are doing
-concurrently, `T` can
-repeat any individual read or compound cursor operation as often as it wants to,
-it will always
-receive the same result. The only exception to this rule is when `T` performed
-transient changes
-to the data itself between the read operations, then these changes will be
-reflected in the
-results.
+can only read the changes of transactions which have completed before `T` has started.
+All reads performed by `T` are **repeatable**: no matter what other transactions are doing
+concurrently, `T` can repeat any individual read or compound cursor operation as often as
+it wants to, it will always receive the same result. The only exception to this rule is
+when `T` performed transient changes to the data itself between the read operations,
+then these changes will be reflected in the results.
+
+LSM4K supports three types of transactions:
+
+- Read-Only Transactions
+- Read-Write Transactions
+- Exclusive Transactions
+
+#### Read-Only Transactions
+
+Read-Only Transactions may only read data, but cannot commit any changes. They may,
+however, apply temporary changes which are only visible to them. In other words, calling
+`store.put(key, value)` is fine in a read-only transaction, only `commit()` is not allowed.
+There may be multiple concurrent transactions of this type at any point in time.
+
+The following operations are allowed / not allowed:
+
+| Operation               | Example                                                    | Permitted |
+|-------------------------|------------------------------------------------------------|-----------|
+| Read from Stores        | `store.get(...)`, `store.openCursor()`                     | ✅ Yes     |
+| Transient modifications | `store.put(...)`, `store.delete()`                         | ✅ Yes     |
+| Create stores           | `transaction.createNewStore(...)`, `store.deleteStore(...) | ❌ No      |
+| Commit changes          | `transaction.commit()`                                     | ❌ No      |
+
+Attempting to perform an action which is not permitted will result in an exception.
+While a transaction in this mode is active, the following concurrent transactions are allowed / not allowed:
+
+| Concurrent Transaction | Permitted |
+|------------------------|-----------|
+| Read-Only              | ✅ Yes     |
+| Read-Write             | ✅ Yes     |
+| Exclusive              | ✅ Yes     |
+
+Starting a Read-Only Transaction in Kotlin:
+
+```kotlin
+// using lambdas (recommmended):
+engine.readOnlyTransaction { tx ->
+  // ... perform changes & queries...
+
+  // runtime exception, tx is read-only!
+  // Do NOT attempt to commit a read-only transaction! 
+  tx.commit()
+}
+
+// or explicitly:
+engine.beginReadOnlyTransaction().use { tx ->
+  // ... perform changes & queries...
+
+  // runtime exception, tx is read-only!
+  // Do NOT attempt to commit a read-only transaction! 
+  tx.commit()
+}
+```
+
+In Java:
+
+```kotlin
+// using lambdas (recommended):
+engine.readOnlyTransaction((tx) -> {
+  // ... perform changes & queries...
+
+  // runtime exception, tx is read-only!
+  // Do NOT attempt to commit a read-only transaction! 
+  return tx.commit();
+});
+
+// or explicitly:
+try (
+  var tx = engine.beginReadOnlyTransaction()){
+    // ... perform changes & queries...
+
+    // runtime exception, tx is read-only!
+    // Do NOT attempt to commit a read-only transaction! 
+    return tx.commit();
+  }
+```
+
+#### Read-Write Transactions
+
+Read-Write Transactions may read data and write data. In contrast to read-only transactions, they are allowed
+(and expected) to perform a `commit()` at the end. There may be multiple concurrent
+transactions of this type at any point in time. This type of transaction operates on the
+Snapshot isolation level.
+
+The following operations are allowed / not allowed:
+
+| Operation               | Example                                                    | Permitted |
+|-------------------------|------------------------------------------------------------|-----------|
+| Read from Stores        | `store.get(...)`, `store.openCursor()`                     | ✅ Yes     |
+| Transient modifications | `store.put(...)`, `store.delete()`                         | ✅ Yes     |
+| Create stores           | `transaction.createNewStore(...)`, `store.deleteStore(...) | ✅ Yes     |
+| Commit changes          | `transaction.commit()`                                     | ✅ Yes     |
+
+Attempting to perform an action which is not permitted will result in an exception.
+While a transaction in this mode is active, the following concurrent transactions are allowed / not allowed:
+
+| Concurrent Transaction | Permitted |
+|------------------------|-----------|
+| Read-Only              | ✅ Yes     |
+| Read-Write             | ✅ Yes     |
+| Exclusive              | ✅ No      |
+
+Starting a Read-Write Transaction in Kotlin:
+
+```kotlin
+// using lambdas (recommended):
+engine.readWriteTransaction { tx ->
+  // ... perform changes & queries
+  tx.commit()
+}
+
+// or explicitly:
+engine.beginReadWriteTransaction().use { tx ->
+  // ... perform changes & queries
+  tx.commit()
+}
+```
+
+In Java:
+
+```java
+// using lambdas (recommended):
+engine.readWriteTransaction((tx) ->{
+        // ... perform changes & queries
+        return tx.
+
+commit();
+});
+
+// or explicitly:
+        try(
+var tx = engine.beginReadWriteTransaction()){
+        // ... perform changes & queries
+        return tx.
+
+commit();
+}
+```
+
+#### Exclusive Transactions
+
+Exclusive Transactions have the same properties as Read-Write Transactions, but only one Exclusive Transaction
+may be active at any point in time. While it is active, it blocks other Read-Write and
+Exclusive Transactions from being executed. This transaction type should be used sparingly
+and only if strict Serializable write semantics are required.
+
+The following operations are allowed / not allowed:
+
+| Operation               | Example                                                    | Permitted |
+|-------------------------|------------------------------------------------------------|-----------|
+| Read from Stores        | `store.get(...)`, `store.openCursor()`                     | ✅ Yes     |
+| Transient modifications | `store.put(...)`, `store.delete()`                         | ✅ Yes     |
+| Create stores           | `transaction.createNewStore(...)`, `store.deleteStore(...) | ✅ Yes     |
+| Commit changes          | `transaction.commit()`                                     | ✅ Yes     |
+
+Attempting to perform an action which is not permitted will result in an exception.
+
+While a transaction in this mode is active, the following concurrent transactions are allowed / not allowed:
+
+| Concurrent Transaction | Permitted |
+|------------------------|-----------|
+| Read-Only              | ✅ Yes     |
+| Read-Write             | ✅ No      |
+| Exclusive              | ✅ No      |
+
+Starting an exclusive transaction in Kotlin:
+
+```kotlin
+// using lambdas (recommended):
+engine.exclusiveTransaction { tx ->
+  // ... perform changes & queries
+  tx.commit()
+}
+
+// or explicitly:
+engine.beginExclusiveTransaction().use { tx ->
+  // ... perform changes & queries
+  tx.commit()
+}
+```
+
+Starting an exclusive transaction in Java:
+
+```java
+// using lambdas (recommended):
+engine.exclusiveTransaction((tx) ->{
+        // ... perform changes & queries
+        return tx.
+
+commit();
+});
+
+// or explicitly:
+        try(
+var tx = engine.beginExclusiveTransaction()){
+        // ... perform changes & queries
+        tx.
+
+commit();
+}
+```
 
 ### Log-Structured-Merge (LSM) Tree
 
@@ -316,7 +567,6 @@ implementations
 are welcome, provided that they meet the quality standards and fit into the
 existing code base
 and vision.
-
 
 ## FAQ (Frequently Asked Questions)
 

@@ -25,6 +25,26 @@ sealed interface CompactionStrategy {
          */
         val DEFAULT = LeveledCompactionStrategy()
 
+        /**
+         * Creates a builder for a [LeveledCompactionStrategy].
+         *
+         * @return the builder
+         */
+        @JvmStatic
+        fun leveledBuilder(): LeveledCompactionStrategy.Builder {
+            return LeveledCompactionStrategy.builder()
+        }
+
+        /**
+         * Creates a builder for a [TieredCompactionStrategy].
+         *
+         * @return the builder
+         */
+        @JvmStatic
+        fun tieredBuilder(): TieredCompactionStrategy.Builder {
+            return TieredCompactionStrategy.builder()
+        }
+
     }
 
     val fileSeparationStrategy: FileSeparationStrategy

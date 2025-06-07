@@ -144,6 +144,34 @@ interface LSM4KTransaction : AutoCloseable {
     }
 
     /**
+     * Creates a new store with the given [storeId] and the default compaction strategy.
+     *
+     * Please note that stores may be created immediately, even before the current transaction is [committed][commit],
+     * and they may continue to exist even if the current transaction is [rolled back][rollback].
+     *
+     * @param storeId The ID of the store to create. Must be unique among all stores.
+     *
+     * @return The newly created store.
+     */
+    fun createNewStore(storeId: String): TransactionalReadWriteStore {
+        return this.createNewStore(storeId, compactionStrategy = null)
+    }
+
+    /**
+     * Creates a new store with the given [storeId] and the default compaction strategy.
+     *
+     * Please note that stores may be created immediately, even before the current transaction is [committed][commit],
+     * and they may continue to exist even if the current transaction is [rolled back][rollback].
+     *
+     * @param storeId The ID of the store to create. Must be unique among all stores.
+     *
+     * @return The newly created store.
+     */
+    fun createNewStore(storeId: StoreId): TransactionalReadWriteStore {
+        return this.createNewStore(storeId, compactionStrategy = null)
+    }
+
+    /**
      * Creates a new store with the given [storeId].
      *
      * Please note that stores may be created immediately, even before the current transaction is [committed][commit],

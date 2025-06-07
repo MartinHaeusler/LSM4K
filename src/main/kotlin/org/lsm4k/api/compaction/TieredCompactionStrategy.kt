@@ -72,7 +72,7 @@ class TieredCompactionStrategy(
      *
      * Otherwise, it does not trigger any compaction (no matter which of the other compaction triggers apply).
      */
-    val numberOfTiers: Int = 8,
+    val numberOfTiers: Int = DEFAULT_NUMBER_OF_TIERS,
 
     /**
      * Configures the "Space Amplification Trigger" for compaction.
@@ -92,7 +92,7 @@ class TieredCompactionStrategy(
      *
      * Lower ratios mean that the stores will be compacted more eagerly.
      */
-    val maxSpaceAmplificationPercent: Double = 2.0,
+    val maxSpaceAmplificationPercent: Double = DEFAULT_MAX_SPACE_AMPLIFICATION_PERCENT,
 
     /**
      * Configures the "Size Ratio Trigger" for compaction.
@@ -112,22 +112,113 @@ class TieredCompactionStrategy(
      * by any tier, *all* lower tiers will be compacted into the current one. This happens only if there are
      * at least [minMergeTiers] are affected.
      */
-    val sizeRatio: Double = 1.0,
+    val sizeRatio: Double = DEFAULT_SIZE_RATIO,
 
     /**
      * Configures the "Size Ratio Trigger" for compaction.
      *
      * Size-Ratio-based compaction will only occur if at least [minMergeTiers] are affected.
      */
-    val minMergeTiers: Int = 2,
+    val minMergeTiers: Int = DEFAULT_MIN_MERGE_TIERS,
 
     /**
      * The strategy to apply when deciding when to split an outbound data stream into multiple LSM files.
      *
      * Defaults to [FileSeparationStrategy.SizeBased].
      */
-    override val fileSeparationStrategy: FileSeparationStrategy = FileSeparationStrategy.SizeBased(),
+    override val fileSeparationStrategy: FileSeparationStrategy = DEFAULT_FILE_SEPARATION_STRATEGY,
 ) : CompactionStrategy {
+
+    companion object {
+
+        private val DEFAULT_NUMBER_OF_TIERS: Int = 8
+
+        private val DEFAULT_MAX_SPACE_AMPLIFICATION_PERCENT: Double = 2.0
+
+        private val DEFAULT_SIZE_RATIO: Double = 1.0
+
+        private val DEFAULT_MIN_MERGE_TIERS: Int = 2
+
+        private val DEFAULT_FILE_SEPARATION_STRATEGY: FileSeparationStrategy = FileSeparationStrategy.SizeBased()
+
+        @JvmStatic
+        fun builder(): Builder {
+            return Builder()
+        }
+
+    }
+
+    /**
+     * A Builder for a [org.lsm4k.api.compaction.TieredCompactionStrategy].
+     */
+    class Builder {
+
+        private var numberOfTiers: Int = DEFAULT_NUMBER_OF_TIERS
+
+        private var maxSpaceAmplificationPercent: Double = DEFAULT_MAX_SPACE_AMPLIFICATION_PERCENT
+
+        private var sizeRatio: Double = DEFAULT_SIZE_RATIO
+
+        private var minMergeTiers: Int = DEFAULT_MIN_MERGE_TIERS
+
+        private var fileSeparationStrategy: FileSeparationStrategy = DEFAULT_FILE_SEPARATION_STRATEGY
+
+        /**
+         * @see [org.lsm4k.api.compaction.TieredCompactionStrategy.numberOfTiers]
+         */
+        fun withNumberOfTiers(numberOfTiers: Int): Builder {
+            this.numberOfTiers = numberOfTiers
+            return this
+        }
+
+        /**
+         * @see [org.lsm4k.api.compaction.TieredCompactionStrategy.maxSpaceAmplificationPercent]
+         */
+        fun withMaxSpaceAmplificationPercent(maxSpaceAmplificationPercent: Double): Builder {
+            this.maxSpaceAmplificationPercent = maxSpaceAmplificationPercent
+            return this
+        }
+
+        /**
+         * @see [org.lsm4k.api.compaction.TieredCompactionStrategy.sizeRatio]
+         */
+        fun withSizeRatio(sizeRatio: Double): Builder {
+            this.sizeRatio = sizeRatio
+            return this
+        }
+
+        /**
+         * @see [org.lsm4k.api.compaction.TieredCompactionStrategy.minMergeTiers]
+         */
+        fun withMinMergeTiers(minMergeTiers: Int): Builder {
+            this.minMergeTiers = minMergeTiers
+            return this
+        }
+
+        /**
+         * @see [org.lsm4k.api.compaction.TieredCompactionStrategy.fileSeparationStrategy]
+         */
+        fun withFileSeparationStrategy(fileSeparationStrategy: FileSeparationStrategy): Builder {
+            this.fileSeparationStrategy = fileSeparationStrategy
+            return this
+        }
+
+        /**
+         * Finalizes the [org.lsm4k.api.compaction.TieredCompactionStrategy] and returns it.
+         *
+         * @return The finalized strategy.
+         */
+        fun build(): TieredCompactionStrategy {
+            return TieredCompactionStrategy(
+                numberOfTiers = this.numberOfTiers,
+                maxSpaceAmplificationPercent = this.maxSpaceAmplificationPercent,
+                sizeRatio = this.sizeRatio,
+                minMergeTiers = this.minMergeTiers,
+                fileSeparationStrategy = this.fileSeparationStrategy,
+            )
+        }
+
+    }
 
     override fun toString(): String {
         return "TieredCompactionStrategy[tiers=${this.numberOfTiers}, sizeAmp=${String.format("%.2f", this.maxSpaceAmplificationPercent)}, sizeRatio=${String.format("%.2f", this.sizeRatio)}]"

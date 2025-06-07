@@ -236,7 +236,7 @@ interface DatabaseEngine : AutoCloseable {
      * | Concurrent Transaction | Permitted |
      * |------------------------|-----------|
      * | Read-Only              | ✅ Yes     |
-     * | Read-Write             | ✅ Yes     |
+     * | Read-Write             | ✅ No      |
      * | Exclusive              | ✅ No      |
      *
      * This method uses the [LSM4KConfiguration.defaultLockAcquisitionTimeout].
