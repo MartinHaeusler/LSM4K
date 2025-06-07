@@ -5,6 +5,7 @@ plugins {
     alias(libs.plugins.versions)
     alias(libs.plugins.dokka)
     id("maven-publish")
+    id("signing")
 }
 
 group = "org.lsm4k"
@@ -104,6 +105,10 @@ publishing {
             }
         }
     }
+}
+
+signing {
+    sign(publishing.publications["lsm4k"])
 }
 
 // ================================================================================================

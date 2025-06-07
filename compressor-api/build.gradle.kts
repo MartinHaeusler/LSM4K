@@ -2,6 +2,7 @@ plugins {
     kotlin("jvm")
     alias(libs.plugins.dokka)
     id("maven-publish")
+    id("signing")
 }
 
 group = rootProject.group
@@ -84,4 +85,8 @@ publishing {
             }
         }
     }
+}
+
+signing {
+    sign(publishing.publications["lsm4k-compressor-api"])
 }
