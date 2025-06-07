@@ -14,6 +14,8 @@ as well, but expect some friction in the API.
 
 ## Including in your project
 
+> LSM4K currently targets a baseline of Kotlin 2.x and JDK 21.
+
 In gradle:
 
 ```kotlin
@@ -576,7 +578,7 @@ LSM4K is built with Gradle:
   ./gradlew build
 ```
 
-The automated test suite can be executed indivdually via:
+The automated test suite can be executed individually via:
 
 ```shell
   ./gradlew test
