@@ -12,6 +12,33 @@ Groovy, etc.) may leverage it
 as well, but expect some friction in the API.
 
 
+## Including in your project
+
+In gradle:
+
+```kotlin
+implementation("io.github.martinhaeusler.lsm4k:LSM4K:1.0.0-Alpha")
+// include the snappy compressor (not required, but recommended)
+implementation("io.github.martinhaeusler.lsm4k:compressor-snappy:1.0.0-Alpha")
+```
+
+In maven:
+
+```xml
+<dependency>
+  <groupId>io.github.martinhaeusler.lsm4k</groupId>
+  <artifactId>LSM4K</artifactId>
+  <version>1.0.0-Alpha</version>
+</dependency>
+
+<!-- Snappy Compressor (not required, but recommended) -->
+<dependency>
+    <groupId>io.github.martinhaeusler.lsm4k</groupId>
+    <artifactId>compressor-snappy</artifactId>
+    <version>1.0.0-Alpha</version>
+</dependency>
+```
+
 ## Project State
 
 This project is currently in **1.0.0-Alpha** state and requesting feedback from developers and users.
