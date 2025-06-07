@@ -16,55 +16,55 @@ as well, but expect some friction in the API.
 ```kotlin
 // open a new DatabaseEngine instance on a directory of your choice
 DatabaseEngine.openOnDirectory(directory).use { engine ->
-  // option 1 to open transactions: using the structured lambda 
-  // (this is the preferred way) 
-  engine.readWriteTransaction { tx ->
-    // create a new named store
-    tx.createNewStore("example")
-    tx.commit()
-  }
-
-  // option 2 to open transactions: using beginTransaction()
-  // (Java users can use try-with-resources instead of ".use()")
-  engine.beginReadWriteTransaction().use { tx ->
-    val store = tx.getStore("example")
-    // insert or update using "put(key, value)"
-    store.put(Bytes.of("hello"), Bytes.of("world"))
-    store.put(Bytes.of("foo"), Bytes.of("bar"))
-
-    // you can get individual values for keys. The values
-    // can be transient in your current transaction, or
-    // persistent on disk.
-    store.get(Bytes.of("foo"))?.asString() // gives "bar"
-    store.get(Bytes.of("notThere"))?.asString() // gives null
-
-    // you can iterate over the data in the store via cursors
-    // (Java users: please use 'useCursor(...)' instead)
-    store.withCursor { cursor ->
-      // navigate using:
-      // - first / last
-      // - next / prev
-      // - seekExactlyOrNext / seekExactlyOrPrev
-      cursor.firstOrThrow()
-      // access the current position
-      val firstKey = cursor.key.asString() // gives "foo"
-      val firstValue = cursor.value.asString() // gives "bar"
-
-      // safe navigation is supported as well: the navigation
-      // methods return true if the navigation was successful,
-      // or false if they could not be executed because there
-      // is no more data.
-      if (!cursor.next()) {
-        // no more enries
-        return@withCursor
-      }
-
-      val secondKey = cursor.key.asString() // gives "hello"
-      val secondValue = cursor.value.asString() // gives "world"
+    // option 1 to open transactions: using the structured lambda 
+    // (this is the preferred way) 
+    engine.readWriteTransaction { tx ->
+        // create a new named store
+        tx.createNewStore("example")
+        tx.commit()
     }
 
-    tx.commit()
-  }
+    // option 2 to open transactions: using beginTransaction()
+    // (Java users can use try-with-resources instead of ".use()")
+    engine.beginReadWriteTransaction().use { tx ->
+        val store = tx.getStore("example")
+        // insert or update using "put(key, value)"
+        store.put(Bytes.of("hello"), Bytes.of("world"))
+        store.put(Bytes.of("foo"), Bytes.of("bar"))
+
+        // you can get individual values for keys. The values
+        // can be transient in your current transaction, or
+        // persistent on disk.
+        store.get(Bytes.of("foo"))?.asString() // gives "bar"
+        store.get(Bytes.of("notThere"))?.asString() // gives null
+
+        // you can iterate over the data in the store via cursors
+        // (Java users: please use 'useCursor(...)' instead)
+        store.withCursor { cursor ->
+            // navigate using:
+            // - first / last
+            // - next / prev
+            // - seekExactlyOrNext / seekExactlyOrPrev
+            cursor.firstOrThrow()
+            // access the current position
+            val firstKey = cursor.key.asString() // gives "foo"
+            val firstValue = cursor.value.asString() // gives "bar"
+
+            // safe navigation is supported as well: the navigation
+            // methods return true if the navigation was successful,
+            // or false if they could not be executed because there
+            // is no more data.
+            if (!cursor.next()) {
+                // no more enries
+                return@withCursor
+            }
+
+            val secondKey = cursor.key.asString() // gives "hello"
+            val secondValue = cursor.value.asString() // gives "world"
+        }
+
+        tx.commit()
+    }
 
 } // instance gets closed here automatically
 ```
@@ -78,8 +78,8 @@ named arguments directly:
 
 ```kotlin
 val config = LSM4KConfiguration(
-  blockCacheSize = 4.GiB,
-  // ... other settings by name ...
+    blockCacheSize = 4.GiB,
+    // ... other settings by name ...
 )
 ```
 
@@ -88,9 +88,9 @@ instead (which also works for Kotlin if you prefer this solution):
 
 ```java
 var config = LSM4KConfiguration.builder()
-        .withBlockCacheSize(4, SizeUnit.GIB)
-        // ... other settings
-        .build();
+    .withBlockCacheSize(4, SizeUnit.GIB)
+    // ... other settings
+    .build();
 ```
 
 For the full list of settings and their defaults, please refer to your IDE code completion,
@@ -106,7 +106,7 @@ In Kotlin:
 val config = LSM4KConfiguration()
 
 DatabaseEngine.openOnDirectory(directory, config).use { engine ->
-  // use the engine
+    // use the engine
 }
 ```
 
@@ -116,10 +116,9 @@ In Java:
 // create config as shown above
 LSM4KConfiguration config = LSM4KConfiguration.builder().build();
 
-try(
-DatabaseEngine engine = DatabaseEngine.openOnDirectory(directory, config)){
-        // use the engine
-        }
+try(DatabaseEngine engine = DatabaseEngine.openOnDirectory(directory, config)){
+    // use the engine
+}
 ```
 
 ## Features
@@ -179,20 +178,20 @@ Starting a Read-Only Transaction in Kotlin:
 ```kotlin
 // using lambdas (recommmended):
 engine.readOnlyTransaction { tx ->
-  // ... perform changes & queries...
+    // ... perform changes & queries...
 
-  // runtime exception, tx is read-only!
-  // Do NOT attempt to commit a read-only transaction! 
-  tx.commit()
+    // runtime exception, tx is read-only!
+    // Do NOT attempt to commit a read-only transaction! 
+    tx.commit()
 }
 
 // or explicitly:
 engine.beginReadOnlyTransaction().use { tx ->
-  // ... perform changes & queries...
+    // ... perform changes & queries...
 
-  // runtime exception, tx is read-only!
-  // Do NOT attempt to commit a read-only transaction! 
-  tx.commit()
+    // runtime exception, tx is read-only!
+    // Do NOT attempt to commit a read-only transaction! 
+    tx.commit()
 }
 ```
 
@@ -201,22 +200,21 @@ In Java:
 ```kotlin
 // using lambdas (recommended):
 engine.readOnlyTransaction((tx) -> {
-  // ... perform changes & queries...
-
-  // runtime exception, tx is read-only!
-  // Do NOT attempt to commit a read-only transaction! 
-  return tx.commit();
-});
-
-// or explicitly:
-try (
-  var tx = engine.beginReadOnlyTransaction()){
     // ... perform changes & queries...
 
     // runtime exception, tx is read-only!
     // Do NOT attempt to commit a read-only transaction! 
     return tx.commit();
-  }
+});
+
+// or explicitly:
+try (var tx = engine.beginReadOnlyTransaction()){
+    // ... perform changes & queries...
+
+    // runtime exception, tx is read-only!
+    // Do NOT attempt to commit a read-only transaction! 
+    return tx.commit();
+}
 ```
 
 #### Read-Write Transactions
@@ -249,14 +247,14 @@ Starting a Read-Write Transaction in Kotlin:
 ```kotlin
 // using lambdas (recommended):
 engine.readWriteTransaction { tx ->
-  // ... perform changes & queries
-  tx.commit()
+    // ... perform changes & queries
+    tx.commit()
 }
 
 // or explicitly:
 engine.beginReadWriteTransaction().use { tx ->
-  // ... perform changes & queries
-  tx.commit()
+    // ... perform changes & queries
+    tx.commit()
 }
 ```
 
@@ -265,19 +263,14 @@ In Java:
 ```java
 // using lambdas (recommended):
 engine.readWriteTransaction((tx) ->{
-        // ... perform changes & queries
-        return tx.
-
-commit();
+    // ... perform changes & queries
+    return tx.commit();
 });
 
 // or explicitly:
-        try(
-var tx = engine.beginReadWriteTransaction()){
-        // ... perform changes & queries
-        return tx.
-
-commit();
+try(var tx = engine.beginReadWriteTransaction()){
+    // ... perform changes & queries
+    return tx.commit();
 }
 ```
 
@@ -312,14 +305,14 @@ Starting an exclusive transaction in Kotlin:
 ```kotlin
 // using lambdas (recommended):
 engine.exclusiveTransaction { tx ->
-  // ... perform changes & queries
-  tx.commit()
+    // ... perform changes & queries
+    tx.commit()
 }
 
 // or explicitly:
 engine.beginExclusiveTransaction().use { tx ->
-  // ... perform changes & queries
-  tx.commit()
+    // ... perform changes & queries
+    tx.commit()
 }
 ```
 
@@ -328,19 +321,14 @@ Starting an exclusive transaction in Java:
 ```java
 // using lambdas (recommended):
 engine.exclusiveTransaction((tx) ->{
-        // ... perform changes & queries
-        return tx.
-
-commit();
+    // ... perform changes & queries
+    return tx.commit();
 });
 
 // or explicitly:
-        try(
-var tx = engine.beginExclusiveTransaction()){
-        // ... perform changes & queries
-        tx.
-
-commit();
+try(var tx = engine.beginExclusiveTransaction()){
+    // ... perform changes & queries
+    tx.commit();
 }
 ```
 
