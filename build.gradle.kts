@@ -3,6 +3,8 @@ import com.github.benmanes.gradle.versions.updates.DependencyUpdatesTask
 plugins {
     kotlin("jvm") version libs.versions.kotlin
     alias(libs.plugins.versions)
+    alias(libs.plugins.dokka)
+    id("maven-publish")
 }
 
 group = "org.lsm4k"
@@ -48,8 +50,22 @@ java {
     toolchain {
         languageVersion.set(JavaLanguageVersion.of(libs.versions.java.get()))
     }
-    withJavadocJar()
-    withSourcesJar()
+}
+
+val sourcesJar = tasks.register<Jar>("sourcesJar") {
+    from(sourceSets.main.get().allSource)
+    archiveClassifier.set("sources")
+}
+
+val dokkaJavadocJar = tasks.register<Jar>("dokkaJavadocJar") {
+    dependsOn(tasks.dokkaJavadoc)
+    from(tasks.dokkaJavadoc.flatMap { it.outputDirectory })
+    archiveClassifier.set("javadoc")
+}
+
+artifacts {
+    add("archives", sourcesJar)
+    add("archives", dokkaJavadocJar)
 }
 
 // ================================================================================================

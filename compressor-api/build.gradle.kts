@@ -1,5 +1,7 @@
 plugins {
     kotlin("jvm")
+    alias(libs.plugins.dokka)
+    id("maven-publish")
 }
 
 group = rootProject.group
@@ -18,8 +20,6 @@ java {
     toolchain {
         languageVersion.set(JavaLanguageVersion.of(libs.versions.java.get()))
     }
-    withJavadocJar()
-    withSourcesJar()
 }
 
 dependencies {
@@ -30,4 +30,20 @@ dependencies {
 
 tasks.test {
     useJUnitPlatform()
+}
+
+val sourcesJar = tasks.register<Jar>("sourcesJar") {
+    from(sourceSets.main.get().allSource)
+    archiveClassifier.set("sources")
+}
+
+val dokkaJavadocJar = tasks.register<Jar>("dokkaJavadocJar") {
+    dependsOn(tasks.dokkaJavadoc)
+    from(tasks.dokkaJavadoc.flatMap { it.outputDirectory })
+    archiveClassifier.set("javadoc")
+}
+
+artifacts {
+    add("archives", sourcesJar)
+    add("archives", dokkaJavadocJar)
 }
