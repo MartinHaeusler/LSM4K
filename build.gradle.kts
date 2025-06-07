@@ -9,7 +9,7 @@ plugins {
 }
 
 group = "org.lsm4k"
-version = "1.0-SNAPSHOT"
+version = "1.0.0-Alpha"
 
 repositories {
     mavenCentral()
