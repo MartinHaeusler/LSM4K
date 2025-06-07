@@ -16,53 +16,52 @@ as well, but expect some friction in the API.
 ```kotlin
 // open a new DatabaseEngine instance on a directory of your choice
 DatabaseEngine.openOnDirectory(directory).use { engine ->
-    // option 1 to open transactions: using the structured lambda
+  // option 1 to open transactions: using the structured lambda
   engine.readWriteTransaction { tx ->
-        // create a new named store
-        tx.createNewStore("example")
-        tx.commit()
+    // create a new named store
+    tx.createNewStore("example")
+    tx.commit()
+  }
+
+  // option 2 to open transactions: using beginTransaction()
+  engine.beginReadWriteTransaction().use { tx ->
+    val store = tx.getStore("example")
+    // insert or update using "put(key, value)"
+    store.put(Bytes.of("hello"), Bytes.of("world"))
+    store.put(Bytes.of("foo"), Bytes.of("bar"))
+
+    // you can get individual values for keys. The values
+    // can be transient in your current transaction, or
+    // persistent on disk.
+    store.get(Bytes.of("foo"))?.asString() // gives "bar"
+    store.get(Bytes.of("notThere"))?.asString() // gives null
+
+    // you can iterate over the data in the store via cursors
+    store.withCursor { cursor ->
+      // navigate using:
+      // - first / last
+      // - next / prev
+      // - seekExactlyOrNext / seekExactlyOrPrev
+      cursor.firstOrThrow()
+      // access the current position
+      val firstKey = cursor.key.asString() // gives "foo"
+      val firstValue = cursor.value.asString() // gives "bar"
+
+      // safe navigation is supported as well: the navigation
+      // methods return true if the navigation was successful,
+      // or false if they could not be executed because there
+      // is no more data.
+      if (!cursor.next()) {
+        // no more enries
+        return@withCursor
+      }
+
+      val secondKey = cursor.key.asString() // gives "hello"
+      val secondValue = cursor.value.asString() // gives "world"
     }
 
-    // option 2 to open transactions: using beginTransaction()
-  engine.beginReadWriteTransaction()
-    .use { tx ->
-        val store = tx.getStore("example")
-        // insert or update using "put(key, value)"
-        store.put(Bytes.of("hello"), Bytes.of("world"))
-        store.put(Bytes.of("foo"), Bytes.of("bar"))
-
-        // you can get individual values for keys. The values
-        // can be transient in your current transaction, or
-        // persistent on disk.
-        store.get(Bytes.of("foo"))?.asString() // gives "bar"
-        store.get(Bytes.of("notThere"))?.asString() // gives null
-
-        // you can iterate over the data in the store via cursors
-        store.withCursor { cursor ->
-            // navigate using:
-            // - first / last
-            // - next / prev
-            // - seekExactlyOrNext / seekExactlyOrPrev
-            cursor.firstOrThrow()
-            // access the current position
-            val firstKey = cursor.key.asString() // gives "foo"
-            val firstValue = cursor.value.asString() // gives "bar"
-
-            // safe navigation is supported as well: the navigation
-            // methods return true if the navigation was successful,
-            // or false if they could not be executed because there
-            // is no more data.
-            if (!cursor.next()) {
-                // no more enries
-                return@withCursor
-            }
-
-            val secondKey = cursor.key.asString() // gives "hello"
-            val secondValue = cursor.value.asString() // gives "world"
-        }
-
-        tx.commit()
-    }
+    tx.commit()
+  }
 
 } // instance gets closed here automatically
 ```
@@ -101,45 +100,13 @@ classical B+ trees.
 This allows LSM4K to...
 
 - ... work in a strictly **append-only** fashion. Existing data is never
-  overwritten,
-  only
-  new
-  files
-  are
-  being
-  created
-  as
-  needed.
-  If
-  a
-  file
-  becomes
-  obsolete,
-  it
-  is
-  dropped
-  in
-  its
-  entirety.
-  This
-  allows
-  for
-  high
-  data
-  consistency
-  with
-  minimal
-  locking.
+  overwritten, only new
+  files are being created as needed. If a file becomes obsolete, it is dropped
+  in its entirety.
+  This allows for high data consistency with minimal locking.
 - ... employ a high degree of **compression** on its data. This helps to keep
-  the
-  disk
-  footprint
-  small
-  and
-  speeds
-  up
-  reads
-  considerably.
+  the disk footprint
+  small and speeds up reads considerably.
 - ... trade **random reads and writes** traditionally required in B+ trees for *
   *sequential access**.
 - ... respond quickly to API requests while deferring reorganizational work to
@@ -147,157 +114,14 @@ This allows LSM4K to...
 
 ### Compression
 
-Compression
-is
-another
-main
-pillar
-of
-LSM4K.
-Employing
-compression
-allows
-for
-*
-*faster
-**
-writes,
-because
-the
-time
-spent
-for
-compression +
-writing
-is
-*
-*less
-**
-than
-writing
-all
-original
-bytes.
-Compression
-allows
-for
-*
-*faster
-**
-reads
-too:
-the
-time
-spent
-for
-reading +
-decompression
-is
-*
-*less
-**
-than
-the
-time
-for
-reading
-the
-corresponding
-uncompressed
-data
-from
-disk.
-
-All
-LSM
-files
-utilize
-GZIP
-compression
-by
-default,
-because
-it
-is
-included
-in
-the
-JDK.
-GZIP
-is
-widely
-known
-and
-supported,
-and
-it
-has
-a
-good
-compression
-ratio,
-but
-the
-runtime
-for
-compressing
-and
-decompression
-is
-not
-optimal.
-For
-best
-performance,
-we
-recommend
-to
-use [Snappy](https://github.com/xerial/snappy-java)
-compression
-which
-offers
-a
-good
-balance
-between (
-de-)
-compression
-speed
-and
-file
-size.
-LSM4K
-comes
-with
-multiple
-optional
-compression
-modules
-called "
-Compressors".
-Compressors
-allow
-you
-to
-work
-with
-minimal
-dependencies
-on
-your
-classpath,
-as
-you
-only
-need
-to
-add
-the
-compressors
-which
-you
-actively
-use.
+Compression is another main pillar of LSM4K. All LSM files utilize
+[Snappy](https://github.com/xerial/snappy-java) compression by default which
+offers a good balance
+between (de-)compression speed and file size. Employing compression allows for *
+*faster** reads too:
+the time spent for reading + decompression is **less** than the time for reading
+the corresponding
+uncompressed data from disk.
 
 ### Write-Ahead-Log
 
@@ -397,7 +221,7 @@ number of prefetching threads in the configuration (or disable prefetching
 altogether if desired) and it
 should match the concurrent requests supported by your storage device.
 
-### Optional In-Memory Mode
+### In-Memory Mode
 
 LSM4K is built on top of a (very simple) Virtual File System. This allows
 LSM4K to offer a
@@ -493,709 +317,173 @@ are welcome, provided that they meet the quality standards and fit into the
 existing code base
 and vision.
 
+
 ## FAQ (Frequently Asked Questions)
+
+### Can I use this library with Java / Scala / Groovy / ... ?
+
+The API has been designed predominantly with Kotlin and its language features in mind.
+That being said, I tried to make it accessible from Java as much as possible. It may
+not be as nice as when using Kotlin directly, but it should work. By extension, if it
+works for Java, it should also work for all other languages which offer interoperability
+with Java libraries.
+
+### What's the big difference between LSM and a B-Tree?
+
+A B-Tree is usually managed in data "pages". Each page has the same size, and
+a page manager loads them from disk as needed and caches them. When a modification
+on a B-Tree occurs, all the pages it touches are marked as "dirty". A dirty page
+must not be discarded from the cache before it is written to disk. Additionally,
+concurrent modifications on those pages need to be synchronized accordingly. There
+are some major problems with this approach:
+
+- A single modification (e.g. a single insert) may cause the B-Tree to rebalance itself
+  via a so-called "[rotation](https://en.wikipedia.org/wiki/Tree_rotation)". These
+  rotations touch **many** nodes and **many** pages of the tree. This consequently
+  means **many** writes to disk, all of which are **random** (i.e. not sequential)
+  since the pages live in arbitrary positions on disk. This increases the so-called
+  [write amplification](https://en.wikipedia.org/wiki/Write_amplification), i.e. the
+  number of actual writes required for a single logical write.
+- The tree rotation algorithm itself is fairly involved and complex.
+- Since the algorithm touches multiple pages, write atomicity becomes an issue. B-Trees
+  can recover from partial writes with a Write-Ahead-Log (WAL) (which is also employed
+  by LSM4K), but the **recovery algorithm** is extremely complex
+  (see [ARIES](https://en.wikipedia.org/wiki/Algorithms_for_Recovery_and_Isolation_Exploiting_Semantics)).
+- B-Tree implementations tend to apply writes in a **synchronous** manner: even though the
+  data provided by the user is in the Write-Ahead-Log, they still use the request thread
+  for updates in the tree itself to ensure that subsequent reads will have access to them.
+- Since changes can occur on any page at any point in time, B-Trees do not lend themselves
+  well to compression algorithms.
+
+LSM trees are like a day-and-night difference to B-trees when it comes to these points:
+
+- They operate on **immutable** data structures. This makes recovery quick and easy.
+- They perform exclusively **sequential writes** by appending to existing files. Unlike
+  the B-tree, there are no random writes on tree nodes, since everything is immutable.
+- Since all files on disk are immutable, compression algorithms are a natural fit for
+  LSM trees.
+- Since LSM files on disk are immutable, only a bare minimum of locking is required.
+  Individual blocks (unlike pages in B-Trees) neither require locking nor dirty-flagging
+  as they will never change their content.
+- Since LSM files on disk are immutable, the recovery algorithm is fairly straight forward:
+  it deletes any files which haven't been fully written and keeps the rest intact. Some more
+  effort is required for the Write-Ahead-Log recovery itself, which is the same procedure as
+  for the B-Tree WAL. LSM trees **never allow uncommitted changes** to enter LSM files;
+  rollbacks during recovery are therefore not needed.
+- When a commit occurs, data is only written into the Write-Ahead-Log and into the in-memory
+  segment of the affected LSM tree. The committing thread is released immediately afterward.
+  This means that writes will be **very fast** since all they do is essentially to dump their
+  changes into the WAL, which is the bare minimum amount of work needed to ensure atomicity
+  and durability.
+- If too many writes occur in quick succession, the in-memory segments of LSM trees may
+  become too large, which means that the ongoing commit has to wait until the in-memory
+  data has been flushed to disk. This does block the writer temporarily but should only
+  occur in very write-heavy scenarios. Configuring the available memory pool for the
+  in-memory segments can help to address this situation.
+- LSM trees do not have a "rebalancing" mechanism as such, but they do need to reorganize
+  their data from time to time. This is called a **compaction**. Compactions run entirely
+  on background threads. While they do consume system resources (CPU cycles, RAM and
+  disk I/O operations), they **do not block** other concurrent operations on the LSM tree.
+  Neither writers nor readers are blocked by a parallel compaction.
+- The read and write amplification can be fine-tuned by configuring a **Compaction Strategy**,
+  either globally or on a per-tree basis.
+
+**TL;DR:** B-Trees use random writes and synchronous operations. LSM trees use immutable data
+structures, sequential writes with compression, and periodically clean up and reorganize
+themselves in the background.
 
 ### Does it support SQL?
 
-No.
-LSM4K
-is
-a
-library
-that
-attempts
-to
-do
-*
-*one
-**
-thing
-and
-do
-it
-well.
-It
-is
-entirely
-possible
-to
-use
-LSM4K
-as
-a
-*
-*building
-block
-**
-to
-create
-a
-Database
-Management
-System (
-DBMS)
-which
-is
-capable
-of
-processing
-SQL.
-In
-fact,
-pretty
-much
-every
-modern
-relational
-DBMS
-has
-a
-piece
-in
-its
-architecture
-which
-is
-the
-"
-Storage
-Engine" -
-a
-Key-Value-Store.
-LSM4K
-fits
-exactly
-into
-that
-role,
-but
-does
-not
-provide
-the
-rest
-of
-the
-DBMS.
+No. LSM4K is a library that attempts to do **one** thing and do it well.
+It is entirely possible to use LSM4K as a **building block** to create a
+Database Management System (DBMS) which is capable of processing SQL.
+In fact, pretty much every modern relational DBMS has a piece in its
+architecture which is the "Storage Engine" - a Key-Value-Store.
+LSM4K fits exactly into that role, but does not provide the rest of the DBMS.
 
 ### Why another LSM implementation?
 
-First
-and
-foremost,
-it
-was
-a
-learning
-exercise
-for
-me
-and
-a
-project
-I've
-greatly
-enjoyed
-working
-on
-for
-over
-a
-year.
-I
-wanted
-to
-create
-a
-Key-Value-Store
-with
-good
-performance
-that
-is
-easy
-to
-use
-and
-really
-robust
-so
-it
-can "
-survive"
-even
-in
-the
-most
-dire
-circumstances.
-For
-an
-excellent
-battle-tested
-implementation
-which
-is
-based
-on
-B-Trees
-instead
-of
-LSM
-Trees,
+Curiosity, plus the absence of a generic JVM-based LSM implementation that
+suited my own requirements. I wanted to create a Key-Value-Store with good
+performance that is easy to use and really robust so it can "survive" even
+in the most dire circumstances. For an excellent battle-tested implementation
+which is based on B-Trees instead of LSM Trees,
 see [Jetbrains Xodus](https://github.com/JetBrains/xodus).
 
 ### Why the JVM and not native?
 
-There
-are
-great
-LSM
-engines
-out
-there
-when
-working
-in
-native
-environments.
-First
-and
-foremost, [RocksDB](https://github.com/facebook/rocksdb)
-deserves
-a
-mention
-here.
-The
-original [LevelDB](https://github.com/google/leveldb)
-was
-an
-inspiration
-as
-well.
-The
-main
-issue
-is
-not
-inherently
-with
-these
-libraries,
-they
-are
-great
-pieces
-of
-software.
-The
-issues
-arise
-when
-you
-try
-to
-access
-them
-from
-your
-JVM-based
-application
-via
-JNI.
-While
-the
-overhead
-of
-a
-single
-JNI
-call
-may
-be
-very
-small
-and
-basically
-negligible,
-when
-working
-directly
-with
-a
-Key-Value
-Store
-Engine,
-you
-need
-to
-do
-MANY
-calls.
-For
-example,
-to
-create
-an
-iterator,
-put
-it
-to
-the
-first
-position
-in
-a
-store,
-and
-push
-it
-all
-the
-way
-through
-the
-store
-until
-the
-end
-results
-in
-roughly
-`N`
-method
-calls
-via
-JNI,
-where
-`N`
-is
-the
-number
-of
-entries
-in
-the
-store.
-It's
-not
-uncommon
-to
-have
-100.000+
-entries
-in
-a
-key-value
-store.
-And
-that's
-just
-for
-answering
-a
-single
-full-table
-scan
-on
-a
-single
-store.
-The
-numbers
-just
-add
-up
-very
-quickly
-and
-even
-the
-tiniest
-of
-overheads
-will
-be
-deadly
-for
-the
-application's
-performance.
+There are great LSM engines out there when working in native environments.
+First and foremost, [RocksDB](https://github.com/facebook/rocksdb) deserves
+a mention here. The original [LevelDB](https://github.com/google/leveldb)
+was an inspiration as well. The main issue is not inherently with these
+libraries, they are great pieces of software. The issues arise when you
+try to access them from your JVM-based application via JNI. While the
+overhead of a single JNI call may be very small and basically negligible,
+when working directly with a Key-Value Store Engine, you need to do MANY
+calls. For example, to create an iterator, put it to the first position
+in a store, and push it all the way through the store until the end results in
+roughly `N`method calls via JNI, where`N`is the number of entries in the store.
+It's not uncommon to have 100.000+ entries in a key-value store. And that's
+just for answering a single full-table scan on a single store. The numbers
+just add up very quickly and even the tiniest of overheads will be deadly
+for the application's performance.
 
-*
-*But
-that
-approach
-works
-for
-SQL
-queries
-too!
-**
+**But that approach works for SQL queries too!**
 
-Yes,
-it
-does.
-Because
-SQL
-allows
-to
-formulate
-a
-very
-precise
-data
-demand
-on
-a
-high
-level
-of
-abstraction.
-To
-fire
-a
-basic
-SQL
-query,
-you
-need
-to
-call
-the
-JDBC
-driver
-just
-*
-*once
-**.
-That's
-such
-a
-small
-number,
-even
-routing
-the
-call
-through
-a
-network
-will
-not
-cause
-much
-reason
-for
-concern.
-The
-SQL
-database
-engine
-can
-then
-perform
-the
-"
-dance
-of
-the
-cursors"
-to
-get
-exactly
-the
-data
-you
-want,
-and
-sends
-it
-back
-to
-you.
-However,
-a
-Key-Value
-Store
-is (
-by
-definition)
-a
-much
-simpler
-data
-store
-which
-has
-no
-notion
-of
-higher-level
-queries
-or
-information
-demands.
-It
-provides
-stores
-over
-which
-you
-can
-iterate
-with
-cursors,
-and
-some
-dedicated
-seek
-capabilities,
-but
-that's
-about
-it.
-You
-*
-*need
-**
-to
-do
-tons
-and
-tons
-of
-method
-calls
-on
-it
-to
-get
-the
-required
-information.
-And
-those
-calls
-need
-to
-be
-*
-*fast
-**.
+Yes, it does. Because SQL allows to formulate a very precise data demand on a
+high level of abstraction. To fire a basic SQL query, you need to call the JDBC
+driver just **once**. That's such a small number, even routing the call through a
+network will not cause much reason for concern. The SQL database engine can then
+perform the "dance of the cursors" to get exactly the data you want, and sends it
+back to you. However, a Key-Value Store is (by definition) a much simpler data store
+which has no notion of higher-level queries or information demands. It provides
+stores over which you can iterate with cursors, and some dedicated seek capabilities,
+but that's about it. You **need** to do tons and tons of method calls on it to get
+the required information. And those calls need to be **fast**.
 
 ### Why Kotlin?
 
-Kotlin
-is
-an
-amazing
-tool.
-It
-compiles
-to
-the
-JVM
-just
-like
-Java,
-but
-offers
-additional
-safety
-guarantees
-in
-terms
-of
-nullability.
-Kotlin
-is
-very
-pleasant
-to
-write
-*
-*and
-**
-read
-and
-overall
-still
-a
-much
-more
-productive
-language
-than
-Java
-itself.
+Kotlin is an amazing tool. It compiles to the JVM just like Java, but offers
+additional safety guarantees in terms of nullability. Kotlin is very pleasant to
+write **and** read and overall still a much more productive language than Java itself.
 
 ### Kotlin Multiplatform compatibility? Kotlin Native compatibility?
 
-Maybe
-one
-day,
-but
-not
-at
-the
-moment.
-While
-LSM4K
-has
-not
-too
-many
-touch
-points
-with
-JVM
-libraries,
-accessing
-files
-is (
-obviously)
-a
-must-have,
-and
-that
-currently
-happens
-via
-the
-`java.io.File`
-API.
-Furthermore,
-LSM4K
-supports
-advanced
-file
-access
-methods
-like
-`FileChannel`
-and
-`MemorySegment`,
-which
-would
-currently
-be
-hard
-to
-replicate
-in
-a
-cross-platform
-fashion.
-Finally,
-LSM4K
-directly
-relies
-on
-some
-capabilities
-of
-Guava,
-for
-example
-for
-caching
-and
-bloom
-filters.
+Maybe one day, but not at the moment. While LSM4K has not too many touch points with
+JVM libraries, accessing files is (obviously) a must-have, and that currently happens
+via the`java.io.File`API. Furthermore, LSM4K supports advanced file access methods
+like`FileChannel`and`MemorySegment`, which would currently be hard to replicate in a
+cross-platform fashion. Finally, LSM4K directly relies on some capabilities of Guava,
+for example for caching and bloom filters.
 
 ### Support for Coroutines / Async?
 
-No.
-I
-am
-not
-a
-proponent
-of
-this
-trend
-at
-all.
+No. I am not a proponent of this trend at all.
 
 ### Support for Virtual Threads?
 
-No,
-not
-at
-the
-moment.
-LSM4K
-uses
-thread
-pools,
-and
-the
-size
-of
-these
-pools
-is
-used
-to
-limit
-the
-maximum
-concurrent
-operations.
-Allowing
-an
-arbitrary
-number
-of
-operations
-to
-hit
-the
-hard
-drive
-at
-the
-same
-time
-will
-ultimately
-lead
-nowhere.
-Virtual
-Threads
-should
-not
-be
-cached
-and
-reused
-either,
-which
-makes
-controlling
-the
-maximum
-number
-of
-concurrent
-tasks
-a
-tricky
-endeavour.
-If
-an
-actual
-performance
-benefit
-can
-be
-demonstrated,
-this
-feature
-might
-be
-supported
-in
-the
-future.
+No, not at the moment. LSM4K uses thread pools, and the size of these pools is used
+to limit the maximum concurrent operations. Allowing an arbitrary number of operations
+to hit the hard drive at the same time will ultimately lead nowhere. Virtual Threads
+should not be cached and reused either, which makes controlling the maximum number of
+concurrent tasks a tricky endeavour. If an actual benefit can be demonstrated,
+this feature might be supported in the future.
+
+### Support for `io_uring`?
+
+[io_uring](https://en.wikipedia.org/wiki/Io_uring) is an exciting technology provided
+by the Linux kernel which allows applications to queue up read requests and get the
+responses from another queue. This not only allows to minimize system calls, but it
+presents the kernel with an opportunity to reorder the requests in a way that minimizes
+disk I/O operations. This is a perfect fit for the Asynchronous Prefetching which is
+performed by LSM4K. However, currently LSM4K does not make use of `io_uring` for two
+reasons:
+
+1. It is only available on Linux. LSM4K was written exclusively based on functionality
+   which either is provided by the JVM itself (and is therefore cross-platform) or
+   offers implementations for all major operating systems. `io_uring` unfortunately
+   does not meet either of those criteria (yet).
+2. Since its creation, `io_uring` has been found to be problematic from a
+   [security point of view](https://www.upwind.io/feed/io_uring-linux-performance-boost-or-security-headache).
+   In the [default docker security profile](https://github.com/moby/moby/issues/47532),
+   `io_uring` is disabled entirely. 
