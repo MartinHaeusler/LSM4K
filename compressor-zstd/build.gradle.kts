@@ -51,6 +51,13 @@ artifacts {
 }
 
 publishing {
+    repositories {
+        maven {
+            name = "LocalMavenWithChecksums"
+            url = uri(layout.buildDirectory.dir("staging-deploy"))
+        }
+    }
+
     publications {
         create<MavenPublication>("lsm4k-zstd-compressor") {
             from(components["java"])

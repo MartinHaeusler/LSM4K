@@ -8,8 +8,8 @@ plugins {
     id("signing")
 }
 
-group = "org.lsm4k"
-version = "1.0-SNAPSHOT"
+group = "io.github.martinhaeusler.lsm4k"
+version = "1.0.0-SNAPSHOT"
 
 repositories {
     mavenCentral()
@@ -70,6 +70,13 @@ artifacts {
 }
 
 publishing {
+    repositories {
+        maven {
+            name = "LocalMavenWithChecksums"
+            url = uri(layout.buildDirectory.dir("staging-deploy"))
+        }
+    }
+
     publications {
         create<MavenPublication>("lsm4k") {
             from(components["java"])
@@ -110,6 +117,20 @@ publishing {
 signing {
     sign(publishing.publications["lsm4k"])
 }
+
+allprojects {
+
+    tasks.withType<Jar>().configureEach {
+        doLast {
+            ant.withGroovyBuilder {
+                "checksum"("algorithm" to "md5", "file" to archiveFile.get().asFile)
+                "checksum"("algorithm" to "sha1", "file" to archiveFile.get().asFile)
+            }
+        }
+    }
+
+}
+
 
 // ================================================================================================
 // VERSION UPDATES

@@ -1,0 +1,5 @@
+package io.github.martinhaeusler.lsm4k.impl.transaction
+
+import io.github.martinhaeusler.lsm4k.api.TransactionalReadWriteStore
+
+interface TransactionalReadWriteStoreInternal : TransactionalStoreInternal, TransactionalReadWriteStore

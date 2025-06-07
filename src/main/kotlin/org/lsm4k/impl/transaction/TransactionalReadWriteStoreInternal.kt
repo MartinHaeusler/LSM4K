@@ -1,5 +1,0 @@
-package org.lsm4k.impl.transaction
-
-import org.lsm4k.api.TransactionalReadWriteStore
-
-interface TransactionalReadWriteStoreInternal: TransactionalStoreInternal, TransactionalReadWriteStore

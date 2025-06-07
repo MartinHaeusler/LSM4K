@@ -50,6 +50,13 @@ artifacts {
 }
 
 publishing {
+    repositories {
+        maven {
+            name = "LocalMavenWithChecksums"
+            url = uri(layout.buildDirectory.dir("staging-deploy"))
+        }
+    }
+
     publications {
         create<MavenPublication>("lsm4k-compressor-api") {
             from(components["java"])
