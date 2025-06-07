@@ -11,7 +11,22 @@ with a Kotlin-first API in mind. Other JVM languages (such as Java, Scala,
 Groovy, etc.) may leverage it
 as well, but expect some friction in the API.
 
-### Basic Usage
+
+## Project State
+
+This project is currently in **1.0.0-Alpha** state and requesting feedback from developers and users.
+
+> **IMPORTANT:** I reserve the right to update the API as well as the persistent format without
+> prior notice or migration path until release version 1.0.0 (stable) is reached.
+
+All constructive feedback is welcome.
+
+- Found a problem / inconsistency / other wrinkle with the API? Let me know.
+- Found a problem in the persistent format? Let me know.
+- Found a bug? Let me know (a reproducing minimal JUnit test would be very much appreciated)
+- Found a performance bottleneck? Let me know (a minimal benchmark which demonstrates the issue would be appreciated)
+
+## Basic Usage
 
 ```kotlin
 // open a new DatabaseEngine instance on a directory of your choice
@@ -474,12 +489,13 @@ completed its execution.
 ### Bloom Filters
 
 Like many other LSM trees, LSM4K employs Bloom Filters, a probabilistic
-data structure which can
-tell if a key **may** be contained in a file or is **certainly not** contained.
-This allows LSM4K
-to skip over entire files when searching for a key. A bloom filter is created
-for each LSM file and is
-stored in its header.
+data structure which can tell if a key **may** be contained in a file or
+is **certainly not** contained. This allows LSM4K to skip over entire
+files when searching for a key. A bloom filter is created for each LSM
+file and is stored in its header.
+
+**Important:** Bloom filters only help to improve the speed of `store.get(key)`
+requests in particular. They do not benefit cursor-based operations.
 
 ### Minimal-Copy Approach
 
@@ -492,44 +508,33 @@ where copies can occur:
   JVM heap.
 - When data needs to be decompressed, a new buffer is allocated to hold the
   decompressed data.
-  This decompression process is, in a way, a copy process.
+  This decompression process is (in a way) a copy process.
 
 Notably, **no** data copying takes place when data is served from the Block
 Cache to a transaction.
 LSM4K makes extensive use of the immutable `Bytes` interface which allows
-to read data, but
-prevents modification. Furthermore, `Bytes` (unlike raw byte arrays) internally
-provides zero-copy
-slicing, so all data eventually is a direct or indirect reference to an element
-in the block cache.
+to read data, but prevents modification. Furthermore, `Bytes` (unlike raw byte arrays)
+internally provides zero-copy slicing, so all data eventually is a direct or indirect
+reference to an element in the block cache.
 
 There is one downside to this approach: if you want to retain access to a key or
-value you have fetched
-for extended periods of time, you should call `bytyes.own()` on it to create a
-local copy. Not doing this
-means that a reference to the block in the block cache is retained in the JVM
-heap, which
-may lead to `OutOfMemoryError`s. However, the usual use case for key-value
-stores is that each value will
+value you have fetched for extended periods of time, you should call `bytyes.own()`
+on it to create a local copy. Not doing this means that a reference to the block
+in the block cache is retained in the JVM heap, which may lead to `OutOfMemoryError`s.
+However, the usual use case for key-value stores is that each value will
 be deserialized immediately on-the-fly into a format which is usable by the
-application, so this problem
-should not occur often.
+application, so this problem should not occur often.
 
 ### Fully on-heap
 
 In order to maximize ease of use, ease of configuration, ease of deployment and
-ease of debugging,
-LSM4K operates fully on-heap. It only allocates temporary off-heap buffers
-when it needs to
-communicate with the file system, or when it calls into native APIs for
-compression. These buffers
-are short-lived and usually small in size. All data which out-lives a
-transaction will be held
-on-heap. A heap dump will therefore provide exact information to you. When
-choosing the maximum
+ease of debugging, LSM4K operates fully on-heap. It only allocates temporary off-heap
+buffers when it needs to communicate with the file system, or when it calls into
+native APIs for compression. These buffers are short-lived and usually small in size.
+All data which out-lives a transaction will be held on-heap. A heap dump will
+therefore provide exact information to you. When choosing the maximum
 heap size of your JVM, leaving headroom for off-heap operations is therefore
-much less of a concern
-compared to an off-heap solution.
+much less of a concern compared to an off-heap solution.
 
 ## Building
 
@@ -558,7 +563,7 @@ and vision.
 
 ## FAQ (Frequently Asked Questions)
 
-### Can I use this library with Java / Scala / Groovy / ... ?
+### Q: Can I use this library with Java / Scala / Groovy / ... ?
 
 The API has been designed predominantly with Kotlin and its language features in mind.
 That being said, I tried to make it accessible from Java as much as possible. It may
@@ -566,7 +571,7 @@ not be as nice as when using Kotlin directly, but it should work. By extension, 
 works for Java, it should also work for all other languages which offer interoperability
 with Java libraries.
 
-### What's the big difference between LSM and a B-Tree?
+### Q: What's the big difference between LSM and a B-Tree?
 
 A B-Tree is usually managed in data "pages". Each page has the same size, and
 a page manager loads them from disk as needed and caches them. When a modification
@@ -630,7 +635,7 @@ LSM trees are like a day-and-night difference to B-trees when it comes to these 
 structures, sequential writes with compression, and periodically clean up and reorganize
 themselves in the background.
 
-### Does it support SQL?
+### Q: Does it support SQL?
 
 No. LSM4K is a library that attempts to do **one** thing and do it well.
 It is entirely possible to use LSM4K as a **building block** to create a
@@ -639,7 +644,7 @@ In fact, pretty much every modern relational DBMS has a piece in its
 architecture which is the "Storage Engine" - a Key-Value-Store.
 LSM4K fits exactly into that role, but does not provide the rest of the DBMS.
 
-### Why another LSM implementation?
+### Q: Why another LSM implementation?
 
 Curiosity, plus the absence of a generic JVM-based LSM implementation that
 suited my own requirements. I wanted to create a Key-Value-Store with good
@@ -648,7 +653,7 @@ in the most dire circumstances. For an excellent battle-tested implementation
 which is based on B-Trees instead of LSM Trees,
 see [Jetbrains Xodus](https://github.com/JetBrains/xodus).
 
-### Why the JVM and not native?
+### Q: Why the JVM and not native?
 
 There are great LSM engines out there when working in native environments.
 First and foremost, [RocksDB](https://github.com/facebook/rocksdb) deserves
@@ -666,7 +671,7 @@ just for answering a single full-table scan on a single store. The numbers
 just add up very quickly and even the tiniest of overheads will be deadly
 for the application's performance.
 
-**But that approach works for SQL queries too!**
+**Q: But that approach works for SQL queries too!**
 
 Yes, it does. Because SQL allows to formulate a very precise data demand on a
 high level of abstraction. To fire a basic SQL query, you need to call the JDBC
@@ -679,13 +684,20 @@ stores over which you can iterate with cursors, and some dedicated seek capabili
 but that's about it. You **need** to do tons and tons of method calls on it to get
 the required information. And those calls need to be **fast**.
 
-### Why Kotlin?
+Aside from performance-related issues, it is also a matter of managing the store
+at runtime. When the JVM **and** a native process (e.g. RocksDB) are involved, you
+need to be very careful when assigning resources (in particular, RAM) to processes
+because the JVM and the native process will inevitably compete for the available
+memory. By having everything on-heap, the native side of the competition disappears
+completely.
+
+### Q: Why Kotlin?
 
 Kotlin is an amazing tool. It compiles to the JVM just like Java, but offers
 additional safety guarantees in terms of nullability. Kotlin is very pleasant to
 write **and** read and overall still a much more productive language than Java itself.
 
-### Kotlin Multiplatform compatibility? Kotlin Native compatibility?
+### Q: Kotlin Multiplatform compatibility? Kotlin Native compatibility?
 
 Maybe one day, but not at the moment. While LSM4K has not too many touch points with
 JVM libraries, accessing files is (obviously) a must-have, and that currently happens
@@ -694,11 +706,11 @@ like`FileChannel`and`MemorySegment`, which would currently be hard to replicate 
 cross-platform fashion. Finally, LSM4K directly relies on some capabilities of Guava,
 for example for caching and bloom filters.
 
-### Support for Coroutines / Async?
+### Q: Support for Coroutines / Async?
 
 No. I am not a proponent of this trend at all.
 
-### Support for Virtual Threads?
+### Q: Support for Virtual Threads?
 
 No, not at the moment. LSM4K uses thread pools, and the size of these pools is used
 to limit the maximum concurrent operations. Allowing an arbitrary number of operations
@@ -707,7 +719,7 @@ should not be cached and reused either, which makes controlling the maximum numb
 concurrent tasks a tricky endeavour. If an actual benefit can be demonstrated,
 this feature might be supported in the future.
 
-### Support for `io_uring`?
+### Q: Support for `io_uring`?
 
 [io_uring](https://en.wikipedia.org/wiki/Io_uring) is an exciting technology provided
 by the Linux kernel which allows applications to queue up read requests and get the
