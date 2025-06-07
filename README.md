@@ -17,26 +17,31 @@ as well, but expect some friction in the API.
 In gradle:
 
 ```kotlin
-implementation("io.github.martinhaeusler.lsm4k:LSM4K:1.0.0-Alpha")
-// include the snappy compressor (not required, but recommended)
-implementation("io.github.martinhaeusler.lsm4k:compressor-snappy:1.0.0-Alpha")
+dependencies {
+    implementation("io.github.martinhaeusler.lsm4k:LSM4K:1.0.0-Alpha")
+    
+    // include the snappy compressor (not required, but recommended)
+    implementation("io.github.martinhaeusler.lsm4k:compressor-snappy:1.0.0-Alpha")
+}
 ```
 
 In maven:
 
 ```xml
-<dependency>
-  <groupId>io.github.martinhaeusler.lsm4k</groupId>
-  <artifactId>LSM4K</artifactId>
-  <version>1.0.0-Alpha</version>
-</dependency>
-
-<!-- Snappy Compressor (not required, but recommended) -->
-<dependency>
+<dependencies>
+  <dependency>
     <groupId>io.github.martinhaeusler.lsm4k</groupId>
-    <artifactId>compressor-snappy</artifactId>
+    <artifactId>LSM4K</artifactId>
     <version>1.0.0-Alpha</version>
-</dependency>
+  </dependency>
+  
+  <!-- Snappy Compressor (not required, but recommended) -->
+  <dependency>
+      <groupId>io.github.martinhaeusler.lsm4k</groupId>
+      <artifactId>compressor-snappy</artifactId>
+      <version>1.0.0-Alpha</version>
+  </dependency>
+</dependencies>
 ```
 
 ## Project State
