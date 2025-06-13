@@ -107,6 +107,8 @@ class DiskBasedVirtualReadWriteFile(
                 this.internalOutputStream.flush()
                 this.internalOutputStream.close()
                 Files.move(tempFile.toPath(), file.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+                // fsync the parent directory (this is needed primarily on linux)
+                parent?.fsync()
             } catch (e: IOException) {
                 rollback()
                 throw e

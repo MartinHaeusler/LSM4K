@@ -3,8 +3,12 @@ package io.github.martinhaeusler.lsm4k.io.vfs.disk
 import io.github.martinhaeusler.lsm4k.io.vfs.VirtualDirectory
 import io.github.martinhaeusler.lsm4k.io.vfs.VirtualFileSystemElement
 import io.github.martinhaeusler.lsm4k.io.vfs.VirtualReadWriteFile
+import io.github.martinhaeusler.lsm4k.util.OperatingSystem
+import io.github.oshai.kotlinlogging.KotlinLogging
 import java.io.File
+import java.nio.channels.FileChannel
 import java.nio.file.Files
+import java.nio.file.StandardOpenOption
 
 class DiskBasedVirtualDirectory(
     override val parent: DiskBasedVirtualDirectory?,
@@ -12,6 +16,11 @@ class DiskBasedVirtualDirectory(
     private val vfs: DiskBasedVirtualFileSystem,
 ) : VirtualDirectory {
 
+    companion object {
+
+        private val log = KotlinLogging.logger {}
+
+    }
 
     override fun list(): List<String> {
         return this.file.list()?.asList() ?: emptyList()
@@ -76,6 +85,36 @@ class DiskBasedVirtualDirectory(
 
     override fun hashCode(): Int {
         return file.hashCode()
+    }
+
+    fun fsync() {
+        if (this.vfs.settings.fileSyncMode == FileSyncMode.NO_SYNC) {
+            return
+        }
+
+        if (OperatingSystem.isWindows) {
+            // fsync on directories is neither needed nor supported on windows.
+            return
+        }
+
+        // TECHNICALLY it's not officially supported to fsync a directory
+        // in Java (and it also doesn't work on windows). However, many
+        // Java databases rely on this functionality already, so we're not
+        // the first to do this kind of hack...
+        try {
+            FileChannel.open(this.file.toPath(), StandardOpenOption.READ).use { channel ->
+                // even though we're in READ mode, we can still force the channel, which
+                // will lead to a call to fsync().
+                channel.force(true)
+            }
+        } catch (e: Exception) {
+            log.warn(e) {
+                "Could not perform fsync() on directory '${this.path}'." +
+                    " This may cause data corruption in case of power outage or immediate OS shutdowns." +
+                    " Cause: ${e}"
+            }
+        }
+
     }
 
 }
