@@ -28,6 +28,10 @@ enum class FileSyncMode {
             return FileOutputStream(target, append).buffered()
         }
 
+        override fun sync(channel: FileChannel) {
+            // nothing to do
+        }
+
     },
 
     /** Uses `fsync()` to flush writes to disk. Slowest method, but should be supported on all file systems. */
@@ -41,6 +45,10 @@ enum class FileSyncMode {
                 outputStream.sync(target)
                 outputStream.close()
             }
+        }
+
+        override fun sync(channel: FileChannel) {
+            channel.force(true)
         }
 
     },
@@ -59,9 +67,14 @@ enum class FileSyncMode {
             }
 
             val channel = FileChannel.open(target.toPath(), *settings)
-            return Channels.newOutputStream(channel).onClose { channel.force(true) }.buffered()
+            return Channels.newOutputStream(channel)
+                .onClose { this.sync(channel) }
+                .buffered()
         }
 
+        override fun sync(channel: FileChannel) {
+            channel.force(true)
+        }
     },
 
     /** Uses [StandardOpenOption.DSYNC] to flush writes to disk. Faster than [CHANNEL_SYNC], but may not be available on all file systems. */
@@ -79,9 +92,14 @@ enum class FileSyncMode {
             }
 
             val channel = FileChannel.open(target.toPath(), *settings)
-            return Channels.newOutputStream(channel).onClose { channel.force(false) }.buffered()
+            return Channels.newOutputStream(channel)
+                .onClose { this.sync(channel) }
+                .buffered()
         }
 
+        override fun sync(channel: FileChannel) {
+            channel.force(false)
+        }
     },
 
     ;
@@ -99,5 +117,7 @@ enum class FileSyncMode {
      * @param append Use `true` to append new data to the existing file. Use `false` to overwrite the existing data.
      */
     abstract fun createOutputStream(target: File, append: Boolean): OutputStream
+
+    abstract fun sync(channel: FileChannel)
 
 }

@@ -7,8 +7,10 @@ import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
 import java.io.OutputStream
+import java.nio.channels.FileChannel
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
+import java.nio.file.StandardOpenOption
 
 class DiskBasedVirtualReadWriteFile(
     parent: DiskBasedVirtualDirectory?,
@@ -70,7 +72,14 @@ class DiskBasedVirtualReadWriteFile(
         FileOutputStream(this.file, true).use { fos ->
             fos.channel.use { channel ->
                 channel.truncate(bytesToKeep)
+                this.vfs.settings.fileSyncMode.sync(channel)
             }
+        }
+    }
+
+    override fun fsync() {
+        FileChannel.open(this.file.toPath(), StandardOpenOption.READ).use { channel ->
+            this.vfs.settings.fileSyncMode.sync(channel)
         }
     }
 

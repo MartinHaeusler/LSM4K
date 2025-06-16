@@ -36,6 +36,7 @@ interface VirtualReadWriteFile : VirtualFile {
      */
     fun truncateAfter(bytesToKeep: Long)
 
+    fun fsync()
 
     interface OverWriter : AutoCloseable {
 

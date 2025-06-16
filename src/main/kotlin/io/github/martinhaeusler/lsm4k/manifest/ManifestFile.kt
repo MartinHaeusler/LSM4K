@@ -34,7 +34,7 @@ import kotlin.time.measureTimedValue
  * to it via [appendOperation], and to create checkpoints via [createCheckpoint] (unconditionally) or
  * [createCheckpointIfNumberOfOperationsExceeds] (based on minimum operation count).
  *
- * Since this class handles all required locking operations, it is thread-safe. For any [org.lsm4k.api.DatabaseEngine]
+ * Since this class handles all required locking operations, it is thread-safe. For any [io.github.martinhaeusler.lsm4k.api.DatabaseEngine]
  * instance, there should be exactly one [ManifestFile] instance (which can manage and refer to multiple actual files on disk).
  */
 class ManifestFile(
@@ -63,6 +63,17 @@ class ManifestFile(
     private fun readManifestFromFile(): Manifest {
         val timedValue = measureTimedValue {
             this.replayLock.withLock {
+                // always fsync WAL files before reading them. It could happen that:
+                // - we write to a WAL file (but we don't reach the sync point)
+                // - the process (not the OS) gets killed half-way
+                // - the process gets restarted on the same directory
+                // - the process now reads the half-written file FROM THE OS CACHE
+                // - the process acts upon the data
+                // - power goes out
+                // -> We've read from a WAL which is no longer there :BOOM:
+                //
+                // Solution: play it safe, fsync the file before reading it.
+                this.file.fsync()
                 val (replayedManifest, operationCount) = this.file.withInputStream(this::parseManifestFromInputStream)
                 this.operationCount = operationCount
                 replayedManifest

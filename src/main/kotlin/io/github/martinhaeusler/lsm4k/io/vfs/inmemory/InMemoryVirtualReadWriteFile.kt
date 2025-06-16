@@ -54,6 +54,10 @@ class InMemoryVirtualReadWriteFile(
         // no-op
     }
 
+    override fun fsync() {
+        // no-op for in-memory files
+    }
+
     inner class InMemoryOverWriter : VirtualReadWriteFile.OverWriter {
 
         private var isOpen: Boolean = true
