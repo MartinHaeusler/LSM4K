@@ -9,7 +9,7 @@ plugins {
 }
 
 group = "io.github.martinhaeusler.lsm4k"
-version = "1.0.0-SNAPSHOT"
+version = "1.0.0-M1"
 
 repositories {
     mavenCentral()
