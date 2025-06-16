@@ -198,6 +198,19 @@ class WriteAheadLog(
             // iterate through the final file again, find the exact (binary) offset position of that
             // commit, and truncate the file after that.
             val lastFile = this.walFiles.last()
+
+            // always fsync WAL files before reading them. It could happen that:
+            // - we write to a WAL file (but we don't reach the sync point)
+            // - the process (not the OS) gets killed half-way
+            // - the process gets restarted on the same directory
+            // - the process now reads the half-written file FROM THE OS CACHE
+            // - the process acts upon the data
+            // - power goes out
+            // -> We've read from a WAL which is no longer there :BOOM:
+            //
+            // Solution: play it safe, fsync the file before reading it.
+            lastFile.file.fsync()
+
             val offset = this.getOffsetOfCommitEntry(lastFile, lastCommit)
             lastFile.file.truncateAfter(offset)
         }
@@ -207,6 +220,19 @@ class WriteAheadLog(
     private fun dropLatestWalFilesUntilCommitEntryIsFound(): TSN? {
         while (this.walFiles.isNotEmpty()) {
             val lastFile = this.walFiles.last()
+
+            // always fsync WAL files before reading them. It could happen that:
+            // - we write to a WAL file (but we don't reach the sync point)
+            // - the process (not the OS) gets killed half-way
+            // - the process gets restarted on the same directory
+            // - the process now reads the half-written file FROM THE OS CACHE
+            // - the process acts upon the data
+            // - power goes out
+            // -> We've read from a WAL which is no longer there :BOOM:
+            //
+            // Solution: play it safe, fsync the file before reading it.
+            lastFile.file.fsync()
+
             val lastFileTransactionInfo = this.getTransactionInfo(lastFile, ignoreTruncatedEntries = true)
             val maxCompletedTSN = lastFileTransactionInfo.maxCompletedTSN
             if (maxCompletedTSN == null) {

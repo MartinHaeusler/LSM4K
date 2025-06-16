@@ -63,14 +63,14 @@ class ManifestFile(
     private fun readManifestFromFile(): Manifest {
         val timedValue = measureTimedValue {
             this.replayLock.withLock {
-                // always fsync WAL files before reading them. It could happen that:
-                // - we write to a WAL file (but we don't reach the sync point)
+                // always fsync manifest files before reading them. It could happen that:
+                // - we write to a manifest file (but we don't reach the sync point)
                 // - the process (not the OS) gets killed half-way
                 // - the process gets restarted on the same directory
                 // - the process now reads the half-written file FROM THE OS CACHE
                 // - the process acts upon the data
                 // - power goes out
-                // -> We've read from a WAL which is no longer there :BOOM:
+                // -> We've read from a manifest which is no longer there :BOOM:
                 //
                 // Solution: play it safe, fsync the file before reading it.
                 this.file.fsync()
