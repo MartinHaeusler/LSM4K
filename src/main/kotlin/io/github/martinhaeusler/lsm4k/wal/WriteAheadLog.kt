@@ -501,6 +501,10 @@ class WriteAheadLog(
     private fun createAndRegisterNewWALFile(newSequenceNumber: Long): WALFile {
         val newFile = this.directory.file(this.createWalFileName(newSequenceNumber))
         newFile.create()
+        // we have to fsync the new file...
+        newFile.fsync()
+        // ... but ALSO the parent directory
+        this.directory.fsync()
         val newWALFile = WALFile(newFile, newSequenceNumber)
         this.walFiles.add(newWALFile)
         return newWALFile

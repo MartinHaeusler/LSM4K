@@ -26,6 +26,8 @@ interface VirtualDirectory : VirtualFileSystemElement {
 
     fun delete()
 
+    fun fsync()
+
     fun directory(path: List<String>): VirtualDirectory {
         val (rootDirName, subPath) = path.headTail()
         val rootDir = this.directory(rootDirName)

@@ -67,6 +67,10 @@ class InMemoryVirtualDirectory : VirtualDirectory, InMemoryVirtualFileSystemElem
         this.fileSystem.delete(this.path)
     }
 
+    override fun fsync() {
+        // nothing to do for in-memory directories
+    }
+
     override fun file(name: String): VirtualReadWriteFile {
         return InMemoryVirtualReadWriteFile(this, this.fileSystem, name)
     }

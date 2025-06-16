@@ -87,7 +87,7 @@ class DiskBasedVirtualDirectory(
         return file.hashCode()
     }
 
-    fun fsync() {
+    override fun fsync() {
         if (this.vfs.settings.fileSyncMode == FileSyncMode.NO_SYNC) {
             return
         }
