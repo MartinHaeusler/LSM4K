@@ -20,10 +20,11 @@ In gradle:
 
 ```kotlin
 dependencies {
-    implementation("io.github.martinhaeusler.lsm4k:LSM4K:1.0.0-Alpha")
+    implementation("io.github.martinhaeusler.lsm4k:LSM4K:1.0.0-M1")
     
     // include the snappy compressor (not required, but recommended)
-    implementation("io.github.martinhaeusler.lsm4k:compressor-snappy:1.0.0-Alpha")
+    // to learn more about configuring a compressor, see the dedicated configuration section below.
+    implementation("io.github.martinhaeusler.lsm4k:compressor-snappy:1.0.0-M1")
 }
 ```
 
@@ -34,14 +35,15 @@ In maven:
   <dependency>
     <groupId>io.github.martinhaeusler.lsm4k</groupId>
     <artifactId>LSM4K</artifactId>
-    <version>1.0.0-Alpha</version>
+    <version>1.0.0-M1</version>
   </dependency>
   
   <!-- Snappy Compressor (not required, but recommended) -->
+  <!-- to learn more about configuring a compressor, see the dedicated configuration section below. -->
   <dependency>
       <groupId>io.github.martinhaeusler.lsm4k</groupId>
       <artifactId>compressor-snappy</artifactId>
-      <version>1.0.0-Alpha</version>
+      <version>1.0.0-M1</version>
   </dependency>
 </dependencies>
 ```
@@ -403,13 +405,114 @@ This allows LSM4K to...
 ### Compression
 
 Compression is another main pillar of LSM4K. All LSM files utilize
-[Snappy](https://github.com/xerial/snappy-java) compression by default which
-offers a good balance
+[Snappy](https://github.com/xerial/snappy-java) compression by default which offers a good balance
 between (de-)compression speed and file size. Employing compression allows for *
-*faster** reads too:
-the time spent for reading + decompression is **less** than the time for reading
-the corresponding
-uncompressed data from disk.
+*faster** reads too: the time spent for reading + decompression is **less** than
+the time for reading the corresponding uncompressed data from disk.
+
+
+#### Configuring a Compression Algorithm
+
+By default, LSM4K uses the GZIP compression algorithm. It provides good
+compression ratios and comes bundled with the JDK with no extra dependencies.
+However, GZIP is not ideal in terms of runtime; it is a relatively slow
+algorithm compared to its competitors. We generally recommend to use the
+Snappy compression algorithm instead.
+
+In order to use a compression algorithm with LSM4K, you need two things:
+
+- A dependency to the compressor artifact
+- You need to specify the unique name of the compressor in the LSM4K config
+
+The compressor is a pluggable interface in LSM4K which can also be extended
+by users who want to utilize their own custom algorithms. Out of the box,
+LSM4K comes with the following algorithms:
+
+| Unique Name | Description                    | Library Type     | Maven Artifact                                              |
+|-------------|--------------------------------|------------------|-------------------------------------------------------------|
+| none        | Disable compression completely | Java             | (built-in)                                                  | 
+| gzip        | Default algorithm              | Java             | (built-in)                                                  | 
+| snappy      | Snappy algorithm               | Native (via JNI) | io.github.martinhaeusler.lsm4k:compressor-snappy:<version\> |
+| lz4         | LZ4 algorithm                  | Native (via JNI) | io.github.martinhaeusler.lsm4k:compressor-lz4:<version\>    | 
+| zstd        | ZSTD algoritm                  | Native (via JNI) | io.github.martinhaeusler.lsm4k:compressor-zstd:<version\>   | 
+
+The `<version>` mentioned in the table above will always be equal to your LSM4K version,
+as these artifacts are all managed and released together.
+
+Once you have added the dependency to your compressor of choice, you can configure it
+to be used by default.
+
+In Kotlin:
+
+```kotlin
+val config = LSM4KConfiguration(
+    compressionAlgorithm = "snappy", // or "gzip" or "lz4" or "zstd" or "none"
+    // ... other settings by name ...
+)
+```
+
+In Java:
+
+```java
+var config = LSM4KConfiguration.builder()
+        .withCompressionAlgorithm("snappy") // or "gzip" or "lz4" or "zstd" or "none"
+        // ... other settings
+        .build();
+```
+
+This algorithm will be used for all **newly written** LSM files. Existing files will
+**not** be affected by this choice and will keep using the algorithm which has been
+used to create them.
+
+> **IMPORTANT**: 
+> 
+>Once you have written LSM files with a compression algorithm that relies
+> on an external dependency (e.g. snapy, lz4, zstd), you **must** keep these dependencies
+> on the classpath, otherwise the files will become unreadable!
+
+#### Creating and registering a custom Compression Algorithm
+
+You can also create your own compressor via the Service Provider Interface (SPI) and
+the [ServiceLoader](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/ServiceLoader.html)
+pattern. The SPI class you'll need to implement is:
+
+```kotlin
+io.github.martinhaeusler.lsm4k.compressor.api.Compressor
+```
+
+... which resides in the maven dependency:
+
+```
+io.github.martinhaeusler.lsm4k:compressor-api:<version>
+```
+
+If you use LSM4K in the same project, you will automatically have access to
+this dependency, as LSM4K depends on it.
+
+Please ensure that its method `uniqueName` returns a string that is both
+descriptive (human-readable) and unique among all compression algorithms in your
+project. A lowercase-only name that only consists of alphanumeric letters is
+recommended.
+
+To register your compressor class, create the following directory structure in
+your project:
+
+```
+src
+ \- main
+     \- resources
+         \- META-INF
+             \- services
+                  \- io.github.martinhaeusler.lsm4k.compressor.api.Compressor
+```
+
+The bottom entry is a simple text file. In it, you can list the **fully qualified names** of
+all your compressor classes, one class name per line.
+
+> **Important:**
+> 
+> The service loader pattern requires that your implementation class must have
+> a zero-arguments constructor (a.k.a. "default constructor")!
 
 ### Write-Ahead-Log
 
@@ -459,6 +562,42 @@ data. As new data comes in, the number of tiers increases over time. Through
 compaction, the maximum
 number of tiers is reduced again.
 
+
+To configure tiered compaction as the default for new stores, please use
+the example below.
+
+In Kotlin:
+
+```kotlin
+val config = LSM4KConfiguration(
+    defaultCompactionStrategy = TieredCompactionStrategy(
+        // details for the strategy can be configured here
+    )
+    // ... other settings by name ...
+)
+```
+
+In Java:
+
+```java
+var config = LSM4KConfiguration.builder()
+    .withDefaultCompactionStrategy(
+            CompactionStrategy.tieredBuilder()
+                     // strategy details can be configured here
+                    .build()
+    )
+    // ... other settings
+    .build();
+```
+
+> **Important:**
+> 
+> This configures the **default** compaction strategy which will be used by all
+> new stores created in the future (unless specified otherwise on a per-store basis).
+> All existing stores will **keep using** the strategy which was configured when they
+> were created. A compaction strategy cannot be altered after a store has been created.
+
+
 #### Leveled Compaction
 
 Leveled Compaction organizes the files in a store in "levels": every level
@@ -469,6 +608,73 @@ pre-determined by the configuration and is never exceeded. The key idea here is
 that older data (which
 lives in higher levels) changes less frequently than newer data (which lives in
 lower levels).
+
+
+To configure leveled compaction as the default for new stores, please use
+the example below.
+
+In Kotlin:
+
+```kotlin
+val config = LSM4KConfiguration(
+    defaultCompactionStrategy = LeveledCompactionStrategy(
+        // details for the strategy can be configured here
+    )
+    // ... other settings by name ...
+)
+```
+
+In Java:
+
+```java
+var config = LSM4KConfiguration.builder()
+    .withDefaultCompactionStrategy(
+            CompactionStrategy.leveledBuilder()
+                     // strategy details can be configured here
+                    .build()
+    )
+    // ... other settings
+    .build();
+```
+
+> **Important:**
+>
+> This configures the **default** compaction strategy which will be used by all
+> new stores created in the future (unless specified otherwise on a per-store basis).
+> All existing stores will **keep using** the strategy which was configured when they
+> were created. A compaction strategy cannot be altered after a store has been created.
+
+#### Configuring a Compaction Strategy for a single store
+
+The default compaction strategy may be overwritten on a per-store basis. To do so,
+please use the examples below.
+
+In Kotlin:
+
+```kotlin
+  engine.readWriteTransaction { tx ->
+        val strategy = TieredCompactionStrategy(
+            // details
+        )
+        tx.createNewStore("example", strategy)
+        tx.commit()
+    }
+```
+
+In Java:
+
+```java
+engine.readWriteTransaction((tx) ->{
+    // ... perform changes & queries
+    var strategy = CompactionStrategy.tieredBuilder()
+             // details
+            .build();
+    
+    tx.createNewStore("example", strategy);
+    return tx.commit();
+});
+```
+
 
 ### Block Cache
 
