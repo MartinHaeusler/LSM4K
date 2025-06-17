@@ -1,15 +1,19 @@
 import com.github.benmanes.gradle.versions.updates.DependencyUpdatesTask
+import org.jreleaser.model.Active
+import org.jreleaser.model.Signing
 
 plugins {
     kotlin("jvm") version libs.versions.kotlin
     alias(libs.plugins.versions)
     alias(libs.plugins.dokka)
+    alias(libs.plugins.jreleaser)
     id("maven-publish")
     id("signing")
 }
 
 group = "io.github.martinhaeusler.lsm4k"
 version = "1.0.0-SNAPSHOT"
+description = "LSM4K - A Transactional Key-Value Store in Kotlin"
 
 repositories {
     mavenCentral()
@@ -75,6 +79,11 @@ publishing {
             name = "LocalMavenWithChecksums"
             url = uri(layout.buildDirectory.dir("staging-deploy"))
         }
+
+        maven {
+            name = "PreDeploy"
+            url = uri(layout.buildDirectory.dir("pre-deploy"))
+        }
     }
 
     publications {
@@ -115,7 +124,37 @@ publishing {
 }
 
 signing {
+    setRequired {
+        gradle.taskGraph.allTasks.any { it.name.contains("LocalMavenWithChecksums") }
+    }
     sign(publishing.publications["lsm4k"])
+}
+
+
+jreleaser {
+    signing {
+        active = Active.ALWAYS
+        armored = true
+        mode = Signing.Mode.FILE
+        publicKey = "/home/martin/.gnupg/public.key"
+        secretKey = "/home/martin/.gnupg/private.key"
+    }
+    deploy {
+        maven {
+            mavenCentral {
+                create("sonatype") {
+                    active = Active.ALWAYS
+                    url = "https://central.sonatype.com/api/v1/publisher"
+                    stagingRepository(layout.buildDirectory.dir("pre-deploy").get().asFile.path)
+                }
+            }
+        }
+    }
+    release {
+        github {
+            enabled = false
+        }
+    }
 }
 
 allprojects {
