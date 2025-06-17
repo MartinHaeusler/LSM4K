@@ -1,3 +1,5 @@
+[![javadoc](https://javadoc.io/badge2/io.github.martinhaeusler.lsm4k/LSM4K/javadoc.svg)](https://javadoc.io/doc/io.github.martinhaeusler.lsm4k/LSM4K)
+
 # LSM4K
 
 A Transactional LSM-based Key-Value Storage Engine for Kotlin (and other JVM
