@@ -1,13 +1,14 @@
 [versions]
 java = "21"
-kotlin = "2.1.10"
-jackson = "2.18.2"
+kotlin = "2.3.21"
+jackson = "2.21.3"
 junit5 = "5.11.4"
+junitPlatform = "1.14.4"
 xodus = "2.0.1"
 
 [libraries]
 # General Utilities
-guava = { group = "com.google.guava", name = "guava", version = "33.4.0-jre" }
+guava = { group = "com.google.guava", name = "guava", version = "33.6.0-jre" }
 
 # JSON processing
 jackson-core = { group = "com.fasterxml.jackson.core", name = "jackson-core", version.ref = "jackson" }
@@ -17,25 +18,28 @@ jackson-datatype-pcollections = { group = "com.fasterxml.jackson.datatype", name
 jackson-datatype-duration = { group = "com.fasterxml.jackson.datatype", name = "jackson-datatype-jsr310", version.ref = "jackson" }
 
 # Compression
-snappy = { group = "org.xerial.snappy", name = "snappy-java", version = "1.1.10.7" }
-zstdJni = { group = "com.github.luben", name = "zstd-jni", version = "1.5.6-9" }
-lz4J = { group = "org.lz4", name = "lz4-java", version = "1.8.0" }
+snappy = { group = "org.xerial.snappy", name = "snappy-java", version = "1.1.10.8" }
+zstdJni = { group = "com.github.luben", name = "zstd-jni", version = "1.5.7-8" }
+lz4J = { group = "at.yawk.lz4", name = "lz4-java", version = "1.11.0" }
 
-pcollections = { group = "org.pcollections", name = "pcollections", version = "4.0.2" }
+pcollections = { group = "org.pcollections", name = "pcollections", version = "5.0.0" }
 
 # CRON expression handling
 cronUtils = { group = "com.cronutils", name = "cron-utils", version = "9.2.1" }
 
 # Testing
 junit-jupiter = { group = "org.junit.jupiter", name = "junit-jupiter", version.ref = "junit5" }
+junit-platform-launcher = { group = "org.junit.platform", name = "junit-platform-launcher", version.ref = "junitPlatform" }
+junit-platform-runner = { group = "org.junit.platform", name = "junit-platform-runner", version.ref = "junitPlatform" }
+junit-platform-engine = { group = "org.junit.platform", name = "junit-platform-engine", version.ref = "junitPlatform" }
 junit-engine = { group = "org.junit.jupiter", name = "junit-jupiter-engine", version.ref = "junit5" }
 strikt = { group = "io.strikt", name = "strikt-core", version = "0.35.1" }
-awaitility = { group = "org.awaitility", name = "awaitility", version = "4.3.0"}
+awaitility = { group = "org.awaitility", name = "awaitility", version = "4.3.0" }
 
 # Logging
-slf4j = { group = "org.slf4j", name = "slf4j-api", version = "2.0.16" }
-kotlinLogging = { group = "io.github.oshai", name = "kotlin-logging", version = "7.0.4" }
-logback = { group = "ch.qos.logback", name = "logback-classic", version = "1.5.16" }
+slf4j = { group = "org.slf4j", name = "slf4j-api", version = "2.0.17" }
+kotlinLogging = { group = "io.github.oshai", name = "kotlin-logging", version = "8.0.02" }
+logback = { group = "ch.qos.logback", name = "logback-classic", version = "1.5.32" }
 
 # Key-Value-Stores for benchmarking
 xodus-openAPI = { group = "org.jetbrains.xodus", name = "xodus-openAPI", version.ref = "xodus" }
@@ -44,10 +48,10 @@ xodus-environment = { group = "org.jetbrains.xodus", name = "xodus-environment",
 [bundles]
 jackson = ["jackson-core", "jackson-databind", "jackson-module-kotlin", "jackson-datatype-pcollections", "jackson-datatype-duration"]
 loggingApi = ["slf4j", "kotlinLogging"]
-testing = ["junit-jupiter", "junit-engine", "strikt", "awaitility", "logback"]
+testing = ["junit-jupiter", "junit-engine", "junit-platform-launcher", "junit-platform-engine", "junit-platform-runner", "strikt", "awaitility", "logback"]
 xodus = ["xodus-openAPI", "xodus-environment"]
 
 [plugins]
-versions = { id = "com.github.ben-manes.versions", version = "0.52.0" }
-dokka = { id = "org.jetbrains.dokka", version = "2.0.0" }
-jreleaser = { id = "org.jreleaser", version = "1.18.0" }
+versions = { id = "com.github.ben-manes.versions", version = "0.54.0" }
+dokka = { id = "org.jetbrains.dokka", version = "2.2.0" }
+jreleaser = { id = "org.jreleaser", version = "1.24.0" }
