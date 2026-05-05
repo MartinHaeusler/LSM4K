@@ -12,7 +12,7 @@ plugins {
 }
 
 group = "io.github.martinhaeusler.lsm4k"
-version = "1.0.0-SNAPSHOT"
+version = "1.0.0-M2"
 description = "LSM4K - A Transactional Key-Value Store in Kotlin"
 
 repositories {
