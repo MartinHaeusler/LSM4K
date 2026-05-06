@@ -22,11 +22,11 @@ In gradle:
 
 ```kotlin
 dependencies {
-    implementation("io.github.martinhaeusler.lsm4k:LSM4K:1.0.0-M1")
+    implementation("io.github.martinhaeusler.lsm4k:LSM4K:1.0.0-M2")
     
     // include the snappy compressor (not required, but recommended)
     // to learn more about configuring a compressor, see the dedicated configuration section below.
-    implementation("io.github.martinhaeusler.lsm4k:compressor-snappy:1.0.0-M1")
+    implementation("io.github.martinhaeusler.lsm4k:compressor-snappy:1.0.0-M2")
 }
 ```
 
@@ -37,7 +37,7 @@ In maven:
   <dependency>
     <groupId>io.github.martinhaeusler.lsm4k</groupId>
     <artifactId>LSM4K</artifactId>
-    <version>1.0.0-M1</version>
+    <version>1.0.0-M2</version>
   </dependency>
   
   <!-- Snappy Compressor (not required, but recommended) -->
@@ -45,7 +45,7 @@ In maven:
   <dependency>
       <groupId>io.github.martinhaeusler.lsm4k</groupId>
       <artifactId>compressor-snappy</artifactId>
-      <version>1.0.0-M1</version>
+      <version>1.0.0-M2</version>
   </dependency>
 </dependencies>
 ```
